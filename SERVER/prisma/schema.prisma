@@ -1,0 +1,1059 @@
+// =============================================================================
+// GENERATOR & DATASOURCE
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum EmployeeRole {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MovementType {
+  PURCHASE
+  SALE
+  EXCHANGE_IN
+  EXCHANGE_OUT
+  SUPPLIER_RETURN
+  MANUAL_ADJUSTMENT
+  DAMAGED
+  LOST
+  OPENING_STOCK
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+enum DiscountScope {
+  PRODUCT
+  CATEGORY
+  SALE
+}
+
+enum PurchaseStatus {
+  DRAFT
+  ORDERED
+  RECEIVED
+  CANCELLED
+  PARTIAL
+}
+
+enum SaleStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+  EXCHANGED
+  PARTIAL
+  REFUNDED
+}
+
+enum ExchangeStatus {
+  PENDING
+  COMPLETED
+  REJECTED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  CREDIT
+  GIFT_CARD
+  OTHER
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum ActionModule {
+  PRODUCT
+  VARIANT
+  CATEGORY
+  BRAND
+  SUPPLIER
+  PURCHASE
+  SALE
+  EXCHANGE
+  INVENTORY
+  CUSTOMER
+  EMPLOYEE
+  DISCOUNT
+  COUPON
+  EXPENSE
+  SETTINGS
+  AUTH
+  ASSET
+}
+
+enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  SALE_COMPLETE
+  PURCHASE_RECEIVE
+  EXCHANGE_COMPLETE
+  INVENTORY_ADJUST
+  PRINT_INVOICE
+}
+
+/// Identifies the entity type that an EmployeeAction record refers to.
+/// Used together with referenceId to pinpoint the exact affected record.
+enum ReferenceType {
+  PRODUCT
+  PRODUCT_VARIANT
+  CATEGORY
+  BRAND
+  SUPPLIER
+  PURCHASE
+  SALE
+  EXCHANGE
+  CUSTOMER
+  INVENTORY
+  DISCOUNT
+  COUPON
+  EXPENSE
+  SETTINGS
+  CASH_TRANSACTION
+  ASSET
+}
+
+enum CashTransactionType {
+  CASH_IN
+  CASH_OUT
+}
+
+enum RegisterStatus {
+  OPEN
+  CLOSED
+}
+
+// =============================================================================
+// LOOKUP TABLES
+// =============================================================================
+
+model Size {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants ProductVariant[]
+
+  @@index([sortOrder])
+  @@map("sizes")
+}
+
+model Color {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  hexCode   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants ProductVariant[]
+
+  @@map("colors")
+}
+
+// =============================================================================
+// CATEGORY & BRAND
+// =============================================================================
+
+model Category {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  imageUrl     String?
+  displayOrder Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  products  Product[]
+  discounts Discount[]
+
+  @@index([name])
+  @@index([displayOrder])
+  @@map("categories")
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  logoUrl     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products Product[]
+
+  @@index([name])
+  @@map("brands")
+}
+
+// =============================================================================
+// EMPLOYEE
+// =============================================================================
+
+model Employee {
+  id                  String       @id @default(cuid())
+  employeeCode        String       @unique
+  firstName           String
+  lastName            String
+  email               String?      @unique
+  phone               String       @unique
+  password            String
+  role                EmployeeRole
+  gender              Gender?
+  address             String?
+  salary              Decimal?     @db.Decimal(10, 2)
+  joiningDate         DateTime
+  dateOfBirth         DateTime?
+  isActive            Boolean      @default(true)
+  lastLogin           DateTime?
+  // Incremented on every password change or explicit "logout all devices" action.
+  // Access tokens carry this version; a mismatch means the token is invalidated
+  // without storing individual refresh tokens in the database.
+  refreshTokenVersion Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  purchases          Purchase[]
+  sales              Sale[]
+  inventoryMovements InventoryMovement[]
+  expenses           Expense[]
+  exchanges          Exchange[]
+  auditLogs          AuditLog[]
+  employeeActions    EmployeeAction[]
+  loginHistory       LoginHistory[]
+  openedRegisters    CashRegister[]      @relation("OpenedRegisters")
+  closedRegisters    CashRegister[]      @relation("ClosedRegisters")
+  cashTransactions   CashTransaction[]
+  assetsUploaded     Asset[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@map("employees")
+}
+
+// =============================================================================
+// SUPPLIER
+// =============================================================================
+
+model Supplier {
+  id            String   @id @default(cuid())
+  businessName  String
+  contactPerson String?
+  phone         String   @unique
+  email         String?
+  address       String?
+  notes         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchases Purchase[]
+
+  @@index([businessName])
+  @@index([phone])
+  @@map("suppliers")
+}
+
+// =============================================================================
+// PRODUCT & PRODUCT VARIANT
+// =============================================================================
+
+model Product {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  categoryId     String
+  brandId        String?
+  imageUrls      String[]
+  // Free-text synonyms for cashier search (e.g. "polo collar tee").
+  // Stored as String — full-text indexing (GIN/tsvector) must be added via
+  // raw SQL migration when needed. A standard B-tree index on this field
+  // is useless for partial-text search, so no @@index here.
+  searchKeywords String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  category  Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand     Brand?           @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  variants  ProductVariant[]
+  discounts Discount[]
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([brandId])
+  @@map("products")
+}
+
+model ProductVariant {
+  id           String   @id @default(cuid())
+  productId    String
+  sizeId       String
+  colorId      String
+  sku          String   @unique
+  barcode      String?  @unique
+  // Cached value for display convenience — the authoritative cost history
+  // is in PurchaseItem.costPrice. Updated by the application on each purchase.
+  costPrice    Decimal  @db.Decimal(10, 2)
+  sellingPrice Decimal  @db.Decimal(10, 2)
+  mrp          Decimal  @db.Decimal(10, 2)
+  // Never edit currentStock directly — always go through InventoryMovement.
+  currentStock Int      @default(0)
+  reorderLevel Int? // Low-stock alert threshold
+  maximumStock Int? // Overstock alert threshold
+  weight       Decimal? @db.Decimal(8, 3)
+  imageUrl     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  size    Size    @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+  color   Color   @relation(fields: [colorId], references: [id], onDelete: Restrict)
+
+  inventoryMovements  InventoryMovement[]
+  purchaseItems       PurchaseItem[]
+  saleItems           SaleItem[]
+  exchangeReturnItems ExchangeReturnItem[]
+  exchangeIssuedItems ExchangeIssuedItem[]
+
+  @@unique([productId, sizeId, colorId])
+  // sku and barcode have @unique above — PostgreSQL automatically creates
+  // a unique index for them. Explicit @@index would be redundant.
+  @@index([productId])
+  @@index([isActive])
+  @@map("product_variants")
+}
+
+// =============================================================================
+// INVENTORY MOVEMENT
+// =============================================================================
+
+model InventoryMovement {
+  id                String       @id @default(cuid())
+  variantId         String
+  type              MovementType
+  quantityChanged   Int
+  stockBefore       Int
+  stockAfter        Int
+  reason            String?
+  // Human-readable reference for UI display (e.g. "PO-2024-0012", "INV-00150").
+  // Avoids a join when showing stock history to a manager.
+  referenceNumber   String?
+  employeeId        String
+  relatedPurchaseId String?
+  relatedSaleId     String?
+  relatedExchangeId String?
+  createdAt         DateTime     @default(now())
+
+  variant         ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  relatedPurchase Purchase?      @relation(fields: [relatedPurchaseId], references: [id], onDelete: Restrict)
+  relatedSale     Sale?          @relation(fields: [relatedSaleId], references: [id], onDelete: Restrict)
+  relatedExchange Exchange?      @relation(fields: [relatedExchangeId], references: [id], onDelete: Restrict)
+
+  @@index([variantId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([relatedPurchaseId])
+  @@index([relatedSaleId])
+  @@index([relatedExchangeId])
+  @@map("inventory_movements")
+}
+
+// =============================================================================
+// PURCHASE & PURCHASE ITEMS
+// =============================================================================
+
+model Purchase {
+  id                    String         @id @default(cuid())
+  purchaseNumber        String         @unique
+  supplierInvoiceNumber String?
+  supplierId            String
+  employeeId            String
+  purchaseDate          DateTime       @default(now())
+  subtotal              Decimal        @db.Decimal(10, 2)
+  discountAmount        Decimal        @default(0) @db.Decimal(10, 2)
+  taxAmount             Decimal        @default(0) @db.Decimal(10, 2)
+  totalAmount           Decimal        @db.Decimal(10, 2)
+  notes                 String?
+  status                PurchaseStatus @default(DRAFT)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  supplier           Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  employee           Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  items              PurchaseItem[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([purchaseNumber])
+  @@index([supplierInvoiceNumber])
+  @@index([supplierId])
+  @@index([purchaseDate])
+  @@index([status])
+  @@index([createdAt])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id                     String  @id @default(cuid())
+  purchaseId             String
+  variantId              String
+  quantity               Int
+  // Authoritative cost at time of this purchase — the source of truth for
+  // margin calculations. Never reconstructible from lastPurchasePrice alone.
+  costPrice              Decimal @db.Decimal(10, 2)
+  // Selling price at time of purchase — lets owner review planned margin
+  // per purchase without querying ProductVariant (which changes over time).
+  sellingPriceAtPurchase Decimal @db.Decimal(10, 2)
+  totalPrice             Decimal @db.Decimal(10, 2)
+
+  purchase Purchase       @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseId])
+  @@index([variantId])
+  @@map("purchase_items")
+}
+
+// =============================================================================
+// CUSTOMER & ADDRESSES
+// =============================================================================
+
+model Customer {
+  id           String    @id @default(cuid())
+  customerCode String    @unique
+  isWalkIn     Boolean   @default(false)
+  name         String
+  phone        String    @unique
+  email        String?
+  gender       Gender?
+  dateOfBirth  DateTime?
+  anniversary  DateTime?
+  rewardPoints Int       @default(0)
+  notes        String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  addresses CustomerAddress[]
+  sales     Sale[]
+  exchanges Exchange[]
+
+  @@index([phone])
+  @@index([name])
+  @@index([customerCode])
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id           String   @id @default(cuid())
+  customerId   String
+  type         String // Home, Office, Other
+  addressLine1 String
+  addressLine2 String?
+  city         String?
+  state        String?
+  pincode      String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+// =============================================================================
+// SALE & SALE ITEMS
+// =============================================================================
+
+model Sale {
+  id                   String     @id @default(cuid())
+  saleNumber           String     @unique
+  idempotencyKey       String?    @unique
+  customerId           String
+  employeeId           String
+  saleDate             DateTime   @default(now())
+  subtotal             Decimal    @db.Decimal(10, 2)
+  // discountAmount = automatic promotions applied by the system (Owner-created Discounts/Coupons)
+  discountAmount       Decimal    @default(0) @db.Decimal(10, 2)
+  // manualDiscountAmount = discretionary discount applied by the Owner at billing time.
+  // Authorization (Owner-only) is enforced in backend middleware, not here.
+  // When applied, the backend must create AuditLog + EmployeeAction records.
+  manualDiscountAmount Decimal    @default(0) @db.Decimal(10, 2)
+  // Reason the Owner provided for the manual discount — stored for the audit trail.
+  manualDiscountReason String?
+  taxAmount            Decimal    @default(0) @db.Decimal(10, 2)
+  grandTotal           Decimal    @db.Decimal(10, 2)
+  paidAmount           Decimal    @default(0) @db.Decimal(10, 2)
+  dueAmount            Decimal    @default(0) @db.Decimal(10, 2)
+  couponId             String?
+  notes                String?
+  status               SaleStatus @default(DRAFT)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  coupon   Coupon?  @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  items              SaleItem[]
+  payments           Payment[]
+  exchanges          Exchange[]
+  inventoryMovements InventoryMovement[]
+  invoice            Invoice?
+
+  @@index([saleNumber])
+  @@index([customerId])
+  @@index([employeeId])
+  @@index([saleDate])
+  @@index([status])
+  @@index([createdAt])
+  @@map("sales")
+}
+
+model SaleItem {
+  id        String @id @default(cuid())
+  saleId    String
+  variantId String
+
+  // --- ARCHIVAL SNAPSHOTS ---
+  // We snapshot these text fields so that if a Product or Variant is renamed
+  // or deleted in the future, the historical receipt still renders perfectly.
+  productName String
+  sizeName    String
+  colorName   String
+  sku         String
+  barcode     String?
+
+  // --- QUANTITY & FINANCIALS ---
+  quantity     Int
+  sellingPrice Decimal @db.Decimal(10, 2)
+
+  // Item-level tax calculations for strict accounting
+  taxRate   Decimal @default(0) @db.Decimal(5, 2) // e.g. 5.00 for 5%
+  taxAmount Decimal @default(0) @db.Decimal(10, 2)
+
+  discountAmount Decimal @default(0) @db.Decimal(10, 2)
+
+  // costAtSale = ProductVariant.costPrice at the exact moment of the sale.
+  // Crucial for historical gross profit calculation.
+  costAtSale Decimal @db.Decimal(10, 2)
+
+  // (sellingPrice * quantity) - discountAmount + taxAmount
+  totalPrice Decimal @db.Decimal(10, 2)
+
+  sale    Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@index([variantId])
+  @@map("sale_items")
+}
+
+// =============================================================================
+// PAYMENT
+// =============================================================================
+
+model Payment {
+  id             String        @id @default(cuid())
+  saleId         String
+  method         PaymentMethod
+  amount         Decimal       @db.Decimal(10, 2)
+  transactionRef String?
+  status         PaymentStatus @default(PAID)
+  paidAt         DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([method])
+  @@index([status])
+  @@map("payments")
+}
+
+// =============================================================================
+// INVOICE
+// =============================================================================
+
+model Invoice {
+  id              String   @id @default(cuid())
+  saleId          String   @unique
+  invoiceNumber   String   @unique
+  invoiceDate     DateTime @default(now())
+  customerName    String?
+  customerPhone   String?
+  customerAddress String?
+  invoiceData     Json?
+  pdfUrl          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+// =============================================================================
+// EXCHANGE
+// Garments shops do exchanges, not traditional refunds.
+// Returned items → EXCHANGE_IN movement (stock increases)
+// Issued items   → EXCHANGE_OUT movement (stock decreases)
+// =============================================================================
+
+model Exchange {
+  id              String         @id @default(cuid())
+  exchangeNumber  String         @unique
+  originalSaleId  String
+  customerId      String
+  employeeId      String
+  exchangeDate    DateTime       @default(now())
+  returnedValue   Decimal        @db.Decimal(10, 2)
+  issuedValue     Decimal        @db.Decimal(10, 2)
+  // Positive = customer pays extra. Negative = shop refunds the difference.
+  priceDifference Decimal        @db.Decimal(10, 2)
+  // Primary business reason for the exchange (e.g. "Wrong Size", "Damaged Item").
+  // Used for exchange reports and trend analysis. Keep it concise and consistent.
+  exchangeReason  String?
+  // Free-form comments from the employee — separate from exchangeReason so that
+  // structured reporting does not rely on parsing unstructured text.
+  notes           String?
+  status          ExchangeStatus @default(PENDING)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  originalSale Sale     @relation(fields: [originalSaleId], references: [id], onDelete: Restrict)
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  returnedItems      ExchangeReturnItem[]
+  issuedItems        ExchangeIssuedItem[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([exchangeNumber])
+  @@index([originalSaleId])
+  @@index([exchangeDate])
+  @@index([employeeId])
+  @@index([createdAt])
+  @@map("exchanges")
+}
+
+model ExchangeReturnItem {
+  id          String  @id @default(cuid())
+  exchangeId  String
+  variantId   String
+  quantity    Int
+  priceAtSale Decimal @db.Decimal(10, 2)
+  totalValue  Decimal @db.Decimal(10, 2)
+
+  exchange Exchange       @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([exchangeId])
+  @@index([variantId])
+  @@map("exchange_return_items")
+}
+
+model ExchangeIssuedItem {
+  id           String  @id @default(cuid())
+  exchangeId   String
+  variantId    String
+  quantity     Int
+  sellingPrice Decimal @db.Decimal(10, 2)
+  totalValue   Decimal @db.Decimal(10, 2)
+
+  exchange Exchange       @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([exchangeId])
+  @@index([variantId])
+  @@map("exchange_issued_items")
+}
+
+// =============================================================================
+// EXPENSES
+// =============================================================================
+
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  expenses Expense[]
+
+  @@map("expense_categories")
+}
+
+model Expense {
+  id              String        @id @default(cuid())
+  expenseCode     String        @unique
+  categoryId      String
+  title           String
+  amount          Decimal       @db.Decimal(10, 2)
+  vendorName      String?
+  paymentMethod   PaymentMethod @default(CASH)
+  referenceNumber String?
+  description     String?
+  notes           String?
+  employeeId      String
+  expenseDate     DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  category ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  employee Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([expenseCode])
+  @@index([categoryId])
+  @@index([expenseDate])
+  @@index([paymentMethod])
+  @@map("expenses")
+}
+
+// =============================================================================
+// CASH MANAGEMENT (DRAWER / REGISTER)
+// =============================================================================
+
+model CashRegister {
+  id              String         @id @default(cuid())
+  status          RegisterStatus @default(OPEN)
+  openedAt        DateTime       @default(now())
+  closedAt        DateTime?
+  
+  openingBalance  Decimal        @db.Decimal(10, 2)
+  closingBalance  Decimal?       @db.Decimal(10, 2)
+  expectedBalance Decimal?       @db.Decimal(10, 2)
+  difference      Decimal?       @db.Decimal(10, 2) // positive = excess, negative = shortage
+  
+  openedById      String
+  closedById      String?
+  notes           String?
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  openedBy        Employee       @relation("OpenedRegisters", fields: [openedById], references: [id], onDelete: Restrict)
+  closedBy        Employee?      @relation("ClosedRegisters", fields: [closedById], references: [id], onDelete: Restrict)
+  transactions    CashTransaction[]
+
+  @@index([status])
+  @@index([openedAt])
+  @@map("cash_registers")
+}
+
+model CashTransaction {
+  id            String              @id @default(cuid())
+  registerId    String
+  type          CashTransactionType
+  amount        Decimal             @db.Decimal(10, 2)
+  reason        String
+  referenceId   String?
+  referenceType ReferenceType?
+  employeeId    String
+  createdAt     DateTime            @default(now())
+
+  register      CashRegister        @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  employee      Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([registerId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("cash_transactions")
+}
+
+// =============================================================================
+// DISCOUNTS & COUPONS
+// =============================================================================
+
+model Discount {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  type        DiscountType
+  value       Decimal       @db.Decimal(10, 2)
+  scope       DiscountScope
+  productId   String?
+  categoryId  String?
+  startDate   DateTime?
+  endDate     DateTime?
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  product  Product?  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([scope])
+  @@index([isActive])
+  @@index([startDate, endDate])
+  @@map("discounts")
+}
+
+model Coupon {
+  id              String       @id @default(cuid())
+  code            String       @unique
+  type            DiscountType
+  value           Decimal      @db.Decimal(10, 2)
+  minimumPurchase Decimal?     @db.Decimal(10, 2)
+  usageLimit      Int?
+  usageCount      Int          @default(0)
+  expiryDate      DateTime?
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  sales Sale[]
+
+  @@index([code])
+  @@index([isActive])
+  @@map("coupons")
+}
+
+// =============================================================================
+// SETTINGS
+// Single-row configuration table. Application layer enforces one row only.
+// =============================================================================
+
+/// Singleton settings table.
+/// The PK is a fixed constant string "singleton" — enforced at DB level.
+/// Application layer must always upsert with id = "singleton".
+/// This guarantees exactly one row without a separate UNIQUE constraint hack.
+model Settings {
+  id                  String   @id @default("singleton")
+  version             Int      @default(1)
+
+  // Top-level indexing properties
+  storeName           String   @default("Default Store")
+  currency            String   @default("INR")
+  timeZone            String   @default("Asia/Kolkata")
+
+  // Modular JSON Configuration Blocks (Strongly typed in application layer)
+  storeConfig         Json     @default("{}")
+  invoiceConfig       Json     @default("{}")
+  pricingConfig       Json     @default("{}")
+  promotionConfig     Json     @default("{}")
+  exchangeConfig      Json     @default("{}")
+  inventoryConfig     Json     @default("{}")
+  customerConfig      Json     @default("{}")
+  securityConfig      Json     @default("{}")
+  reportingConfig     Json     @default("{}")
+  notificationConfig  Json     @default("{}")
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+model Notification {
+  id            String   @id @default(cuid())
+  type          String   // e.g., "LOW_STOCK", "SALE_COMPLETED"
+  title         String
+  message       String
+  isRead        Boolean  @default(false)
+  
+  referenceId   String?
+  referenceType String?
+  
+  // Audience
+  targetUserId  String?
+  targetRole    EmployeeRole?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([targetUserId, isRead])
+  @@index([targetRole, isRead])
+  @@map("notifications")
+}
+
+// ============================================================================
+// ASSETS & DOCUMENTS
+// ============================================================================
+
+enum AssetStatus {
+  ACTIVE
+  SOFT_DELETED
+}
+
+enum AssetVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model Asset {
+  id              String         @id @default(cuid())
+  originalName    String
+  storedName      String         @unique
+  storagePath     String
+  provider        String         @default("LOCAL") // e.g. LOCAL, S3, R2
+  contentType     String
+  sizeBytes       Int
+  checksum        String?
+  visibility      AssetVisibility @default(PRIVATE)
+  status          AssetStatus    @default(ACTIVE)
+  
+  ownerModule     String
+  ownerEntityId   String?
+  
+  uploadedById    String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  uploadedBy      Employee?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([ownerModule, ownerEntityId])
+  @@index([status])
+  @@index([uploadedById])
+  @@map("assets")
+}
+
+// =============================================================================
+// PROMOTIONS
+// =============================================================================
+
+model Promotion {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  
+  // 0 is lowest priority. Higher numbers execute first.
+  priority    Int       @default(0)
+  
+  // If true, no other promotions can be stacked if this one applies.
+  isExclusive Boolean   @default(false)
+  
+  // Stored as JSON to allow absolute extensibility (Buy X Get Y, Min Spend, etc.)
+  conditions  Json
+  actions     Json
+  
+  startDate   DateTime?
+  endDate     DateTime?
+  isActive    Boolean   @default(true)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([isActive])
+  @@index([startDate, endDate])
+  @@index([priority])
+  @@map("promotions")
+}
+
+// =============================================================================
+// MONITORING — AuditLog, EmployeeAction, LoginHistory
+// These replace scattered createdBy/updatedBy fields.
+// =============================================================================
+
+/// Complete record of every create/update/delete on important tables.
+/// oldData and newData capture JSON snapshots for full change history.
+model AuditLog {
+  id         String       @id @default(cuid())
+  employeeId String
+  action     ActionType
+  module     ActionModule
+  tableName  String
+  recordId   String
+  oldData    Json?
+  newData    Json?
+  createdAt  DateTime     @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId])
+  @@index([module])
+  @@index([tableName, recordId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// High-level employee activity log for the Owner dashboard.
+/// Less granular than AuditLog — one row per meaningful business action.
+model EmployeeAction {
+  id            String         @id @default(cuid())
+  employeeId    String
+  actionType    ActionType
+  module        ActionModule
+  description   String?
+  // referenceType + referenceId together identify the affected record.
+  // referenceType = strongly-typed entity name from the ReferenceType enum.
+  // referenceId   = cuid of the specific record in that entity's table.
+  // Example: referenceType=SALE + referenceId="clx..." pinpoints one sale.
+  referenceType ReferenceType?
+  referenceId   String?
+  createdAt     DateTime       @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId])
+  @@index([actionType])
+  @@index([module])
+  @@index([createdAt])
+  @@map("employee_actions")
+}
+
+/// Records every login attempt and session for security monitoring.
+model LoginHistory {
+  id           String    @id @default(cuid())
+  employeeId   String
+  loginAt      DateTime  @default(now())
+  logoutAt     DateTime?
+  device       String?
+  browser      String?
+  ipAddress    String?
+  isSuccessful Boolean   @default(true)
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId])
+  @@index([loginAt])
+  @@index([isSuccessful])
+  @@map("login_history")
+}

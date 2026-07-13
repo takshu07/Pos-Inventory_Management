@@ -1,0 +1,82 @@
+import type { Request, Response } from "express";
+import { asyncHandler } from "../utils/asyncHandler";
+import { customerService } from "../services/customer.service";
+import { customerValidation } from "../validation/customer.validation";
+
+export const customerController = {
+  /**
+   * GET /api/v1/customers
+   */
+  getCustomers: asyncHandler(async (req: Request, res: Response) => {
+    const params = customerValidation.query.parse(req.query);
+    const result = await customerService.getCustomers(params);
+    res.status(200).json({
+      success: true,
+      message: "Customers retrieved successfully.",
+      data: result,
+    });
+  }),
+
+  /**
+   * GET /api/v1/customers/walk-in
+   */
+  getWalkInCustomer: asyncHandler(async (req: Request, res: Response) => {
+    const customer = await customerService.getWalkInCustomer();
+    res.status(200).json({
+      success: true,
+      message: "Walk-In customer retrieved successfully.",
+      data: customer,
+    });
+  }),
+
+  /**
+   * GET /api/v1/customers/:id
+   */
+  getCustomerById: asyncHandler(async (req: Request, res: Response) => {
+    const customer = await customerService.getCustomerById(req.params["id"] as string);
+    res.status(200).json({
+      success: true,
+      message: "Customer retrieved successfully.",
+      data: customer,
+    });
+  }),
+
+  /**
+   * POST /api/v1/customers
+   */
+  createCustomer: asyncHandler(async (req: Request, res: Response) => {
+    const data = customerValidation.create.parse(req.body);
+    const newCustomer = await customerService.createCustomer(data, req.user!.id);
+    res.status(201).json({
+      success: true,
+      message: "Customer created successfully.",
+      data: newCustomer,
+    });
+  }),
+
+  /**
+   * PATCH /api/v1/customers/:id
+   */
+  updateCustomer: asyncHandler(async (req: Request, res: Response) => {
+    const data = customerValidation.update.parse(req.body);
+    const updatedCustomer = await customerService.updateCustomer(req.params["id"] as string, data, req.user!.id);
+    res.status(200).json({
+      success: true,
+      message: "Customer updated successfully.",
+      data: updatedCustomer,
+    });
+  }),
+
+  /**
+   * GET /api/v1/customers/:id/purchases
+   */
+  getCustomerPurchases: asyncHandler(async (req: Request, res: Response) => {
+    const params = customerValidation.query.parse(req.query);
+    const result = await customerService.getCustomerPurchaseHistory(req.params["id"] as string, params);
+    res.status(200).json({
+      success: true,
+      message: "Customer purchases retrieved successfully.",
+      data: result,
+    });
+  }),
+};

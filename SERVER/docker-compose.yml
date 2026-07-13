@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      target: runner
+    container_name: cex-pos-api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/cexpos?schema=public
+      - JWT_SECRET=super_secret_docker_key
+      - JWT_EXPIRES_IN=8h
+      - ALLOWED_ORIGINS=http://localhost:5173
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - pos-network
+    restart: unless-stopped
+    volumes:
+      - asset_uploads:/app/uploads
+
+  db:
+    image: postgres:15-alpine
+    container_name: cex-pos-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=cexpos
+    ports:
+      - "5432:5432"
+    networks:
+      - pos-network
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+networks:
+  pos-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+  asset_uploads:
