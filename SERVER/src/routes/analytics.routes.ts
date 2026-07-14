@@ -9,9 +9,9 @@ const router = Router();
 router.use(authenticate);
 
 // GET /api/v1/analytics/reports -> List available reports
-router.get("/reports", requireRole("MANAGER"), analyticsController.getAvailableReports);
+router.get("/reports", requireRole("CASHIER"), analyticsController.getAvailableReports);
 
 // GET /api/v1/analytics/generate -> Generate a specific report
-router.get("/generate", requireRole("MANAGER"), analyticsController.generateReport);
+router.get("/generate", requireRole("CASHIER"), analyticsController.generateReport);
 
 export default router;

@@ -95,6 +95,28 @@ export function AdminDashboard() {
         />
       </div>
 
+      {/* Payment Breakdown Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          title="Cash Collection"
+          value={kpis?.paymentBreakdown ? formatCurrency(kpis.paymentBreakdown.CASH || 0) : "₹0"}
+          icon={<IndianRupee className="h-4 w-4 text-emerald-500" />}
+          isLoading={isLoadingKPIs}
+        />
+        <StatCard
+          title="UPI Collection"
+          value={kpis?.paymentBreakdown ? formatCurrency(kpis.paymentBreakdown.UPI || 0) : "₹0"}
+          icon={<IndianRupee className="h-4 w-4 text-blue-500" />}
+          isLoading={isLoadingKPIs}
+        />
+        <StatCard
+          title="Card Collection"
+          value={kpis?.paymentBreakdown ? formatCurrency(kpis.paymentBreakdown.CARD || 0) : "₹0"}
+          icon={<IndianRupee className="h-4 w-4 text-orange-500" />}
+          isLoading={isLoadingKPIs}
+        />
+      </div>
+
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (Wider) */}

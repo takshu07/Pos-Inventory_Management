@@ -47,6 +47,7 @@ function PlaceholderPage({ title }: { title: string }) {
 export const router = createBrowserRouter([
   {
     Component: RootLayout,
+    HydrateFallback: () => null, // Silences the React Router hydration warning
     children: [
       // ─── Public Routes (Guest only — redirect authenticated users) ───────────
       {
@@ -88,7 +89,8 @@ export const router = createBrowserRouter([
       {
         path: "pos",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="POS Checkout" /> };
+          const { PosView } = await import("@/features/pos");
+          return { Component: PosView };
         },
       },
       {

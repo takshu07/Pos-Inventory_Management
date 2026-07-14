@@ -41,6 +41,11 @@ export async function getSalesKPIs(filters: { startDate?: string; endDate?: stri
       comparative: {
         previousRevenue: 111500,
         previousOrderCount: 125,
+      },
+      paymentBreakdown: {
+        CASH: 45000,
+        UPI: 55430,
+        CARD: 25000
       }
     };
   }
@@ -88,14 +93,29 @@ export async function getTopProducts(): Promise<TopProduct[]> {
  * MOCK: Fetch recent sales transactions.
  */
 export async function getRecentSales(): Promise<RecentSale[]> {
-  await new Promise((resolve) => setTimeout(resolve, 700));
-  return [
-    { id: "101", receiptNumber: "RCP-101", timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), totalAmount: 4500, status: "COMPLETED", customerName: "Rahul Sharma" },
-    { id: "102", receiptNumber: "RCP-102", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), totalAmount: 1250, status: "COMPLETED" },
-    { id: "103", receiptNumber: "RCP-103", timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), totalAmount: 8900, status: "EXCHANGED", customerName: "Priya Patel" },
-    { id: "104", receiptNumber: "RCP-104", timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), totalAmount: 3200, status: "COMPLETED" },
-    { id: "105", receiptNumber: "RCP-105", timestamp: new Date(Date.now() - 1000 * 60 * 180).toISOString(), totalAmount: 550, status: "REFUNDED", customerName: "Amit Kumar" },
-  ];
+  try {
+    const response = await apiClient.get<any>("/sales", {
+      params: { limit: 5 },
+    });
+    
+    // Because of the axios interceptor, response is { success, message, data: { total, data: Sale[] } }
+    const sales = response.data?.data || [];
+    
+    return sales.map((sale: any) => ({
+      id: sale.id,
+      receiptNumber: sale.saleNumber,
+      timestamp: sale.saleDate,
+      totalAmount: Number(sale.grandTotal),
+      status: sale.status,
+      customerName: sale.customer?.name
+    }));
+  } catch (error) {
+    console.warn("Failed to fetch recent sales. Using mock data.", error);
+    return [
+      { id: "101", receiptNumber: "RCP-101", timestamp: new Date(Date.now() - 1000 * 60 * 5).toISOString(), totalAmount: 4500, status: "COMPLETED", customerName: "Rahul Sharma" },
+      { id: "102", receiptNumber: "RCP-102", timestamp: new Date(Date.now() - 1000 * 60 * 15).toISOString(), totalAmount: 1250, status: "COMPLETED" },
+    ];
+  }
 }
 
 /**

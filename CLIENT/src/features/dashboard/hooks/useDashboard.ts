@@ -26,8 +26,24 @@ import {
 export function useSalesKPIs(filters: { range?: string; startDate?: string; endDate?: string } = {}) {
   // If a string range is passed (e.g. "7d"), calculate dates here or pass to API
   const apiFilters = { ...filters };
-  if (filters.range === "today") {
-    apiFilters.startDate = new Date().toISOString();
+  if (filters.range) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0); // Default to start of day for accurate full-day counting
+
+    if (filters.range === "today") {
+      // already start of day
+    } else if (filters.range === "7d") {
+      start.setDate(start.getDate() - 7);
+    } else if (filters.range === "30d") {
+      start.setDate(start.getDate() - 30);
+    } else if (filters.range === "90d") {
+      start.setDate(start.getDate() - 90);
+    } else if (filters.range === "1y") {
+      start.setFullYear(start.getFullYear() - 1);
+    }
+
+    apiFilters.startDate = start.toISOString();
+    delete (apiFilters as any).range;
   }
   
   return useQuery({

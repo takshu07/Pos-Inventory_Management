@@ -43,6 +43,7 @@ class SalesDashboardKPIStrategy implements ReportStrategy {
       totalDiscount: currentKPIs.totalDiscount,
       totalTax: currentKPIs.totalTax,
       grossMarginPercent: grossMargin,
+      paymentBreakdown: currentKPIs.paymentBreakdown,
       comparative: previousKPIs ? {
         previousRevenue: previousKPIs.revenue,
         previousOrderCount: previousKPIs.orderCount

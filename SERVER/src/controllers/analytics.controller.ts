@@ -17,6 +17,11 @@ export const generateReport = asyncHandler(async (req: Request, res: Response) =
   const query = analyticsFilterSchema.parse({ query: req.query }).query;
   const { reportName, ...filters } = query;
   
+  // If user is a cashier, forcibly scope the report to their own data
+  if (req.user?.role === "CASHIER") {
+    filters.employeeId = req.user.id;
+  }
+  
   const result = await analyticsService.generateReport(reportName, filters);
   
   return res.status(HTTP_STATUS.OK).json({

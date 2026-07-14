@@ -20,6 +20,7 @@ export interface SalesKPI {
     previousRevenue: number;
     previousOrderCount: number;
   };
+  paymentBreakdown?: Record<string, number>;
 }
 
 export interface ChartDataPoint {

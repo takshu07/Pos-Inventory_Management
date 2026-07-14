@@ -44,6 +44,10 @@ export const listSales = asyncHandler(async (req: Request, res: Response) => {
   // 1. Extract and validate query params (pagination, filters, search)
   const query = saleValidation.listQuery.parse(req.query);
 
+  if (req.user?.role === "CASHIER") {
+    query.employeeId = req.user.id;
+  }
+
   // 2. Delegate to service layer
   const result = await SaleService.listSales(query);
 

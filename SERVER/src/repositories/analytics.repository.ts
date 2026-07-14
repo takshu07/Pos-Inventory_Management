@@ -90,12 +90,30 @@ export const analyticsRepository = {
       ${ctx.endDate ? Prisma.sql`AND s."saleDate" <= ${ctx.endDate}` : Prisma.empty}
     `;
 
+    // Payment method breakdown
+    const paymentAggregations = await prisma.payment.groupBy({
+      by: ['method'],
+      where: {
+        sale: where,
+        status: 'PAID',
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+
+    const paymentBreakdown = paymentAggregations.reduce((acc, curr) => {
+      acc[curr.method] = Number(curr._sum.amount || 0);
+      return acc;
+    }, {} as Record<string, number>);
+
     return {
       revenue: Number(aggregations._sum.grandTotal || 0),
       orderCount: count,
       totalDiscount: Number(aggregations._sum.discountAmount || 0) + Number(aggregations._sum.manualDiscountAmount || 0),
       totalTax: Number(aggregations._sum.taxAmount || 0),
-      totalCogs: Number(cogsResult[0]?.total_cogs || 0)
+      totalCogs: Number(cogsResult[0]?.total_cogs || 0),
+      paymentBreakdown
     };
   }
 };

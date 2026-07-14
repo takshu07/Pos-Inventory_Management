@@ -39,6 +39,7 @@ import inventoryMovementRoutes from "./routes/inventoryMovement.routes";
 import productRoutes from "./routes/product.routes";
 import productVariantRoutes from "./routes/productVariant.routes";
 import purchaseRoutes from "./routes/purchase.routes";
+import saleRoutes from "./routes/sale.routes";
 import supplierRoutes from "./routes/supplier.routes";
 import analyticsRoutes from "./routes/analytics.routes";
 import configurationRoutes from "./routes/configuration.routes";
@@ -95,7 +96,7 @@ const corsOptions: cors.CorsOptions = {
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+  allowedHeaders: ["Content-Type", "Authorization", "Idempotency-Key"],
 };
 
 app.use(cors(corsOptions));
@@ -169,6 +170,7 @@ app.use("/api/v1/product-variants", productVariantRoutes);
 app.use("/api/v1/inventory-movements", inventoryMovementRoutes);
 app.use("/api/v1/exchanges", exchangeRoutes);
 app.use("/api/v1/purchases", purchaseRoutes);
+app.use("/api/v1/sales", saleRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/configuration", configurationRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
