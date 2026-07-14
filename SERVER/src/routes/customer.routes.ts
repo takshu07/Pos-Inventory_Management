@@ -15,14 +15,15 @@ router.use(authenticate);
 // =============================================================================
 router.get("/", requireRole("CASHIER"), customerController.getCustomers);
 router.get("/walk-in", requireRole("CASHIER"), customerController.getWalkInCustomer);
+router.get("/phone/:phone", requireRole("CASHIER"), customerController.getCustomerByPhone);
 router.get("/:id", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerById);
 router.get("/:id/purchases", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerPurchases);
 
 // =============================================================================
-// WRITE OPERATIONS (MANAGER AND ABOVE)
-// Only Managers and Owners can create or modify customer records.
+// WRITE OPERATIONS (CASHIER AND ABOVE)
+// Cashiers can create customers during checkout. Managers can update.
 // =============================================================================
-router.post("/", requireRole("MANAGER"), customerController.createCustomer);
+router.post("/", requireRole("CASHIER"), customerController.createCustomer);
 router.patch("/:id", validateParam("id"), requireRole("MANAGER"), customerController.updateCustomer);
 
 export default router;

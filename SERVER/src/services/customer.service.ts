@@ -44,6 +44,15 @@ export const customerService = {
   },
 
   /**
+   * Retrieves a single customer by phone exactly.
+   */
+  async getCustomerByPhone(phone: string) {
+    const normalizedPhone = normalizePhone(phone);
+    const customer = await customerRepository.findByPhone(normalizedPhone);
+    return customer; // Return null if not found instead of 404 so UI knows
+  },
+
+  /**
    * Retrieves the Walk-In Customer.
    */
   async getWalkInCustomer() {

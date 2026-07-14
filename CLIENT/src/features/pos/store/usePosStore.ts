@@ -2,25 +2,33 @@ import { create } from "zustand";
 import { CartItem, PosVariant, PosDiscount } from "../types/pos.types";
 import { calculateSubtotal, calculateDiscountAmount, calculateGrandTotal } from "../utils/pos.utils";
 
+import { CustomerModel } from "@/features/customers/types";
+
 interface PosState {
+  isSessionStarted: boolean; // Controls whether the cart/scan screen is active
   cart: CartItem[];
   discount?: PosDiscount;
   tax: number; // Storing total tax amount for simplicity
+  customer: Partial<CustomerModel> | null; // Attached customer (can be partial for new un-saved)
   
   // Actions
+  startSession: (customer: Partial<CustomerModel> | null) => void;
   addItem: (variant: PosVariant, quantity?: number) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
   removeItem: (cartItemId: string) => void;
   clearCart: () => void;
   setDiscount: (discount?: PosDiscount) => void;
-  
-  // Computed (accessed via selector or derived in components, but convenient to have getters if needed, though zustand doesn't natively do computed properties easily, so we rely on selectors in components)
+  setCustomer: (customer: Partial<CustomerModel> | null) => void;
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
+  isSessionStarted: false,
   cart: [],
   discount: undefined,
   tax: 0,
+  customer: null,
+
+  startSession: (customer) => set({ isSessionStarted: true, customer, cart: [] }),
 
   addItem: (variant, quantity = 1) => {
     set((state) => {
@@ -93,11 +101,15 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   clearCart: () => {
-    set({ cart: [], discount: undefined, tax: 0 });
+    set({ cart: [], discount: undefined, tax: 0, customer: null, isSessionStarted: false });
   },
 
   setDiscount: (discount) => {
     set({ discount });
+  },
+
+  setCustomer: (customer) => {
+    set({ customer });
   }
 }));
 

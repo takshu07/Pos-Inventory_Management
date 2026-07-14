@@ -31,7 +31,11 @@ export interface PosDiscount {
 }
 
 export interface CheckoutPayload {
-  customerId?: string;
+  customer?: {
+    id?: string;
+    phone?: string;
+    name?: string;
+  };
   manualDiscountAmount?: number;
   manualDiscountReason?: string;
   items: {

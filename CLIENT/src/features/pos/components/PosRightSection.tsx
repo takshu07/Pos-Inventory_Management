@@ -9,9 +9,10 @@ import { PaymentModal } from "./PaymentModal";
 import { formatCurrency } from "../utils/pos.utils";
 import { useCheckout } from "../api/pos.api";
 
+
 export function PosRightSection() {
   const queryClient = useQueryClient();
-  const { cart, updateQuantity, removeItem, clearCart } = usePosStore();
+  const { cart, updateQuantity, removeItem, clearCart, customer, setCustomer } = usePosStore();
   const { subtotal, discountAmount, grandTotal } = usePosTotals();
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
 
@@ -25,8 +26,23 @@ export function PosRightSection() {
       unitPrice: item.unitPrice,
     }));
 
+    // Build customer payload
+    let customerPayload = undefined;
+    if (customer && customer.phone) {
+      if (!customer.id && !customer.name?.trim()) {
+        toast.error("Please enter a Customer Name for new customers.");
+        return;
+      }
+      customerPayload = {
+        id: customer.id,
+        phone: customer.phone,
+        name: customer.name,
+      };
+    }
+
     checkoutMutation.mutate(
       {
+        customer: customerPayload,
         items,
         payments,
         // If manual discount was implemented, we'd pass it here
@@ -43,7 +59,7 @@ export function PosRightSection() {
           queryClient.invalidateQueries({ queryKey: ["sales"] });
         },
         onError: (err: any) => {
-          toast.error(err.message || "Failed to complete sale");
+          toast.error(err.response?.data?.message || err.message || "Failed to complete sale");
           // Keep modal open so cashier can fix errors
         }
       }
@@ -52,6 +68,31 @@ export function PosRightSection() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden bg-background">
+      {/* Customer Display Section */}
+      <div className="p-4 border-b bg-muted/10 shrink-0 flex items-center justify-between">
+        <div className="flex flex-col">
+          <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-1">
+            Customer
+          </span>
+          {customer ? (
+            <div className="flex flex-col">
+              <span className="font-semibold">{customer.name || "Unknown"}</span>
+              <span className="text-xs text-muted-foreground">{customer.phone}</span>
+            </div>
+          ) : (
+            <span className="font-semibold text-muted-foreground">Walk-in Customer</span>
+          )}
+        </div>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={clearCart} 
+          className="text-xs h-8 text-muted-foreground hover:text-foreground"
+        >
+          Change
+        </Button>
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b bg-muted/10 shrink-0">
         <div className="flex items-center gap-2 font-semibold">

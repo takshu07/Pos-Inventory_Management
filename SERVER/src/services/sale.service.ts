@@ -31,13 +31,6 @@ export class SaleService {
       return this.buildCheckoutResponse(existingSale);
     }
 
-    let finalCustomerId = payload.customerId;
-    if (!finalCustomerId) {
-      const walkIn = await prisma.customer.findFirst({ where: { isWalkIn: true } });
-      if (!walkIn) throw new AppError(HTTP_STATUS.INTERNAL_SERVER_ERROR, "Walk-In customer not initialized.");
-      finalCustomerId = walkIn.id;
-    }
-
     // 2. Extract and pre-validate database variants (No Prisma in Service)
     const variants = await this.fetchVariants(payload.items);
     this.validateVariants(variants, payload.items);
@@ -66,7 +59,7 @@ export class SaleService {
     // 4. Execute the core transaction with resiliency
     const saleId = await executeWithRetry(
       () => this.executeCheckoutTransaction(
-        payload, variants, employee, activePromotions, pricingConfig.defaultTaxRate, idempotencyKey, finalCustomerId as string
+        payload, variants, employee, activePromotions, pricingConfig.defaultTaxRate, idempotencyKey
       ),
       (error: any) => error?.code === "P2002", // Retry only on Unique Constraint (Invoice collision)
       3 // Max 3 retries
@@ -241,10 +234,44 @@ export class SaleService {
     employee: any,
     activePromotions: any[],
     taxRate: any,
-    idempotencyKey: string,
-    finalCustomerId: string
+    idempotencyKey: string
   ): Promise<string> {
     return prisma.$transaction(async (tx) => {
+      // 0. Determine or Create Customer inside transaction
+      let finalCustomerId: string;
+
+      if (payload.customer?.id) {
+        finalCustomerId = payload.customer.id;
+      } else if (payload.customer?.phone && payload.customer?.name) {
+        // Find existing or create new
+        let existing = await tx.customer.findFirst({ where: { phone: payload.customer.phone } });
+        if (existing) {
+          finalCustomerId = existing.id;
+        } else {
+          // Generate customer code based on count
+          const count = await tx.customer.count({
+            where: { isWalkIn: false },
+          });
+          const customerCode = `CUS-${String(count + 1).padStart(6, "0")}`;
+
+          const newCust = await tx.customer.create({
+            data: {
+              customerCode,
+              name: payload.customer.name,
+              phone: payload.customer.phone,
+              isActive: true,
+              isWalkIn: false,
+            }
+          });
+          finalCustomerId = newCust.id;
+        }
+      } else {
+        // Default to Walk-In
+        const walkIn = await tx.customer.findFirst({ where: { isWalkIn: true } });
+        if (!walkIn) throw new AppError(HTTP_STATUS.INTERNAL_SERVER_ERROR, "Walk-In customer not initialized.");
+        finalCustomerId = walkIn.id;
+      }
+
       // 1. Math Pipeline
       const pricing = this.calculatePricing(variants, payload.items, payload.manualDiscountAmount || 0, employee, activePromotions, taxRate, finalCustomerId);
       const payments = PaymentService.processPayments(payload.payments as any, pricing.grandTotal);

@@ -42,6 +42,18 @@ export const customerController = {
   }),
 
   /**
+   * GET /api/v1/customers/phone/:phone
+   */
+  getCustomerByPhone: asyncHandler(async (req: Request, res: Response) => {
+    const customer = await customerService.getCustomerByPhone(req.params["phone"] as string);
+    res.status(200).json({
+      success: true,
+      message: customer ? "Customer found." : "Customer not found.",
+      data: customer,
+    });
+  }),
+
+  /**
    * POST /api/v1/customers
    */
   createCustomer: asyncHandler(async (req: Request, res: Response) => {

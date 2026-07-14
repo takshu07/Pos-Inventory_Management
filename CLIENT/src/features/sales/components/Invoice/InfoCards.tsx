@@ -2,11 +2,13 @@ import React from "react";
 import { InvoiceDetailModel } from "../../types";
 import { Card } from "@/components/ui/Card";
 
-export function CustomerCard({ customer }: { customer: InvoiceDetailModel["customer"] }) {
+export function CustomerCard({ customer }: { customer: any }) {
+  const isWalkIn = !customer || customer.isWalkIn;
+
   return (
     <Card className="p-4 flex flex-col gap-2">
       <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider">Customer Info</h3>
-      {customer ? (
+      {!isWalkIn ? (
         <>
           <div className="font-semibold text-lg">{customer.name}</div>
           <div className="text-muted-foreground">{customer.phone || "No phone provided"}</div>

@@ -30,7 +30,11 @@ export const saleValidation = {
    * financial totals (subtotal, tax, grandTotal, etc).
    */
   checkout: z.object({
-    customerId: z.string().cuid("Invalid Customer ID format").optional().nullable(),
+    customer: z.object({
+      id: z.string().cuid().optional(),
+      phone: z.string().max(20).optional(),
+      name: z.string().max(100).optional(),
+    }).optional().nullable(),
     manualDiscountAmount: z.number().nonnegative("Manual discount cannot be negative").default(0),
     manualDiscountReason: z
       .string()

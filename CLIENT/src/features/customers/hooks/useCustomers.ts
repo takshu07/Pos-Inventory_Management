@@ -1,0 +1,47 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchCustomers, createCustomer, getWalkInCustomer, getCustomerByPhone } from "../api/customerApi";
+import { CustomerQueryFilters, CustomerCreateDTO } from "../types";
+
+export const customerKeys = {
+  all: ["customers"] as const,
+  lists: () => [...customerKeys.all, "list"] as const,
+  list: (filters: CustomerQueryFilters) => [...customerKeys.lists(), filters] as const,
+  walkIn: () => [...customerKeys.all, "walk-in"] as const,
+};
+
+export function useCustomers(filters: CustomerQueryFilters) {
+  return useQuery({
+    queryKey: customerKeys.list(filters),
+    queryFn: () => fetchCustomers(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
+export function useWalkInCustomer() {
+  return useQuery({
+    queryKey: customerKeys.walkIn(),
+    queryFn: getWalkInCustomer,
+    staleTime: Infinity, // Walk-in customer rarely changes
+  });
+}
+
+export function useCustomerByPhone(phone: string) {
+  return useQuery({
+    queryKey: [...customerKeys.all, "phone", phone],
+    queryFn: () => getCustomerByPhone(phone),
+    enabled: phone.length >= 10,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+    retry: false, // Don't retry if 404/not found
+  });
+}
+
+export function useCreateCustomer() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: (data: CustomerCreateDTO) => createCustomer(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: customerKeys.all });
+    },
+  });
+}
