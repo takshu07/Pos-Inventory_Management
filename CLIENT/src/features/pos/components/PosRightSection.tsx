@@ -40,6 +40,7 @@ export function PosRightSection() {
           // Invalidate dashboard queries to automatically refresh analytics
           queryClient.invalidateQueries({ queryKey: ["dashboard"] });
           queryClient.invalidateQueries({ queryKey: ["analytics"] });
+          queryClient.invalidateQueries({ queryKey: ["sales"] });
         },
         onError: (err: any) => {
           toast.error(err.message || "Failed to complete sale");

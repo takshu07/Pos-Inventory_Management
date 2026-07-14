@@ -96,13 +96,15 @@ export const router = createBrowserRouter([
       {
         path: "sales",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="Sales History" /> };
+          const { SalesHistoryView } = await import("@/features/sales");
+          return { Component: SalesHistoryView };
         },
       },
       {
         path: "sales/:saleId",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="Invoice Details" /> };
+          const { InvoiceView } = await import("@/features/sales");
+          return { Component: InvoiceView };
         },
       },
       {
