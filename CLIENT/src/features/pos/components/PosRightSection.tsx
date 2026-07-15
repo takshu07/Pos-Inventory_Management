@@ -12,7 +12,7 @@ import { useCheckout } from "../api/pos.api";
 
 export function PosRightSection() {
   const queryClient = useQueryClient();
-  const { cart, updateQuantity, removeItem, clearCart, customer, setCustomer } = usePosStore();
+  const { cart, updateQuantity, removeItem, clearCart, customer, unstartSession, setCheckoutStep } = usePosStore();
   const { subtotal, discountAmount, grandTotal } = usePosTotals();
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
 
@@ -52,11 +52,13 @@ export function PosRightSection() {
         onSuccess: () => {
           toast.success("Sale completed successfully!");
           setIsPaymentOpen(false);
-          clearCart();
+          setCheckoutStep(3);
+          
           // Invalidate dashboard queries to automatically refresh analytics
           queryClient.invalidateQueries({ queryKey: ["dashboard"] });
           queryClient.invalidateQueries({ queryKey: ["analytics"] });
           queryClient.invalidateQueries({ queryKey: ["sales"] });
+          queryClient.invalidateQueries({ queryKey: ["customers"] }); // Ensure new customers are fetchable
         },
         onError: (err: any) => {
           toast.error(err.response?.data?.message || err.message || "Failed to complete sale");
@@ -86,7 +88,7 @@ export function PosRightSection() {
         <Button 
           variant="ghost" 
           size="sm" 
-          onClick={clearCart} 
+          onClick={unstartSession} 
           className="text-xs h-8 text-muted-foreground hover:text-foreground"
         >
           Change
@@ -159,7 +161,10 @@ export function PosRightSection() {
           size="lg"
           className="w-full mt-2 h-14 text-lg font-semibold shadow-md"
           disabled={cart.length === 0}
-          onClick={() => setIsPaymentOpen(true)}
+          onClick={() => {
+            setIsPaymentOpen(true);
+            setCheckoutStep(2);
+          }}
         >
           Checkout
         </Button>
@@ -167,7 +172,12 @@ export function PosRightSection() {
 
       <PaymentModal
         open={isPaymentOpen}
-        onClose={() => !checkoutMutation.isPending && setIsPaymentOpen(false)}
+        onClose={() => {
+          if (!checkoutMutation.isPending) {
+            setIsPaymentOpen(false);
+            setCheckoutStep(1);
+          }
+        }}
         grandTotal={grandTotal}
         onConfirm={handleCompleteSale}
         isProcessing={checkoutMutation.isPending}

@@ -27,10 +27,10 @@ export function useWalkInCustomer() {
 
 export function useCustomerByPhone(phone: string) {
   return useQuery({
-    queryKey: [...customerKeys.all, "phone", phone],
+    queryKey: [...customerKeys.all, "phone-lookup", phone], // Changed key to forcefully bypass browser's ghost cache
     queryFn: () => getCustomerByPhone(phone),
     enabled: phone.length >= 10,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 10, // 10 seconds (enough to prevent spam, but clears errors fast)
     retry: false, // Don't retry if 404/not found
   });
 }

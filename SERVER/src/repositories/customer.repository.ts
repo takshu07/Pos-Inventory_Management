@@ -122,11 +122,18 @@ export const customerRepository = {
    * Retrieves the count of customers to generate sequential codes.
    */
   async getNextSequenceNumber(): Promise<number> {
-    // Exclude the Walk-In customer from the sequence calculation
-    const count = await prisma.customer.count({
-      where: { isWalkIn: false },
+    const lastCustomer = await prisma.customer.findFirst({
+      where: { isWalkIn: false, customerCode: { startsWith: 'CUS-' } },
+      orderBy: { customerCode: 'desc' },
     });
-    return count + 1;
+
+    if (!lastCustomer) return 1;
+
+    const lastSeqStr = lastCustomer.customerCode.replace('CUS-', '');
+    const parsedSeq = parseInt(lastSeqStr, 10);
+    
+    if (isNaN(parsedSeq)) return 1;
+    return parsedSeq + 1;
   },
 
   /**

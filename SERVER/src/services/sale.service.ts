@@ -248,11 +248,22 @@ export class SaleService {
         if (existing) {
           finalCustomerId = existing.id;
         } else {
-          // Generate customer code based on count
-          const count = await tx.customer.count({
-            where: { isWalkIn: false },
+          // Generate customer code based on the highest existing code
+          const lastCustomer = await tx.customer.findFirst({
+            where: { isWalkIn: false, customerCode: { startsWith: 'CUS-' } },
+            orderBy: { customerCode: 'desc' }
           });
-          const customerCode = `CUS-${String(count + 1).padStart(6, "0")}`;
+          
+          let nextSeq = 1;
+          if (lastCustomer) {
+            const lastSeqStr = lastCustomer.customerCode.replace('CUS-', '');
+            const parsedSeq = parseInt(lastSeqStr, 10);
+            if (!isNaN(parsedSeq)) {
+              nextSeq = parsedSeq + 1;
+            }
+          }
+          
+          const customerCode = `CUS-${String(nextSeq).padStart(6, "0")}`;
 
           const newCust = await tx.customer.create({
             data: {

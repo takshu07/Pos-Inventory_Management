@@ -13,12 +13,15 @@ interface PosState {
   
   // Actions
   startSession: (customer: Partial<CustomerModel> | null) => void;
+  unstartSession: () => void;
   addItem: (variant: PosVariant, quantity?: number) => void;
   updateQuantity: (cartItemId: string, quantity: number) => void;
   removeItem: (cartItemId: string) => void;
   clearCart: () => void;
   setDiscount: (discount?: PosDiscount) => void;
   setCustomer: (customer: Partial<CustomerModel> | null) => void;
+  checkoutStep: number;
+  setCheckoutStep: (step: number) => void;
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
@@ -27,8 +30,10 @@ export const usePosStore = create<PosState>((set, get) => ({
   discount: undefined,
   tax: 0,
   customer: null,
+  checkoutStep: 0,
 
-  startSession: (customer) => set({ isSessionStarted: true, customer, cart: [] }),
+  startSession: (customer) => set({ isSessionStarted: true, customer, checkoutStep: 1 }),
+  unstartSession: () => set({ isSessionStarted: false, checkoutStep: 0 }),
 
   addItem: (variant, quantity = 1) => {
     set((state) => {
@@ -101,7 +106,7 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   clearCart: () => {
-    set({ cart: [], discount: undefined, tax: 0, customer: null, isSessionStarted: false });
+    set({ cart: [], discount: undefined, tax: 0, customer: null, isSessionStarted: false, checkoutStep: 0 });
   },
 
   setDiscount: (discount) => {
@@ -110,6 +115,10 @@ export const usePosStore = create<PosState>((set, get) => ({
 
   setCustomer: (customer) => {
     set({ customer });
+  },
+
+  setCheckoutStep: (step) => {
+    set({ checkoutStep: step });
   }
 }));
 

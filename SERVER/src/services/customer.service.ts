@@ -49,7 +49,13 @@ export const customerService = {
   async getCustomerByPhone(phone: string) {
     const normalizedPhone = normalizePhone(phone);
     const customer = await customerRepository.findByPhone(normalizedPhone);
-    return customer; // Return null if not found instead of 404 so UI knows
+    
+    if (!customer) {
+      return null;
+    }
+
+    const stats = await customerRepository.getStatistics(customer.id);
+    return { ...customer, statistics: stats };
   },
 
   /**

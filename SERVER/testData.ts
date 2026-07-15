@@ -8,8 +8,8 @@ async function main() {
     console.log("No employees found. Run setup script.");
   } else {
     console.log("Employee found:");
-    console.log(`Phone: ${employees[0].phone}`);
-    console.log(`Role: ${employees[0].role}`);
+    console.log(`Phone: ${employees[0]?.phone}`);
+    console.log(`Role: ${employees[0]?.role}`);
     console.log("(Note: Use the password you set for this employee, usually 'Password123' if seeded)");
   }
 
