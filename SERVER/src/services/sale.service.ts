@@ -408,13 +408,19 @@ export class SaleService {
       id: sale.id,
       saleNumber: sale.saleNumber,
       status: sale.status,
+      subtotal: sale.subtotal,
+      discountAmount: sale.discountAmount,
+      manualDiscountAmount: sale.manualDiscountAmount,
+      taxAmount: sale.taxAmount,
       grandTotal: sale.grandTotal,
       paidAmount: sale.paidAmount,
       dueAmount: sale.dueAmount,
       saleDate: sale.saleDate,
       customer: sale.customer || null,
+      employee: sale.employee || null,
       items: sale.items,
       payments: sale.payments,
+      exchanges: sale.exchanges || [],
     };
   }
 

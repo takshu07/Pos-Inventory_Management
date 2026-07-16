@@ -51,7 +51,6 @@ export const EMPLOYEE_NAV: NavSection[] = [
       { label: "Dashboard",       path: "/",               icon: LayoutDashboard },
       { label: "POS Checkout",    path: "/pos",            icon: ShoppingCart },
       { label: "Sales History",   path: "/sales",          icon: History },
-      { label: "Exchange",        path: "/exchanges",      icon: ArrowLeftRight },
       { label: "Customers",       path: "/customers",      icon: Users },
       { label: "Product Lookup",  path: "/products/lookup", icon: Package },
       { label: "Cash Register",   path: "/finance/register", icon: Wallet },

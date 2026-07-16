@@ -19,6 +19,8 @@ export function mapToSaleHistoryRow(rawSale: any): SaleHistoryRowModel {
     totalAmount: Number(rawSale.grandTotal),
     status: rawSale.status,
     paymentMethods: paymentMethods as string[],
+    createdAt: rawSale.createdAt,
+    items: rawSale.items || [],
   };
 }
 

@@ -4,6 +4,7 @@ import { paginationSchema } from "./common.validation";
 export const exchangeValidation = {
   create: z.object({
     originalSaleId: z.string().min(1, "Original Sale ID is required"),
+    customerId: z.string().min(1, "Customer ID is required"),
     exchangeReason: z.string().min(1, "Exchange reason is required").max(100),
     notes: z.string().max(1000).optional().nullable(),
     
@@ -11,6 +12,7 @@ export const exchangeValidation = {
       z.object({
         variantId: z.string().min(1, "Variant ID is required"),
         quantity: z.number().int().positive("Quantity must be positive"),
+        condition: z.enum(["GOOD", "DAMAGED"]).default("GOOD"),
       })
     ).min(1, "At least one item must be returned"),
     
@@ -19,7 +21,15 @@ export const exchangeValidation = {
         variantId: z.string().min(1, "Variant ID is required"),
         quantity: z.number().int().positive("Quantity must be positive"),
       })
-    ).min(1, "At least one item must be issued"),
+    ).optional().default([]),
+    
+    payments: z.array(
+      z.object({
+        method: z.enum(["CASH", "UPI", "CARD", "CREDIT", "GIFT_CARD", "OTHER"]),
+        amount: z.number().positive("Payment amount must be positive"),
+        transactionRef: z.string().optional(),
+      })
+    ).optional().default([]),
   }),
 
   query: paginationSchema,

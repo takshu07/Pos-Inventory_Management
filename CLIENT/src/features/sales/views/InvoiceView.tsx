@@ -41,17 +41,19 @@ export default function InvoiceView() {
               <Badge variant={invoice.status === "COMPLETED" ? "success" : invoice.status === "CANCELLED" ? "error" : "warning"}>
                 {invoice.status}
               </Badge>
+              {invoice.exchanges && invoice.exchanges.length > 0 && (
+                <Badge variant="secondary" className="bg-purple-100 text-purple-800 border-purple-200 ml-2">
+                  Exchange Performed
+                </Badge>
+              )}
             </h1>
             <div className="text-sm text-muted-foreground">{new Date(invoice.date).toLocaleString()}</div>
           </div>
         </div>
         
         <div className="flex gap-2">
-          <Button variant="outline" disabled title="Coming Soon">
-            <RefreshCw className="mr-2 h-4 w-4" /> Exchange
-          </Button>
-          <Button variant="default" disabled title="Coming Soon">
-            <Printer className="mr-2 h-4 w-4" /> Print
+          <Button variant="outline" onClick={() => window.print()}>
+            <Printer className="w-4 h-4 mr-2" /> Print Receipt
           </Button>
         </div>
       </div>

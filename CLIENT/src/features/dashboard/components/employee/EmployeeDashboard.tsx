@@ -30,9 +30,8 @@ export function EmployeeDashboard() {
 
   const employeeActions = [
     { label: "New Sale", icon: "ShoppingCart", href: "/pos", color: "#3b82f6" },
-    { label: "Exchange", icon: "RefreshCw", href: "/exchanges/new", color: "#f59e0b" },
+    { label: "Check Inventory", icon: "Package", href: "/products/lookup", color: "#8b5cf6" },
     { label: "Customers", icon: "Users", href: "/customers", color: "#10b981" },
-    { label: "Products", icon: "Search", href: "/products/lookup", color: "#8b5cf6" },
   ];
 
   return (

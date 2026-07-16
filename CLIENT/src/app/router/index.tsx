@@ -108,12 +108,6 @@ export const router = createBrowserRouter([
         },
       },
       {
-        path: "exchanges",
-        async lazy() {
-          return { Component: () => <PlaceholderPage title="Exchange" /> };
-        },
-      },
-      {
         path: "customers",
         async lazy() {
           return { Component: () => <PlaceholderPage title="Customers" /> };

@@ -57,6 +57,7 @@ startServer().catch(err => {
 
 async function gracefulShutdown(signal: string): Promise<void> {
   console.log(`\n⚠️  Received ${signal}. Starting graceful shutdown...`);
+// restart 2
 
   server.close(async () => {
     logger.info("✅ HTTP server closed.");

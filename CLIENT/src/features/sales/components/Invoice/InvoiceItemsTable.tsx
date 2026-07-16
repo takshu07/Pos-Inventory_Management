@@ -10,6 +10,7 @@ export function InvoiceItemsTable({ items }: { items: InvoiceDetailModel["items"
           <TableRow>
             <TableHead>Item</TableHead>
             <TableHead>SKU</TableHead>
+            <TableHead>Barcode</TableHead>
             <TableHead className="text-right">Qty</TableHead>
             <TableHead className="text-right">Price</TableHead>
             <TableHead className="text-right">Tax</TableHead>
@@ -26,6 +27,7 @@ export function InvoiceItemsTable({ items }: { items: InvoiceDetailModel["items"
                 </div>
               </TableCell>
               <TableCell className="text-muted-foreground text-xs">{item.sku}</TableCell>
+              <TableCell className="text-muted-foreground text-xs font-mono">{item.barcode || "-"}</TableCell>
               <TableCell className="text-right">{item.quantity}</TableCell>
               <TableCell className="text-right">₹{item.sellingPrice.toFixed(2)}</TableCell>
               <TableCell className="text-right">₹{item.taxAmount.toFixed(2)} ({item.taxRate}%)</TableCell>

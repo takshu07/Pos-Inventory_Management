@@ -50,7 +50,6 @@ router.get(
 router.get(
   "/:id",
   requireRole("CASHIER"),
-  validateParam("id"),
   saleController.getSaleById
 );
 
@@ -63,7 +62,6 @@ router.get(
 router.post(
   "/:id/void",
   requireRole("MANAGER"), // Strict hierarchical authorization
-  validateParam("id"),
   saleController.voidSale
 );
 

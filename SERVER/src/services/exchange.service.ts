@@ -1,4 +1,4 @@
-import { Prisma, MovementType, ExchangeStatus } from "../../generated/prisma";
+import { Prisma, MovementType, ExchangeStatus, ReturnCondition } from "../../generated/prisma";
 import { prisma } from "../config/prisma";
 import { AppError } from "../errors/AppError";
 import { HTTP_STATUS } from "../constants/httpStatus";
@@ -39,6 +39,21 @@ export const exchangeService = {
       throw new AppError(HTTP_STATUS.BAD_REQUEST, "Cannot exchange items from an incomplete or voided sale");
     }
 
+    // NEW VALIDATION: Customer Ownership
+    if (!payload.customerId || originalSale.customerId !== payload.customerId) {
+      throw new AppError(HTTP_STATUS.BAD_REQUEST, "Customer mismatch: Exchange must belong to the original customer.");
+    }
+
+    // NEW VALIDATION: 3-Day Purchase Window
+    const saleDate = new Date(originalSale.createdAt);
+    const currentDate = new Date();
+    const diffTime = Math.abs(currentDate.getTime() - saleDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays > 3) {
+      throw new AppError(HTTP_STATUS.BAD_REQUEST, "Exchange rejected: Purchase is older than 3 days.");
+    }
+
     // 2. Validate Returns
     const previouslyReturnedMap = await exchangeRepository.getPreviouslyReturnedQuantities(payload.originalSaleId);
     
@@ -71,6 +86,7 @@ export const exchangeService = {
       validatedReturns.push({
         variantId: ret.variantId,
         quantity: ret.quantity,
+        condition: ret.condition as ReturnCondition,
         priceAtSale: unitPricePaid,
         totalValue: lineReturnTotal,
       });
@@ -86,6 +102,11 @@ export const exchangeService = {
       throw new AppError(HTTP_STATUS.BAD_REQUEST, "One or more issued variants are invalid or inactive.");
     }
 
+    const returnVariantIds = payload.returnedItems.map(i => i.variantId);
+    const returnedVariants = await prisma.productVariant.findMany({
+      where: { id: { in: returnVariantIds } }
+    });
+
     let issuedValue = new Prisma.Decimal(0);
     const validatedIssues: Prisma.ExchangeIssuedItemUncheckedCreateWithoutExchangeInput[] = [];
 
@@ -94,6 +115,14 @@ export const exchangeService = {
       
       if (variant.currentStock < issue.quantity) {
         throw new AppError(HTTP_STATUS.BAD_REQUEST, `Insufficient stock for variant ${variant.sku}.`);
+      }
+
+      // NEW VALIDATION: MRP RULE
+      // Find the old product's MRP. For simplicity, we check if ANY returned item has a higher MRP than the replacement.
+      // In a strict mapping, each issue is linked to a specific return. We will enforce that the new item's MRP is >= the highest returned MRP.
+      const highestReturnedMrp = returnedVariants.reduce((max, rv) => Math.max(max, Number(rv.mrp)), 0);
+      if (Number(variant.mrp) < highestReturnedMrp) {
+        throw new AppError(HTTP_STATUS.BAD_REQUEST, `MRP Rule Failed: Replacement product MRP (${variant.mrp}) cannot be lower than the returned product MRP (${highestReturnedMrp}).`);
       }
 
       const lineIssueTotal = new Prisma.Decimal(variant.sellingPrice).mul(issue.quantity);
@@ -109,6 +138,14 @@ export const exchangeService = {
 
     // 4. Calculate Price Difference
     const priceDifference = issuedValue.sub(returnedValue);
+
+    if (priceDifference.greaterThan(0)) {
+      const payments = payload.payments || [];
+      const totalPayment = payments.reduce((sum, p) => sum + p.amount, 0);
+      if (new Prisma.Decimal(totalPayment).lessThan(priceDifference)) {
+        throw new AppError(HTTP_STATUS.BAD_REQUEST, "Total payment amount is less than the price difference.");
+      }
+    }
 
     // 5. Execute Transaction
     const exchange = await prisma.$transaction(async (tx) => {
@@ -134,6 +171,18 @@ export const exchangeService = {
           },
         },
       });
+
+      // Issue store credit if negative difference
+      if (priceDifference.lessThan(0)) {
+        await tx.customer.update({
+          where: { id: originalSale.customerId },
+          data: {
+            storeCredit: {
+              increment: priceDifference.abs()
+            }
+          }
+        });
+      }
 
       // Execute inventory movements for RETURNS (Stock increases)
       for (const ret of validatedReturns) {
@@ -163,8 +212,19 @@ export const exchangeService = {
         );
       }
 
-      // Future hook: If priceDifference > 0, we could generate a pending Payment record.
-      // For now, it assumes cash is collected instantly.
+      // Process Payments if any
+      const payments = payload.payments || [];
+      if (payments.length > 0) {
+        await tx.payment.createMany({
+          data: payments.map((p) => ({
+            exchangeId: createdExchange.id,
+            method: p.method as any,
+            amount: p.amount,
+            transactionRef: p.transactionRef ?? null,
+            status: "PAID",
+          })),
+        });
+      }
 
       return createdExchange;
     });

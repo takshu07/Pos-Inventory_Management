@@ -26,6 +26,8 @@ export interface SaleHistoryRowModel {
   totalAmount: number;
   status: string;
   paymentMethods: string[]; // e.g. ["CASH", "UPI"]
+  createdAt: string;
+  items?: any[];
 }
 
 export interface SaleItemModel {
@@ -58,6 +60,7 @@ export interface InvoiceDetailModel {
   employee: SaleEmployee | null;
   items: SaleItemModel[];
   payments: PaymentEntry[];
+  exchanges?: { id: string; exchangeNumber?: string }[];
 }
 
 export interface SalesPaginatedResponse {

@@ -45,14 +45,20 @@ export const saleRepository = {
   /**
    * Fetches a single Sale with all necessary relations for rendering a Receipt.
    */
-  async findById(id: string) {
-    return prisma.sale.findUnique({
-      where: { id },
+  async findById(idOrSaleNumber: string) {
+    return prisma.sale.findFirst({
+      where: {
+        OR: [
+          { id: idOrSaleNumber },
+          { saleNumber: idOrSaleNumber }
+        ]
+      },
       include: {
         customer: { select: { id: true, name: true, phone: true } },
         employee: { select: { id: true, firstName: true, lastName: true } },
         items: true,
         payments: true,
+        exchanges: { select: { id: true, exchangeNumber: true } },
       },
     });
   },
@@ -116,6 +122,8 @@ export const saleRepository = {
           employee: { select: { id: true, firstName: true, lastName: true } },
           // We include payments to render payment status chips on the grid UI
           payments: { select: { method: true, amount: true, status: true } },
+          exchanges: { select: { id: true } },
+          items: true,
         },
       }),
     ]);

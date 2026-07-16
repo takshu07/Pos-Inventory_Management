@@ -4,12 +4,22 @@ import { calculateSubtotal, calculateDiscountAmount, calculateGrandTotal } from 
 
 import { CustomerModel } from "@/features/customers/types";
 
+export interface PosReturnedItem {
+  cartItemId: string;
+  variant: PosVariant;
+  quantity: number;
+  originalSaleId: string;
+  mrp: number;
+}
+
 interface PosState {
+  posMode: "SALE" | "EXCHANGE";
   isSessionStarted: boolean; // Controls whether the cart/scan screen is active
   cart: CartItem[];
   discount?: PosDiscount;
   tax: number; // Storing total tax amount for simplicity
   customer: Partial<CustomerModel> | null; // Attached customer (can be partial for new un-saved)
+  exchangeReturns: PosReturnedItem[];
   
   // Actions
   startSession: (customer: Partial<CustomerModel> | null) => void;
@@ -22,18 +32,24 @@ interface PosState {
   setCustomer: (customer: Partial<CustomerModel> | null) => void;
   checkoutStep: number;
   setCheckoutStep: (step: number) => void;
+  setPosMode: (mode: "SALE" | "EXCHANGE") => void;
+  addExchangeReturn: (item: PosReturnedItem) => void;
+  removeExchangeReturn: (cartItemId: string) => void;
 }
 
 export const usePosStore = create<PosState>((set, get) => ({
+  posMode: "SALE",
   isSessionStarted: false,
   cart: [],
   discount: undefined,
   tax: 0,
   customer: null,
   checkoutStep: 0,
+  exchangeReturns: [],
 
-  startSession: (customer) => set({ isSessionStarted: true, customer, checkoutStep: 1 }),
-  unstartSession: () => set({ isSessionStarted: false, checkoutStep: 0 }),
+  startSession: (customer) => set({ isSessionStarted: true, customer, checkoutStep: 1, posMode: "SALE", cart: [], exchangeReturns: [] }),
+  unstartSession: () => set({ isSessionStarted: false, checkoutStep: 0, posMode: "SALE", cart: [], exchangeReturns: [] }),
+  setPosMode: (mode) => set({ posMode: mode, exchangeReturns: mode === "SALE" ? [] : get().exchangeReturns }),
 
   addItem: (variant, quantity = 1) => {
     set((state) => {
@@ -106,7 +122,7 @@ export const usePosStore = create<PosState>((set, get) => ({
   },
 
   clearCart: () => {
-    set({ cart: [], discount: undefined, tax: 0, customer: null, isSessionStarted: false, checkoutStep: 0 });
+    set({ cart: [], discount: undefined, tax: 0, customer: null, isSessionStarted: false, checkoutStep: 0, exchangeReturns: [] });
   },
 
   setDiscount: (discount) => {
@@ -119,15 +135,24 @@ export const usePosStore = create<PosState>((set, get) => ({
 
   setCheckoutStep: (step) => {
     set({ checkoutStep: step });
-  }
+  },
+  
+  addExchangeReturn: (item) => set((state) => ({ exchangeReturns: [...state.exchangeReturns, item] })),
+  removeExchangeReturn: (cartItemId) => set((state) => ({ exchangeReturns: state.exchangeReturns.filter(i => i.cartItemId !== cartItemId) }))
 }));
 
 // Helper hook for derived totals
 export const usePosTotals = () => {
-  const { cart, discount, tax } = usePosStore();
+  const { cart, discount, tax, posMode, exchangeReturns } = usePosStore();
   const subtotal = calculateSubtotal(cart);
   const discountAmount = calculateDiscountAmount(subtotal, discount);
-  const grandTotal = calculateGrandTotal(subtotal, discountAmount, tax);
+  const saleTotal = calculateGrandTotal(subtotal, discountAmount, tax);
+  
+  const returnTotal = posMode === "EXCHANGE" 
+    ? exchangeReturns.reduce((sum, item) => sum + (Number(item.variant.sellingPrice) * item.quantity), 0)
+    : 0;
 
-  return { subtotal, discountAmount, tax, grandTotal };
+  const grandTotal = posMode === "EXCHANGE" ? Math.max(0, saleTotal - returnTotal) : saleTotal;
+
+  return { subtotal, discountAmount, tax, saleTotal, returnTotal, grandTotal };
 };

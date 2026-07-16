@@ -70,7 +70,13 @@ enum SaleStatus {
 enum ExchangeStatus {
   PENDING
   COMPLETED
+  CANCELLED
   REJECTED
+}
+
+enum ReturnCondition {
+  GOOD
+  DAMAGED
 }
 
 enum PaymentMethod {
@@ -468,6 +474,7 @@ model Customer {
   dateOfBirth  DateTime?
   anniversary  DateTime?
   rewardPoints Int       @default(0)
+  storeCredit  Decimal   @default(0) @db.Decimal(10, 2)
   notes        String?
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
@@ -596,7 +603,8 @@ model SaleItem {
 
 model Payment {
   id             String        @id @default(cuid())
-  saleId         String
+  saleId         String?       // Made optional to support exchange payments without a new sale
+  exchangeId     String?       // Links payment to an exchange
   method         PaymentMethod
   amount         Decimal       @db.Decimal(10, 2)
   transactionRef String?
@@ -605,9 +613,11 @@ model Payment {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  sale     Sale?     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  exchange Exchange? @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
 
   @@index([saleId])
+  @@index([exchangeId])
   @@index([method])
   @@index([status])
   @@map("payments")
@@ -671,6 +681,7 @@ model Exchange {
   returnedItems      ExchangeReturnItem[]
   issuedItems        ExchangeIssuedItem[]
   inventoryMovements InventoryMovement[]
+  payments           Payment[]
 
   @@index([exchangeNumber])
   @@index([originalSaleId])
@@ -685,6 +696,7 @@ model ExchangeReturnItem {
   exchangeId  String
   variantId   String
   quantity    Int
+  condition   ReturnCondition @default(GOOD)
   priceAtSale Decimal @db.Decimal(10, 2)
   totalValue  Decimal @db.Decimal(10, 2)
 
