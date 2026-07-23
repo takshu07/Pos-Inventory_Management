@@ -12,7 +12,9 @@ import { ListOfBillsTab } from "../components/ListOfBillsTab";
  *  - Active tab body
  */
 export default function PosView() {
-  const { activeTab } = usePosStore();
+  // Select only activeTab so the workspace shell re-renders on tab switches,
+  // not on every cart/customer keystroke.
+  const activeTab = usePosStore((s) => s.activeTab);
 
   return (
     <div className="h-full w-full flex flex-col bg-background overflow-hidden">

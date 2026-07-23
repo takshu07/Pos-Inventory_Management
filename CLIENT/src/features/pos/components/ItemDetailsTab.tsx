@@ -1,5 +1,6 @@
 import { CheckCircle2, Repeat, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui";
+import { useShallow } from "zustand/react/shallow";
 import { usePosStore } from "../store/usePosStore";
 import { formatCurrency } from "../utils/pos.utils";
 import { ItemCartTable } from "./ItemCartTable";
@@ -13,7 +14,14 @@ import { ExchangeScanner } from "./ExchangeScanner";
  * Saving happens from the toolbar (Save only / Save & Print).
  */
 export function ItemDetailsTab() {
-  const { posMode, setPosMode, exchangeReturns, removeExchangeReturn } = usePosStore();
+  const { posMode, setPosMode, exchangeReturns, removeExchangeReturn } = usePosStore(
+    useShallow((s) => ({
+      posMode: s.posMode,
+      setPosMode: s.setPosMode,
+      exchangeReturns: s.exchangeReturns,
+      removeExchangeReturn: s.removeExchangeReturn,
+    }))
+  );
   const isExchange = posMode === "EXCHANGE";
 
   return (

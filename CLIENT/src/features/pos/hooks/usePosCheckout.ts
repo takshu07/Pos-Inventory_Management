@@ -1,4 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { useShallow } from "zustand/react/shallow";
 import { toast } from "sonner";
 import { usePosStore, usePosTotals, validateExchangeMrp, SessionBill } from "../store/usePosStore";
 import { useCheckout } from "../api/pos.api";
@@ -34,7 +35,17 @@ export function usePosCheckout() {
     recordBill,
     clearCart,
     setActiveTab,
-  } = usePosStore();
+  } = usePosStore(
+    useShallow((s) => ({
+      cart: s.cart,
+      customer: s.customer,
+      posMode: s.posMode,
+      exchangeReturns: s.exchangeReturns,
+      recordBill: s.recordBill,
+      clearCart: s.clearCart,
+      setActiveTab: s.setActiveTab,
+    }))
+  );
   const { subtotal, discountAmount, returnTotal, grandTotal } = usePosTotals();
 
   const isProcessing = checkoutMutation.isPending || exchangeMutation.isPending;

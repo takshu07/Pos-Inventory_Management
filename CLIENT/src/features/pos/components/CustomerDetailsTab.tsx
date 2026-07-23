@@ -3,8 +3,10 @@ import { UserPlus, Search, ArrowRight, ShoppingBag } from "lucide-react";
 import { Input, Button } from "@/components/ui";
 import { useCustomerByPhone, useCreateCustomer } from "@/features/customers/hooks/useCustomers";
 import { useSalesHistory } from "@/features/sales/hooks/useSales";
+import { useShallow } from "zustand/react/shallow";
 import { usePosStore } from "../store/usePosStore";
 import { formatCurrency } from "../utils/pos.utils";
+import { ExchangeSummaryLine } from "@/features/sales/components/Invoice/ExchangeSection";
 import { toast } from "sonner";
 
 const fmtDate = (iso?: string | null) =>
@@ -12,7 +14,13 @@ const fmtDate = (iso?: string | null) =>
 
 /** Left panel: identify or create the customer. */
 function CustomerForm() {
-  const { customer, startSession, setCustomer } = usePosStore();
+  const { customer, startSession, setCustomer } = usePosStore(
+    useShallow((s) => ({
+      customer: s.customer,
+      startSession: s.startSession,
+      setCustomer: s.setCustomer,
+    }))
+  );
   const createCustomer = useCreateCustomer();
 
   const [phone, setPhone] = useState(customer?.phone || "");
@@ -134,7 +142,7 @@ function CustomerForm() {
 
 /** Right panel: previous purchases of the identified customer (empty if new). */
 function PreviousPurchases() {
-  const { customer } = usePosStore();
+  const customer = usePosStore((s) => s.customer);
   const customerId = customer?.id;
   const { data, isLoading } = useSalesHistory({ customerId, limit: 20 });
   const bills = data?.data ?? [];
@@ -160,18 +168,27 @@ function PreviousPurchases() {
         ) : (
           <div className="flex flex-col gap-2">
             {bills.map((b, i) => (
-              <div key={b.id} className="rounded-lg border p-3 bg-background flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-semibold text-muted-foreground w-5">{i + 1}</span>
-                  <div className="flex flex-col">
-                    <span className="font-medium text-sm">{b.invoiceNumber}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {new Date(b.date).toLocaleDateString("en-IN", { dateStyle: "medium" })}
-                      {b.paymentMethods.length > 0 && ` · ${b.paymentMethods.join(", ")}`}
-                    </span>
+              <div key={b.id} className="rounded-lg border p-3 bg-background flex flex-col gap-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-semibold text-muted-foreground w-5">{i + 1}</span>
+                    <div className="flex flex-col">
+                      <span className="font-medium text-sm">{b.invoiceNumber}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(b.date).toLocaleDateString("en-IN", { dateStyle: "medium" })}
+                        {b.paymentMethods.length > 0 && ` · ${b.paymentMethods.join(", ")}`}
+                      </span>
+                    </div>
                   </div>
+                  <span className="font-semibold text-sm">{formatCurrency(b.totalAmount)}</span>
                 </div>
-                <span className="font-semibold text-sm">{formatCurrency(b.totalAmount)}</span>
+                {b.exchanges.length > 0 && (
+                  <div className="flex flex-col gap-1.5 pl-8">
+                    {b.exchanges.map((ex) => (
+                      <ExchangeSummaryLine key={ex.id} exchange={ex} />
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

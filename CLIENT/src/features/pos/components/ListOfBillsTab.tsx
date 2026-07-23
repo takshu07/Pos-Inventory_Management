@@ -1,5 +1,6 @@
 import { Printer, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui";
+import { useShallow } from "zustand/react/shallow";
 import { usePosStore } from "../store/usePosStore";
 import { useSalesHistory } from "@/features/sales/hooks/useSales";
 import { formatCurrency } from "../utils/pos.utils";
@@ -43,7 +44,9 @@ function reprint(raw: any, kind: "SALE" | "EXCHANGE", grandTotal: number) {
 }
 
 export function ListOfBillsTab() {
-  const { sessionBills, customer } = usePosStore();
+  const { sessionBills, customer } = usePosStore(
+    useShallow((s) => ({ sessionBills: s.sessionBills, customer: s.customer }))
+  );
   const { data: history } = useSalesHistory({ customerId: customer?.id, limit: 20 });
 
   return (

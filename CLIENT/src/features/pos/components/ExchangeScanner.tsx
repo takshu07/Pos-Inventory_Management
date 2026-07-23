@@ -1,19 +1,26 @@
 import React, { useState } from "react";
 import { Search, Barcode, Loader2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/Input";
 import { apiClient } from "@/lib/api/axios";
 import { toast } from "sonner";
+import { useShallow } from "zustand/react/shallow";
 import { usePosStore, PosReturnedItem } from "../store/usePosStore";
 import { PosVariant } from "../types/pos.types";
-import { useSalesHistory } from "@/features/sales/hooks/useSales";
+import { salesKeys } from "@/features/sales/hooks/useSales";
+import { fetchSales } from "@/features/sales/api/salesApi";
 
 export function ExchangeScanner() {
   const [barcode, setBarcode] = useState("");
   const [isScanning, setIsScanning] = useState(false);
-  const { customer, addExchangeReturn, cart } = usePosStore();
-  
-  // We preload sales data so it's ready when they scan
-  const { data: salesData } = useSalesHistory({ customerId: customer?.id, limit: 10 });
+  const { customer, addExchangeReturn, cart } = usePosStore(
+    useShallow((s) => ({
+      customer: s.customer,
+      addExchangeReturn: s.addExchangeReturn,
+      cart: s.cart,
+    }))
+  );
+  const queryClient = useQueryClient();
 
   const handleScan = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && barcode.trim()) {
@@ -40,7 +47,17 @@ export function ExchangeScanner() {
         let foundSaleId = null;
         let isWithin3Days = false;
 
-        // useSalesHistory returns { total, data } — the rows carry raw `items` with variantId.
+        // Fetch the customer's sales AT SCAN TIME and await the result. Relying on
+        // a preloaded useSalesHistory() query caused a race: on the first scan the
+        // background fetch often hadn't resolved yet, so the list was empty and the
+        // item was wrongly rejected as "not in recent purchases" — then accepted on
+        // the second scan once the data had arrived. fetchQuery dedupes with the
+        // React Query cache but always resolves to loaded data.
+        const filters = { customerId: customer.id, limit: 10 };
+        const salesData = await queryClient.fetchQuery({
+          queryKey: salesKeys.list(filters),
+          queryFn: () => fetchSales(filters),
+        });
         const sales = salesData?.data || [];
         for (const sale of sales) {
           if (sale.status !== "COMPLETED" && sale.status !== "PARTIAL") continue;

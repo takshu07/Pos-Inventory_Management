@@ -9,16 +9,22 @@
  * - Inventory alerts and operational tables.
  */
 
-import { useState } from "react";
-import { 
-  useSalesKPIs, 
-  useSalesChart, 
-  useRecentSales, 
-  useTopProducts, 
-  useInventoryAlerts 
+import { Suspense, lazy, useState } from "react";
+import {
+  useSalesKPIs,
+  useSalesChart,
+  useRecentSales,
+  useTopProducts,
+  useInventoryAlerts
 } from "../../hooks/useDashboard";
 import { StatCard } from "../widgets/StatCard";
-import { SalesChartWidget } from "../widgets/SalesChartWidget";
+// Lazy-loaded so its heavy dependency (recharts, ~900KB) is fetched only when
+// the dashboard actually mounts the chart — it stays out of the initial load.
+const SalesChartWidget = lazy(() =>
+  import("../widgets/SalesChartWidget").then((m) => ({
+    default: m.SalesChartWidget,
+  }))
+);
 import { RecentSalesWidget } from "../widgets/RecentSalesWidget";
 import { TopProductsWidget } from "../widgets/TopProductsWidget";
 import { InventoryAlertsWidget } from "../widgets/InventoryAlertsWidget";
@@ -121,11 +127,17 @@ export function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (Wider) */}
         <div className="lg:col-span-2 space-y-6">
-          <SalesChartWidget 
-            data={chartData} 
-            isLoading={isLoadingChart} 
-            className="min-h-[400px]" 
-          />
+          <Suspense
+            fallback={
+              <div className="min-h-[400px] rounded-xl border border-border bg-card animate-pulse" />
+            }
+          >
+            <SalesChartWidget
+              data={chartData}
+              isLoading={isLoadingChart}
+              className="min-h-[400px]"
+            />
+          </Suspense>
           <RecentSalesWidget 
             sales={recentSales} 
             isLoading={isLoadingSales} 

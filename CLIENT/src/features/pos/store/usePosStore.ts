@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import { CartItem, PosVariant, PosDiscount } from "../types/pos.types";
 import { calculateSubtotal, calculateDiscountAmount, calculateGrandTotal } from "../utils/pos.utils";
 
@@ -202,21 +204,43 @@ export const usePosStore = create<PosState>((set, get) => ({
     })),
 }));
 
-// Helper hook for derived totals
+// Helper hook for derived totals.
+//
+// Subscribes to ONLY the five fields the totals depend on (via useShallow) so
+// unrelated store changes — active tab, selected row, session bills, customer —
+// no longer re-run this hook or the components that use it. The arithmetic is
+// memoized so it recomputes only when one of those inputs actually changes.
+// (Previously this called `usePosStore()` with no selector, subscribing every
+// consumer to the entire store and recomputing on every state change.)
 export const usePosTotals = () => {
-  const { cart, discount, tax, posMode, exchangeReturns } = usePosStore();
-  const subtotal = calculateSubtotal(cart);
-  const discountAmount = calculateDiscountAmount(subtotal, discount);
-  const saleTotal = calculateGrandTotal(subtotal, discountAmount, tax);
+  const { cart, discount, tax, posMode, exchangeReturns } = usePosStore(
+    useShallow((s) => ({
+      cart: s.cart,
+      discount: s.discount,
+      tax: s.tax,
+      posMode: s.posMode,
+      exchangeReturns: s.exchangeReturns,
+    }))
+  );
 
-  const returnTotal =
-    posMode === "EXCHANGE"
-      ? exchangeReturns.reduce((sum, item) => sum + Number(item.variant.sellingPrice) * item.quantity, 0)
-      : 0;
+  return useMemo(() => {
+    const subtotal = calculateSubtotal(cart);
+    const discountAmount = calculateDiscountAmount(subtotal, discount);
+    const saleTotal = calculateGrandTotal(subtotal, discountAmount, tax);
 
-  const grandTotal = posMode === "EXCHANGE" ? Math.max(0, saleTotal - returnTotal) : saleTotal;
+    const returnTotal =
+      posMode === "EXCHANGE"
+        ? exchangeReturns.reduce(
+            (sum, item) => sum + Number(item.variant.sellingPrice) * item.quantity,
+            0
+          )
+        : 0;
 
-  return { subtotal, discountAmount, tax, saleTotal, returnTotal, grandTotal };
+    const grandTotal =
+      posMode === "EXCHANGE" ? Math.max(0, saleTotal - returnTotal) : saleTotal;
+
+    return { subtotal, discountAmount, tax, saleTotal, returnTotal, grandTotal };
+  }, [cart, discount, tax, posMode, exchangeReturns]);
 };
 
 /**

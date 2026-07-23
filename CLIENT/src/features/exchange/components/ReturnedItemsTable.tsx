@@ -1,3 +1,4 @@
+import { useShallow } from "zustand/react/shallow";
 import { useExchangeStore } from "../store/useExchangeStore";
 import { formatCurrency } from "@/features/pos/utils/pos.utils";
 import { Minus, Plus } from "lucide-react";
@@ -8,7 +9,12 @@ interface ReturnedItemsTableProps {
 }
 
 export function ReturnedItemsTable({ items }: ReturnedItemsTableProps) {
-  const { returnedItems, setReturnQuantity } = useExchangeStore();
+  const { returnedItems, setReturnQuantity } = useExchangeStore(
+    useShallow((s) => ({
+      returnedItems: s.returnedItems,
+      setReturnQuantity: s.setReturnQuantity,
+    }))
+  );
 
   return (
     <div className="flex flex-col gap-3">

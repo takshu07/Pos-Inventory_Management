@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { useSearchVariants } from "@/features/pos/api/pos.api";
 import { useExchangeStore } from "../store/useExchangeStore";
 import { Trash2, Search, Barcode, Plus } from "lucide-react";
@@ -8,7 +9,13 @@ import { formatCurrency } from "@/features/pos/utils/pos.utils";
 import { PosVariant } from "@/features/pos/types/pos.types";
 
 export function ExchangeCart() {
-  const { issuedItems, addIssuedItem, removeIssuedItem } = useExchangeStore();
+  const { issuedItems, addIssuedItem, removeIssuedItem } = useExchangeStore(
+    useShallow((s) => ({
+      issuedItems: s.issuedItems,
+      addIssuedItem: s.addIssuedItem,
+      removeIssuedItem: s.removeIssuedItem,
+    }))
+  );
   
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");

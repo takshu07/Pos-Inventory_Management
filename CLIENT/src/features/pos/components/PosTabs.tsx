@@ -1,4 +1,5 @@
 import { User, Package, ReceiptText } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { usePosStore, PosTab } from "../store/usePosStore";
 import { toast } from "sonner";
 
@@ -13,7 +14,14 @@ const TABS: { key: PosTab; label: string; icon: React.ReactNode }[] = [
  * The Item details tab is locked until a customer is attached.
  */
 export function PosTabs() {
-  const { activeTab, setActiveTab, isSessionStarted, sessionBills } = usePosStore();
+  const { activeTab, setActiveTab, isSessionStarted, sessionBills } = usePosStore(
+    useShallow((s) => ({
+      activeTab: s.activeTab,
+      setActiveTab: s.setActiveTab,
+      isSessionStarted: s.isSessionStarted,
+      sessionBills: s.sessionBills,
+    }))
+  );
 
   const handleClick = (tab: PosTab) => {
     if (tab === "ITEMS" && !isSessionStarted) {

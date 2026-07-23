@@ -16,6 +16,28 @@ export interface PaymentEntry {
   status: string;
 }
 
+export interface ExchangeLineModel {
+  id: string;
+  productName: string;
+  sku: string;
+  sizeName: string;
+  colorName: string;
+  quantity: number;
+  totalValue: number;
+}
+
+export interface ExchangeSummaryModel {
+  id: string;
+  exchangeNumber: string;
+  date: string; // ISO String
+  status: string;
+  returnedValue: number;
+  issuedValue: number;
+  priceDifference: number; // positive = customer paid extra, negative = refund
+  returnedItems: ExchangeLineModel[];
+  issuedItems: ExchangeLineModel[];
+}
+
 export interface SaleHistoryRowModel {
   id: string;
   invoiceNumber: string;
@@ -28,6 +50,7 @@ export interface SaleHistoryRowModel {
   paymentMethods: string[]; // e.g. ["CASH", "UPI"]
   createdAt: string;
   items?: any[];
+  exchanges: ExchangeSummaryModel[];
 }
 
 export interface SaleItemModel {
@@ -60,7 +83,7 @@ export interface InvoiceDetailModel {
   employee: SaleEmployee | null;
   items: SaleItemModel[];
   payments: PaymentEntry[];
-  exchanges?: { id: string; exchangeNumber?: string }[];
+  exchanges: ExchangeSummaryModel[];
 }
 
 export interface SalesPaginatedResponse {

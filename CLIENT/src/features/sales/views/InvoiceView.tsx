@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { CustomerCard, CashierCard } from "../components/Invoice/InfoCards";
 import { InvoiceItemsTable } from "../components/Invoice/InvoiceItemsTable";
 import { PaymentLedger } from "../components/Invoice/PaymentLedger";
+import { ExchangeSection } from "../components/Invoice/ExchangeSection";
 
 export default function InvoiceView() {
   const { saleId } = useParams();
@@ -67,6 +68,9 @@ export default function InvoiceView() {
 
         {/* Items */}
         <InvoiceItemsTable items={invoice.items} />
+
+        {/* Exchanges performed against this sale */}
+        <ExchangeSection exchanges={invoice.exchanges} />
 
         {/* Footer Math & Ledger */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

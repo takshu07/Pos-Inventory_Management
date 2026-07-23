@@ -7,8 +7,34 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { QuickAction, WidgetProps } from "../../types";
 import { Link } from "react-router";
-import * as Icons from "lucide-react";
+import {
+  BarChart3,
+  Boxes,
+  CircleDashed,
+  Package,
+  PackagePlus,
+  Settings,
+  ShoppingCart,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/utils/cn";
+
+// Explicit registry of the icons quick actions can reference. Previously this
+// widget did `import * as Icons from "lucide-react"` and looked icons up by
+// name — a namespace import pulls the ENTIRE lucide icon set (~600KB raw /
+// ~156KB gz) into the bundle and cannot be tree-shaken. Quick-action icon names
+// are a small, static set, so mapping only those keeps the payload tiny.
+// To add a new quick-action icon, import it and add one line here.
+const QUICK_ACTION_ICONS: Record<string, LucideIcon> = {
+  BarChart3,
+  Boxes,
+  Package,
+  PackagePlus,
+  Settings,
+  ShoppingCart,
+  Users,
+};
 
 interface QuickActionsWidgetProps extends WidgetProps {
   actions: QuickAction[];
@@ -23,8 +49,9 @@ export function QuickActionsWidget({ actions, className }: QuickActionsWidgetPro
       <CardContent>
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-3">
           {actions.map((action, idx) => {
-            // Dynamically resolve icon from Lucide
-            const Icon = (Icons as any)[action.icon] || Icons.CircleDashed;
+            // Resolve the icon from the explicit registry (falls back to a
+            // neutral placeholder for any unmapped name).
+            const Icon = QUICK_ACTION_ICONS[action.icon] ?? CircleDashed;
             
             return (
               <Link 

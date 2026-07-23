@@ -1,4 +1,6 @@
+import { useMemo } from "react";
 import { create } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import { PosVariant } from "@/features/pos/types/pos.types";
 
 export interface ExchangeCartItem {
@@ -114,11 +116,23 @@ export const useExchangeStore = create<ExchangeState>((set) => ({
 }));
 
 export const useExchangeTotals = () => {
-  const { returnedItems, issuedItems } = useExchangeStore();
-  
-  const returnedTotal = returnedItems.reduce((sum, item) => sum + (item.quantity * item.priceAtSale), 0);
-  const issuedTotal = issuedItems.reduce((sum, item) => sum + item.lineTotal, 0);
-  const difference = issuedTotal - returnedTotal; // Positive means customer owes us
+  // Subscribe only to the two item arrays (shallow) and memoize the math, so
+  // this recomputes only when items change — not on every unrelated store update.
+  const { returnedItems, issuedItems } = useExchangeStore(
+    useShallow((s) => ({
+      returnedItems: s.returnedItems,
+      issuedItems: s.issuedItems,
+    }))
+  );
 
-  return { returnedTotal, issuedTotal, difference };
+  return useMemo(() => {
+    const returnedTotal = returnedItems.reduce(
+      (sum, item) => sum + item.quantity * item.priceAtSale,
+      0
+    );
+    const issuedTotal = issuedItems.reduce((sum, item) => sum + item.lineTotal, 0);
+    const difference = issuedTotal - returnedTotal; // Positive means customer owes us
+
+    return { returnedTotal, issuedTotal, difference };
+  }, [returnedItems, issuedItems]);
 };

@@ -7,6 +7,7 @@ import { DataTable, ColumnDef } from "@/components/shared/DataTable/DataTable";
 import { SearchBox } from "@/components/ui/SearchBox";
 import { Select } from "@/components/ui/Select";
 import { Badge } from "@/components/ui/Badge";
+import { ArrowLeftRight } from "lucide-react";
 import { SaleHistoryRowModel } from "../types";
 
 export default function SalesHistoryView() {
@@ -85,9 +86,20 @@ export default function SalesHistoryView() {
       key: "status",
       header: "Status",
       cell: (row) => (
-        <Badge variant={row.status === "COMPLETED" ? "success" : row.status === "CANCELLED" ? "error" : "warning"}>
-          {row.status}
-        </Badge>
+        <div className="flex flex-col items-start gap-1">
+          <Badge variant={row.status === "COMPLETED" ? "success" : row.status === "CANCELLED" ? "error" : "warning"}>
+            {row.status}
+          </Badge>
+          {row.exchanges.length > 0 && (
+            <Badge
+              variant="info"
+              title={row.exchanges.map((e) => e.exchangeNumber).join(", ")}
+            >
+              <ArrowLeftRight className="w-3 h-3" />
+              {row.exchanges.length === 1 ? "Exchanged" : `${row.exchanges.length} Exchanges`}
+            </Badge>
+          )}
+        </div>
       ),
     },
   ];

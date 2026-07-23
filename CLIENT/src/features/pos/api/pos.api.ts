@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, keepPreviousData } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api/axios";
 import { PosVariant, CheckoutPayload } from "../types/pos.types";
 
@@ -50,7 +50,10 @@ export const useSearchVariants = (searchStr: string) => {
     queryKey: ["pos", "variants", "search", searchStr],
     queryFn: () => searchVariants(searchStr),
     enabled: searchStr.trim().length > 2,
-    staleTime: 1000 * 60 * 5, // 5 mins
+    staleTime: 1000 * 60 * 5, // 5 mins — catalog changes slowly during a shift
+    // Keep showing the previous matches while the next keystroke's query loads,
+    // so the results list doesn't flash empty between characters.
+    placeholderData: keepPreviousData,
   });
 };
 

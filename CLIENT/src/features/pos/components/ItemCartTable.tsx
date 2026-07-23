@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { usePosStore, usePosTotals } from "../store/usePosStore";
 import { formatCurrency } from "../utils/pos.utils";
 
@@ -8,7 +9,14 @@ import { formatCurrency } from "../utils/pos.utils";
  * Clicking a row selects it for the right-hand detail/autofill panel.
  */
 export function ItemCartTable() {
-  const { cart, selectedCartItemId, setSelectedCartItem, removeItem } = usePosStore();
+  const { cart, selectedCartItemId, setSelectedCartItem, removeItem } = usePosStore(
+    useShallow((s) => ({
+      cart: s.cart,
+      selectedCartItemId: s.selectedCartItemId,
+      setSelectedCartItem: s.setSelectedCartItem,
+      removeItem: s.removeItem,
+    }))
+  );
   const { subtotal, discountAmount, grandTotal, returnTotal, saleTotal } = usePosTotals();
   const lineDiscount = cart.reduce((s, i) => s + (i.discountAmount ?? 0), 0);
 

@@ -84,6 +84,9 @@ export function useRecentSales() {
     queryKey: DASHBOARD_QUERY_KEYS.recentSales(),
     queryFn: getRecentSales,
     refetchInterval: 1000 * 30, // Auto-refresh every 30s
+    // Don't keep polling when the dashboard tab is in the background — saves a
+    // request every 30s per idle tab. It refetches immediately on refocus.
+    refetchIntervalInBackground: false,
     staleTime: 1000 * 15,
   });
 }

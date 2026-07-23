@@ -36,11 +36,17 @@ export function useLogin() {
 
   return useMutation({
     mutationFn: (values: LoginFormValues) => {
-      // Determine if the identifier is an email or phone number
-      const isEmail = values.identifier.includes("@");
+      // Determine if the identifier is an email or phone number.
+      // The identifier is already trimmed by the form's zod resolver; the
+      // password is not, so strip surrounding whitespace here. Browser autofill,
+      // paste, and mobile keyboards frequently append a trailing space, which
+      // otherwise causes a valid password to be rejected as "Invalid credentials".
+      // Only leading/trailing whitespace is removed — never interior characters.
+      const identifier = values.identifier.trim();
+      const isEmail = identifier.includes("@");
       return loginRequest({
-        ...(isEmail ? { email: values.identifier } : { phone: values.identifier }),
-        password: values.password,
+        ...(isEmail ? { email: identifier } : { phone: identifier }),
+        password: values.password.trim(),
       });
     },
 

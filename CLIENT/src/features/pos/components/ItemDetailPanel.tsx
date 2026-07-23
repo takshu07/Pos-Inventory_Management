@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Input } from "@/components/ui";
+import { useShallow } from "zustand/react/shallow";
 import { usePosStore } from "../store/usePosStore";
 import { formatCurrency } from "../utils/pos.utils";
 
@@ -8,7 +9,14 @@ import { formatCurrency } from "../utils/pos.utils";
  * Quantity and discount are editable and flow back into the cart line.
  */
 export function ItemDetailPanel() {
-  const { cart, selectedCartItemId, updateQuantity, updateItemDiscount } = usePosStore();
+  const { cart, selectedCartItemId, updateQuantity, updateItemDiscount } = usePosStore(
+    useShallow((s) => ({
+      cart: s.cart,
+      selectedCartItemId: s.selectedCartItemId,
+      updateQuantity: s.updateQuantity,
+      updateItemDiscount: s.updateItemDiscount,
+    }))
+  );
 
   const item = useMemo(
     () => cart.find((i) => i.cartItemId === selectedCartItemId) ?? null,

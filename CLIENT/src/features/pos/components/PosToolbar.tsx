@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Plus, Printer, Save, ReceiptText } from "lucide-react";
 import { Button } from "@/components/ui";
+import { useShallow } from "zustand/react/shallow";
 import { usePosStore, usePosTotals } from "../store/usePosStore";
 import { usePosCheckout, PaymentInput } from "../hooks/usePosCheckout";
 import { PaymentModal } from "./PaymentModal";
@@ -21,7 +22,17 @@ export function PosToolbar() {
     exchangeReturns,
     lastSavedBill,
     customer,
-  } = usePosStore();
+  } = usePosStore(
+    useShallow((s) => ({
+      resetWorkspace: s.resetWorkspace,
+      activeTab: s.activeTab,
+      posMode: s.posMode,
+      cart: s.cart,
+      exchangeReturns: s.exchangeReturns,
+      lastSavedBill: s.lastSavedBill,
+      customer: s.customer,
+    }))
+  );
   const { grandTotal } = usePosTotals();
   const { save, isProcessing } = usePosCheckout();
 

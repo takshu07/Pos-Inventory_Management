@@ -1,4 +1,38 @@
-import { InvoiceDetailModel, SaleHistoryRowModel } from "../types";
+import {
+  ExchangeLineModel,
+  ExchangeSummaryModel,
+  InvoiceDetailModel,
+  SaleHistoryRowModel,
+} from "../types";
+
+/** Flattens a raw exchange return/issued item into a display line. */
+function mapExchangeLine(rawItem: any): ExchangeLineModel {
+  const variant = rawItem.variant || {};
+  return {
+    id: rawItem.id,
+    productName: variant.product?.name ?? "Unknown product",
+    sku: variant.sku ?? "",
+    sizeName: variant.size?.name ?? "",
+    colorName: variant.color?.name ?? "",
+    quantity: rawItem.quantity,
+    totalValue: Number(rawItem.totalValue ?? 0),
+  };
+}
+
+/** Maps a raw exchange (list or detail shape) into the UI summary model. */
+export function mapExchangeSummary(rawExchange: any): ExchangeSummaryModel {
+  return {
+    id: rawExchange.id,
+    exchangeNumber: rawExchange.exchangeNumber ?? "",
+    date: rawExchange.exchangeDate ?? rawExchange.createdAt ?? "",
+    status: rawExchange.status ?? "",
+    returnedValue: Number(rawExchange.returnedValue ?? 0),
+    issuedValue: Number(rawExchange.issuedValue ?? 0),
+    priceDifference: Number(rawExchange.priceDifference ?? 0),
+    returnedItems: (rawExchange.returnedItems || []).map(mapExchangeLine),
+    issuedItems: (rawExchange.issuedItems || []).map(mapExchangeLine),
+  };
+}
 
 /**
  * Maps the raw backend paginated list item into the UI model.
@@ -21,6 +55,7 @@ export function mapToSaleHistoryRow(rawSale: any): SaleHistoryRowModel {
     paymentMethods: paymentMethods as string[],
     createdAt: rawSale.createdAt,
     items: rawSale.items || [],
+    exchanges: (rawSale.exchanges || []).map(mapExchangeSummary),
   };
 }
 
@@ -60,5 +95,6 @@ export function mapToInvoiceDetail(rawSale: any): InvoiceDetailModel {
       amount: Number(payment.amount),
       status: payment.status,
     })),
+    exchanges: (rawSale.exchanges || []).map(mapExchangeSummary),
   };
 }
