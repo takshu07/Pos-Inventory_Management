@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router";
 import { useSalesHistory } from "../hooks/useSales";
 import { useTableState } from "@/hooks/useTableState";

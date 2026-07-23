@@ -31,11 +31,6 @@ const searchVariants = async (searchStr: string): Promise<PosVariant[]> => {
   return response.data.data;
 };
 
-const lookupBarcode = async (barcode: string): Promise<PosVariant> => {
-  const response = await apiClient.get<never, { data: PosVariant }>(`/product-variants/barcode/${barcode}`);
-  return response.data;
-};
-
 const createSale = async (payload: CheckoutPayload): Promise<any> => {
   const idempotencyKey = crypto.randomUUID();
   const response = await apiClient.post<never, { data: any }>("/sales", payload, {

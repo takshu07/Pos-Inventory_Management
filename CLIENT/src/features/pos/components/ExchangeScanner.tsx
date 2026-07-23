@@ -38,28 +38,26 @@ export function ExchangeScanner() {
 
         // 3. Find eligible sale
         let foundSaleId = null;
-        let originalSaleItem = null;
         let isWithin3Days = false;
 
-        const sales = salesData?.items || [];
+        // useSalesHistory returns { total, data } — the rows carry raw `items` with variantId.
+        const sales = salesData?.data || [];
         for (const sale of sales) {
           if (sale.status !== "COMPLETED" && sale.status !== "PARTIAL") continue;
 
           const saleDate = new Date(sale.createdAt);
           const diffDays = Math.ceil(Math.abs(new Date().getTime() - saleDate.getTime()) / (1000 * 60 * 60 * 24));
-          
-          const matchingItem = sale.items.find((item: any) => item.variantId === variant.id);
-          
+
+          const matchingItem = (sale.items || []).find((item: any) => item.variantId === variant.id);
+
           if (matchingItem) {
             if (diffDays <= 3) {
               foundSaleId = sale.id;
-              originalSaleItem = matchingItem;
               isWithin3Days = true;
               break;
             } else {
               // Found the item, but too old
-              foundSaleId = sale.id; 
-              originalSaleItem = matchingItem;
+              foundSaleId = sale.id;
             }
           }
         }

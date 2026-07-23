@@ -20,7 +20,9 @@ export interface CartItem {
   variant: PosVariant;
   quantity: number;
   unitPrice: number; // The sellingPrice
-  lineTotal: number;
+  discount?: PosDiscount; // Per-line discount as entered by the cashier
+  discountAmount?: number; // Resolved rupee discount for this line
+  lineTotal: number; // quantity * unitPrice - discountAmount
 }
 
 export type PaymentMethod = "CASH" | "CARD" | "UPI";

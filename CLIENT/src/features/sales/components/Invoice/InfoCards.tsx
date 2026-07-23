@@ -1,4 +1,3 @@
-import React from "react";
 import { InvoiceDetailModel } from "../../types";
 import { Card } from "@/components/ui/Card";
 

@@ -4,7 +4,6 @@ import {
   ShoppingCart,
   Package,
   Users,
-  ArrowLeftRight,
   History,
   Wallet,
   Bell,

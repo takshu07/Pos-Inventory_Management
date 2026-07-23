@@ -1,7 +1,6 @@
-import React from "react";
 import { useParams, useNavigate } from "react-router";
 import { useInvoiceDetail } from "../hooks/useSales";
-import { ArrowLeft, RefreshCw, Printer } from "lucide-react";
+import { ArrowLeft, Printer } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { CustomerCard, CashierCard } from "../components/Invoice/InfoCards";

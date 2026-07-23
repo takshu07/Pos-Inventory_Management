@@ -1,4 +1,3 @@
-import React from "react";
 import { InvoiceDetailModel } from "../../types";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";

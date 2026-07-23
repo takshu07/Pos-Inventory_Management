@@ -1,4 +1,3 @@
-import React from "react";
 import { formatCurrency } from "@/features/pos/utils/pos.utils";
 
 interface DifferenceSummaryProps {

@@ -1,4 +1,3 @@
-import React from "react";
 import { useExchangeStore } from "../store/useExchangeStore";
 import { formatCurrency } from "@/features/pos/utils/pos.utils";
 import { Minus, Plus } from "lucide-react";

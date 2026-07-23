@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useSearchVariants } from "@/features/pos/api/pos.api";
 import { useExchangeStore } from "../store/useExchangeStore";
 import { Trash2, Search, Barcode, Plus } from "lucide-react";

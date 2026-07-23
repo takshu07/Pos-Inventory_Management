@@ -1,3 +1,12 @@
+export interface CustomerStatistics {
+  lifetimeSpend: number;
+  totalOrders: number;
+  averageOrderValue: number;
+  firstVisit: string | null;
+  lastVisit: string | null;
+  totalItemsPurchased: number;
+}
+
 export interface CustomerModel {
   id: string;
   name: string;
@@ -12,6 +21,7 @@ export interface CustomerModel {
   totalSpent: number;
   lastPurchaseDate: string | null;
   isActive: boolean;
+  statistics?: CustomerStatistics;
 }
 
 export interface CustomerCreateDTO {

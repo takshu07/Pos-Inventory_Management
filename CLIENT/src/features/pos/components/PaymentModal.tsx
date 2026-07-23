@@ -17,9 +17,10 @@ interface PaymentModalProps {
   grandTotal: number;
   onConfirm: (payload: { method: PaymentMethod; amount: number; transactionRef?: string }[]) => void;
   isProcessing: boolean;
+  confirmLabel?: string;
 }
 
-export function PaymentModal({ open, onClose, grandTotal, onConfirm, isProcessing }: PaymentModalProps) {
+export function PaymentModal({ open, onClose, grandTotal, onConfirm, isProcessing, confirmLabel }: PaymentModalProps) {
   const [entries, setEntries] = useState<PaymentEntry[]>([]);
   const [method, setMethod] = useState<PaymentMethod>("CASH");
   const [amountInput, setAmountInput] = useState<string>("");
@@ -96,12 +97,15 @@ export function PaymentModal({ open, onClose, grandTotal, onConfirm, isProcessin
     (method === "CASH" || amountNum <= remaining) && 
     remaining > 0;
 
-  // Validation for completing the sale
-  const canConfirm = 
-    totalPaid >= grandTotal && 
-    entries.length > 0 && 
-    // Ensure non-cash didn't overpay (if they somehow bypassed UI)
-    nonCashPaid <= grandTotal;
+  // Validation for completing the sale.
+  // A zero-total transaction (e.g. an even MRP exchange) needs no payment entries.
+  const canConfirm =
+    grandTotal <= 0
+      ? true
+      : totalPaid >= grandTotal &&
+        entries.length > 0 &&
+        // Ensure non-cash didn't overpay (if they somehow bypassed UI)
+        nonCashPaid <= grandTotal;
 
   return (
     <Modal open={open} onClose={onClose} title="Complete Payment" size="lg">
@@ -228,12 +232,12 @@ export function PaymentModal({ open, onClose, grandTotal, onConfirm, isProcessin
         <Button variant="ghost" onClick={onClose} disabled={isProcessing}>
           Cancel
         </Button>
-        <Button 
-          onClick={handleConfirm} 
+        <Button
+          onClick={handleConfirm}
           disabled={!canConfirm || isProcessing}
           loading={isProcessing}
         >
-          Confirm Payment
+          {confirmLabel ?? "Confirm Payment"}
         </Button>
       </div>
     </Modal>

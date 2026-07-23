@@ -32,7 +32,7 @@ interface ExchangeState {
   setExchangeStep: (step: number) => void;
 }
 
-export const useExchangeStore = create<ExchangeState>((set, get) => ({
+export const useExchangeStore = create<ExchangeState>((set) => ({
   originalSaleId: null,
   returnedItems: [],
   issuedItems: [],

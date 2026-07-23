@@ -1,47 +1,28 @@
 import { usePosStore } from "../store/usePosStore";
-import { PosLayout } from "../components/PosLayout";
-import { PosLeftSection } from "../components/PosLeftSection";
-import { PosRightSection } from "../components/PosRightSection";
-import { CustomerEntryScreen } from "../components/CustomerEntryScreen";
-import { CheckoutStepper } from "../components/CheckoutStepper";
+import { PosToolbar } from "../components/PosToolbar";
+import { PosTabs } from "../components/PosTabs";
+import { CustomerDetailsTab } from "../components/CustomerDetailsTab";
+import { ItemDetailsTab } from "../components/ItemDetailsTab";
+import { ListOfBillsTab } from "../components/ListOfBillsTab";
 
-import { CheckCircle } from "lucide-react";
-import { Button } from "@/components/ui";
-
+/**
+ * Single cashier workspace matching the design:
+ *  - Static toolbar   [ Add · Print · Save only · Save & Print ]
+ *  - Static tab bar    [ Customer details · Item details · List of bills ]
+ *  - Active tab body
+ */
 export default function PosView() {
-  const { isSessionStarted, checkoutStep, clearCart } = usePosStore();
-
-  if (!isSessionStarted && checkoutStep !== 3) {
-    return <CustomerEntryScreen />;
-  }
+  const { activeTab } = usePosStore();
 
   return (
-    <div className="h-full w-full bg-background flex flex-col">
-      <div className="w-full p-4 shrink-0 bg-muted/30 border-b">
-        <CheckoutStepper currentStep={checkoutStep} />
+    <div className="h-full w-full flex flex-col bg-background overflow-hidden">
+      <PosToolbar />
+      <PosTabs />
+      <div className="flex-1 min-h-0">
+        {activeTab === "CUSTOMER" && <CustomerDetailsTab />}
+        {activeTab === "ITEMS" && <ItemDetailsTab />}
+        {activeTab === "BILLS" && <ListOfBillsTab />}
       </div>
-      
-      {checkoutStep === 3 ? (
-        <div className="flex-1 flex flex-col items-center justify-center animate-in zoom-in-95 duration-500">
-          <CheckCircle className="w-32 h-32 text-green-500 mb-6 drop-shadow-md" />
-          <h1 className="text-5xl font-black tracking-tight text-foreground mb-4">Transaction Complete</h1>
-          <p className="text-xl text-muted-foreground mb-10">The payment was successfully processed.</p>
-          <Button 
-            size="lg" 
-            onClick={() => clearCart()} 
-            className="text-lg h-14 px-10 shadow-lg"
-          >
-            Start New Transaction
-          </Button>
-        </div>
-      ) : (
-        <div className="flex-1 min-h-0">
-          <PosLayout 
-            left={<PosLeftSection />} 
-            right={<PosRightSection />} 
-          />
-        </div>
-      )}
     </div>
   );
 }
