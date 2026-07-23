@@ -10,21 +10,30 @@ class SalesDashboardKPIStrategy implements ReportStrategy {
   category = "Sales";
 
   async execute(ctx: AnalyticsFilterContext) {
-    // 1. Fetch Current Period
-    const currentKPIs = await analyticsRepository.getSalesKPIs(ctx);
+    // The current-period and previous-period KPI batches are independent of each
+    // other, so run them concurrently. When a comparison window exists this
+    // overlaps two multi-query batches instead of serializing them, roughly
+    // halving the dashboard's DB wall-clock. The math below is unchanged.
+    const prevCtx: AnalyticsFilterContext | null =
+      ctx.startDate && ctx.endDate
+        ? {
+            ...ctx,
+            startDate: new Date(
+              ctx.startDate.getTime() -
+                (ctx.endDate.getTime() - ctx.startDate.getTime())
+            ),
+            endDate: new Date(
+              ctx.startDate.getTime()
+            ),
+          }
+        : null;
 
-    // 2. Fetch Previous Period for comparative analysis
-    // If ctx has a date range (e.g. 7 days), we calculate the previous 7 days.
-    let previousKPIs = null;
-    if (ctx.startDate && ctx.endDate) {
-      const durationMs = ctx.endDate.getTime() - ctx.startDate.getTime();
-      const prevCtx: AnalyticsFilterContext = {
-        ...ctx,
-        startDate: new Date(ctx.startDate.getTime() - durationMs),
-        endDate: new Date(ctx.endDate.getTime() - durationMs),
-      };
-      previousKPIs = await analyticsRepository.getSalesKPIs(prevCtx);
-    }
+    const [currentKPIs, previousKPIs] = await Promise.all([
+      analyticsRepository.getSalesKPIs(ctx),
+      prevCtx
+        ? analyticsRepository.getSalesKPIs(prevCtx)
+        : Promise.resolve(null),
+    ]);
 
     // 3. Centralized Math Execution
     const grossMargin = BIMath.calculateGrossMargin(currentKPIs.revenue, currentKPIs.totalCogs);

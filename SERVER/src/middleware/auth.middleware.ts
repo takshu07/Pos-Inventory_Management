@@ -20,6 +20,10 @@ import { HTTP_STATUS } from "../constants/httpStatus";
 import { AppError } from "../errors/AppError";
 import { authRepository } from "../repositories/auth.repository";
 import { verifyToken } from "../utils/jwt";
+import {
+  getAuthContext,
+  setAuthContext,
+} from "../utils/authContextCache";
 
 export async function authenticate(
   req: Request,
@@ -56,16 +60,27 @@ export async function authenticate(
     return next(error);
   }
 
-  // Step 3 & 4: Database verification — active status + token version
-  const employeeRecord = await authRepository.findTokenVersion(payload.id);
+  // Step 3 & 4: Active status + token version.
+  // Served from an in-process cache to avoid a DB round-trip on every request.
+  // On a miss we read the authoritative row and populate the cache. The cache
+  // is explicitly invalidated on password change / (de)activation, so a hit is
+  // as safe as the DB read it replaces (bounded further by a short TTL).
+  let employeeRecord = getAuthContext(payload.id);
 
   if (!employeeRecord) {
-    return next(
-      new AppError(
-        HTTP_STATUS.UNAUTHORIZED,
-        "Account no longer exists. Please contact your manager."
-      )
-    );
+    const fresh = await authRepository.findTokenVersion(payload.id);
+
+    if (!fresh) {
+      return next(
+        new AppError(
+          HTTP_STATUS.UNAUTHORIZED,
+          "Account no longer exists. Please contact your manager."
+        )
+      );
+    }
+
+    setAuthContext(payload.id, fresh);
+    employeeRecord = fresh;
   }
 
   if (!employeeRecord.isActive) {

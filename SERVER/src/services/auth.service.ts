@@ -27,6 +27,7 @@ import type {
 } from "../validation/auth.validation";
 import { comparePassword, hashPassword } from "../utils/hash";
 import { generateToken } from "../utils/jwt";
+import { invalidateAuthContext } from "../utils/authContextCache";
 
 // =============================================================================
 // HELPER: EMPLOYEE CODE GENERATION
@@ -238,4 +239,9 @@ export async function changePassword(
     employeeId,
     hashedNewPassword
   );
+
+  // Incrementing refreshTokenVersion invalidates all previously issued tokens.
+  // Drop the cached auth context so the middleware immediately sees the new
+  // version and rejects stale tokens on the very next request.
+  invalidateAuthContext(employeeId);
 }

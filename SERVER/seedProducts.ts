@@ -175,8 +175,8 @@ async function main() {
   
   // Create an exchange for Ankit's sale to fulfill "Already Exchanged"
   const existingExchange = await prisma.exchange.findFirst({ where: { originalSaleId: ankitSale.id } });
-  if (!existingExchange && ankitSale.items && ankitSale.items.length > 0) {
-     const saleItem = ankitSale.items[0];
+  const saleItem = ankitSale.items?.[0];
+  if (!existingExchange && saleItem) {
      await prisma.exchange.create({
        data: {
          exchangeNumber: 'EXC-20260716-0001',

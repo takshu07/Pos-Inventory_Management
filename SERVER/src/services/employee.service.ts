@@ -13,6 +13,7 @@ import type { AuthenticatedUser } from "../types/employee.types";
 import type { PaginatedResponse } from "../types/common.types";
 import { hashPassword } from "../utils/hash";
 import { stripUndefined } from "../utils/object";
+import { invalidateAuthContext } from "../utils/authContextCache";
 import type {
   CreateEmployeeInput,
   ListEmployeesQuery,
@@ -214,6 +215,11 @@ export async function updateEmployee(
   }
 
   const updatedEmployee = await employeeRepository.update(id, updateData);
+
+  // Invalidate the auth-context cache for this employee. An update may have
+  // toggled isActive (e.g. deactivation), which the authenticate middleware
+  // relies on — the next request must re-read authoritative state.
+  invalidateAuthContext(id);
 
   // Fire-and-forget: record the change in the audit log
   auditRepository.create({

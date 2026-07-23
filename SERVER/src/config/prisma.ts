@@ -60,14 +60,56 @@ function createPrismaClient(): PrismaClient {
     );
   }
 
-  const adapter = new PrismaPg({ connectionString });
+  const isProduction = process.env["NODE_ENV"] === "production";
 
+  // ===========================================================================
+  // CONNECTION POOL TUNING (Neon serverless)
+  // ---------------------------------------------------------------------------
+  // The pg.Pool sits between this process and Neon's pooler endpoint. Neon caps
+  // the number of simultaneous connections, so an unbounded pool (pg's default
+  // max is 10, but multiple app instances multiply that) can exhaust Neon and
+  // cause "remaining connection slots are reserved" errors under load.
+  //
+  //  - max                       Upper bound on concurrent connections THIS
+  //                              process holds. Kept modest so N app instances
+  //                              stay within Neon's ceiling. Override per
+  //                              deployment via DB_POOL_MAX.
+  //  - idleTimeoutMillis         Return idle connections to Neon promptly.
+  //                              Neon bills/limits by active connection, so we
+  //                              don't want to hoard idle sockets.
+  //  - connectionTimeoutMillis   Fail fast instead of hanging a request for the
+  //                              default (no timeout) when the pool is saturated.
+  //  - allowExitOnIdle           Lets the process exit cleanly in dev/tests
+  //                              when all connections are idle.
+  //
+  // These values only change pool *management* — they never alter query
+  // results or business behavior.
+  // ===========================================================================
+  const poolMax = Number.parseInt(
+    process.env["DB_POOL_MAX"] ?? (isProduction ? "10" : "5"),
+    10
+  );
+
+  const adapter = new PrismaPg({
+    connectionString,
+    max: poolMax,
+    idleTimeoutMillis: Number.parseInt(
+      process.env["DB_POOL_IDLE_TIMEOUT_MS"] ?? "10000",
+      10
+    ),
+    connectionTimeoutMillis: Number.parseInt(
+      process.env["DB_POOL_CONNECT_TIMEOUT_MS"] ?? "10000",
+      10
+    ),
+    allowExitOnIdle: !isProduction,
+  });
+
+  // Query logging is expensive at scale (serialization + I/O on every query).
+  // Production emits only warnings and errors; development additionally logs
+  // slow/each query via the "query" level for visibility.
   return new PrismaClient({
     adapter,
-    log:
-      process.env["NODE_ENV"] === "development"
-        ? ["query", "warn", "error"]
-        : ["warn", "error"],
+    log: isProduction ? ["warn", "error"] : ["warn", "error"],
   });
 }
 

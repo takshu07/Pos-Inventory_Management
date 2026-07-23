@@ -20,6 +20,20 @@ import type { CheckoutInput, ListSalesQuery, VoidSaleInput } from "../validation
 
 export class SaleService {
   // ============================================================================
+  // TRANSACTION OPTIONS
+  // maxWait  — how long to wait to acquire a connection before P2028. Raised
+  //            above the Prisma default (2s) so a Neon cold-start / connection
+  //            warm-up doesn't spuriously fail a checkout.
+  // timeout  — max time the interactive transaction may run. Checkout writes
+  //            sale + items + payments + one movement per line item, so a
+  //            multi-item cart needs headroom beyond the 5s default.
+  // ============================================================================
+  private static readonly TX_OPTIONS = {
+    maxWait: Number.parseInt(process.env["DB_TX_MAX_WAIT_MS"] ?? "10000", 10),
+    timeout: Number.parseInt(process.env["DB_TX_TIMEOUT_MS"] ?? "20000", 10),
+  } as const;
+
+  // ============================================================================
   // PUBLIC ORCHESTRATORS
   // ============================================================================
 
@@ -36,7 +50,12 @@ export class SaleService {
     this.validateVariants(variants, payload.items);
 
     // 3. Prepare Context for Enterprise Pricing Engine (Outside Transaction to keep lock short)
-    const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
+    // Only id + role are consumed downstream (pricing uses role); selecting just
+    // those avoids transferring the full employee row (password hash, etc.).
+    const employee = await prisma.employee.findUnique({
+      where: { id: employeeId },
+      select: { id: true, role: true },
+    });
     if (!employee) throw new AppError(HTTP_STATUS.NOT_FOUND, "Employee not found");
     
     // Enterprise Configuration Retrieval (O(1) Memory Lookup)
@@ -135,7 +154,7 @@ export class SaleService {
           tx
         );
       }
-    });
+    }, SaleService.TX_OPTIONS);
 
     // Fire-and-forget audit
     auditRepository.create({
@@ -306,7 +325,7 @@ export class SaleService {
       await this.deductInventory(payload.items, createdSale.id, employee.id, tx);
 
       return createdSale.id;
-    });
+    }, SaleService.TX_OPTIONS);
   }
 
   private static async deductInventory(

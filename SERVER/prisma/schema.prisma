@@ -3,12 +3,17 @@
 // =============================================================================
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  provider        = "prisma-client-js"
+  output          = "../generated/prisma"
+  // Enables declaring PostgreSQL extensions (pg_trgm) and GIN trigram indexes
+  // directly in the schema so `prisma migrate` stays in sync with the
+  // hand-written performance migration and does not flag them as drift.
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
+  provider   = "postgresql"
+  extensions = [pg_trgm]
 }
 
 // =============================================================================
@@ -325,6 +330,9 @@ model Product {
   @@index([name])
   @@index([categoryId])
   @@index([brandId])
+  // Trigram GIN indexes for cashier partial-text product search.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
+  @@index([searchKeywords(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_searchkeywords_trgm_idx")
   @@map("products")
 }
 
@@ -365,6 +373,10 @@ model ProductVariant {
   // a unique index for them. Explicit @@index would be redundant.
   @@index([productId])
   @@index([isActive])
+  // Trigram GIN indexes for partial sku/barcode search (exact lookups still use
+  // the unique b-tree indexes created by @unique).
+  @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "product_variants_sku_trgm_idx")
+  @@index([barcode(ops: raw("gin_trgm_ops"))], type: Gin, map: "product_variants_barcode_trgm_idx")
   @@map("product_variants")
 }
 
@@ -487,6 +499,12 @@ model Customer {
   @@index([phone])
   @@index([name])
   @@index([customerCode])
+  // Trigram GIN indexes accelerate `contains` (ILIKE '%term%') search which a
+  // B-tree cannot serve. Ops name must match the migration exactly.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_name_trgm_idx")
+  @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_phone_trgm_idx")
+  @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_email_trgm_idx")
+  @@index([customerCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_customercode_trgm_idx")
   @@map("customers")
 }
 
@@ -555,6 +573,11 @@ model Sale {
   @@index([saleDate])
   @@index([status])
   @@index([createdAt])
+  // Composite indexes for the two hottest access patterns:
+  //  - analytics: filter status=COMPLETED within a saleDate window
+  //  - sales history: a single employee's sales, newest first
+  @@index([status, saleDate(sort: Desc)], map: "sales_status_saledate_idx")
+  @@index([employeeId, saleDate(sort: Desc)], map: "sales_employeeid_saledate_idx")
   @@map("sales")
 }
 
@@ -620,6 +643,8 @@ model Payment {
   @@index([exchangeId])
   @@index([method])
   @@index([status])
+  // Analytics payment-method breakdown filters payments by (saleId, status).
+  @@index([saleId, status], map: "payments_saleid_status_idx")
   @@map("payments")
 }
 

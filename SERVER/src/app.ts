@@ -22,6 +22,7 @@
 // so development works out-of-the-box without configuration.
 // =============================================================================
 
+import compression from "compression";
 import cors from "cors";
 import express, { type Request, type Response, type NextFunction } from "express";
 import helmet from "helmet";
@@ -67,6 +68,26 @@ app.set("trust proxy", 1);
 // =============================================================================
 
 app.use(helmet());
+
+// =============================================================================
+// RESPONSE COMPRESSION
+// gzip large JSON responses (sales history, analytics, product/variant lists)
+// before they hit the wire. Only bodies above `threshold` are compressed — for
+// tiny payloads the CPU cost outweighs the byte savings. Clients that send a
+// `x-no-compression` header (or don't advertise gzip) are served uncompressed.
+// This must run before the routes so their responses pass through it.
+// =============================================================================
+
+app.use(
+  compression({
+    threshold: 1024, // only compress responses larger than 1KB
+    filter: (req, res) => {
+      // Allow an explicit opt-out for debugging/streaming.
+      if (req.headers["x-no-compression"]) return false;
+      return compression.filter(req, res);
+    },
+  })
+);
 
 // =============================================================================
 // GLOBAL RATE LIMITER

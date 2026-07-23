@@ -51,56 +51,47 @@ export const analyticsRepository = {
    */
   async getSalesKPIs(ctx: AnalyticsFilterContext) {
     const where = this.buildSaleWhere(ctx);
-    
-    const [aggregations, count] = await Promise.all([
-      prisma.sale.aggregate({
-        where,
-        _sum: {
-          grandTotal: true,
-          subtotal: true,
-          discountAmount: true,
-          manualDiscountAmount: true,
-          taxAmount: true
-        }
-      }),
-      prisma.sale.count({ where })
-    ]);
 
-    // Also get cost data from SaleItems to calculate Gross Margin accurately
-    // Note: Enterprise POS tracks COGS at the time of sale.
-    const itemAggregations = await prisma.saleItem.aggregate({
-      where: { sale: where },
-      _sum: {
-        totalPrice: true,
-        // Since costAtSale is Decimal, Prisma supports _sum on it
-        // We multiply costAtSale * quantity to get total COGS per line item.
-        // Prisma's aggregate doesn't support multiplying columns directly, 
-        // but since we only need rough BI we can fetch raw or use a specialized query.
-      }
-    });
-
-    // To get exact COGS, we use a raw query because Prisma cannot sum(costAtSale * quantity).
-    // The engine isolates this dirty truth of relational BI.
-    const cogsResult = await prisma.$queryRaw<[{ total_cogs: number }]>`
-      SELECT COALESCE(SUM("costAtSale" * "quantity"), 0) as total_cogs
-      FROM "sale_items" si
-      JOIN "sales" s ON s.id = si."saleId"
-      WHERE s.status = 'COMPLETED'
-      ${ctx.startDate ? Prisma.sql`AND s."saleDate" >= ${ctx.startDate}` : Prisma.empty}
-      ${ctx.endDate ? Prisma.sql`AND s."saleDate" <= ${ctx.endDate}` : Prisma.empty}
-    `;
-
-    // Payment method breakdown
-    const paymentAggregations = await prisma.payment.groupBy({
-      by: ['method'],
-      where: {
-        sale: where,
-        status: 'PAID',
-      },
-      _sum: {
-        amount: true,
-      },
-    });
+    // All four aggregates are independent, so issue them in ONE parallel batch
+    // instead of awaiting each in sequence. On a remote DB this collapses four
+    // serial round-trips into one round-trip's worth of wall-clock latency.
+    //
+    // Exact COGS needs SUM(costAtSale * quantity), which Prisma's aggregate API
+    // cannot express (no column-to-column multiply), so it stays a raw query.
+    // (The previous saleItem.aggregate of _sum.totalPrice was removed — its
+    // result was never used, so it was a pure wasted round-trip.)
+    const [aggregations, count, cogsResult, paymentAggregations] =
+      await Promise.all([
+        prisma.sale.aggregate({
+          where,
+          _sum: {
+            grandTotal: true,
+            subtotal: true,
+            discountAmount: true,
+            manualDiscountAmount: true,
+            taxAmount: true,
+          },
+        }),
+        prisma.sale.count({ where }),
+        prisma.$queryRaw<[{ total_cogs: number }]>`
+          SELECT COALESCE(SUM("costAtSale" * "quantity"), 0) as total_cogs
+          FROM "sale_items" si
+          JOIN "sales" s ON s.id = si."saleId"
+          WHERE s.status = 'COMPLETED'
+          ${ctx.startDate ? Prisma.sql`AND s."saleDate" >= ${ctx.startDate}` : Prisma.empty}
+          ${ctx.endDate ? Prisma.sql`AND s."saleDate" <= ${ctx.endDate}` : Prisma.empty}
+        `,
+        prisma.payment.groupBy({
+          by: ['method'],
+          where: {
+            sale: where,
+            status: 'PAID',
+          },
+          _sum: {
+            amount: true,
+          },
+        }),
+      ]);
 
     const paymentBreakdown = paymentAggregations.reduce((acc, curr) => {
       acc[curr.method] = Number(curr._sum.amount || 0);

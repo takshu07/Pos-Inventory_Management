@@ -58,7 +58,35 @@ export const saleRepository = {
         employee: { select: { id: true, firstName: true, lastName: true } },
         items: true,
         payments: true,
-        exchanges: { select: { id: true, exchangeNumber: true } },
+        exchanges: {
+          orderBy: { exchangeDate: "asc" },
+          include: {
+            returnedItems: {
+              include: {
+                variant: {
+                  select: {
+                    sku: true,
+                    product: { select: { name: true } },
+                    size: { select: { name: true } },
+                    color: { select: { name: true } },
+                  },
+                },
+              },
+            },
+            issuedItems: {
+              include: {
+                variant: {
+                  select: {
+                    sku: true,
+                    product: { select: { name: true } },
+                    size: { select: { name: true } },
+                    color: { select: { name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
     });
   },
@@ -110,7 +138,12 @@ export const saleRepository = {
       }),
     };
 
-    const [total, data] = await prisma.$transaction([
+    // NOTE: This is a read-only list query and does NOT need transactional
+    // atomicity. Wrapping the count + deeply-nested findMany in an interactive
+    // $transaction gave the whole batch a 5s timeout; the nested exchange/
+    // item includes routinely blew past it, throwing "expired transaction" and
+    // surfacing as a 500. Run them as independent parallel reads instead.
+    const [total, data] = await Promise.all([
       prisma.sale.count({ where }),
       prisma.sale.findMany({
         where,
@@ -122,7 +155,50 @@ export const saleRepository = {
           employee: { select: { id: true, firstName: true, lastName: true } },
           // We include payments to render payment status chips on the grid UI
           payments: { select: { method: true, amount: true, status: true } },
-          exchanges: { select: { id: true } },
+          // Exchange summary for the list UI: number, values, and item lines so the
+          // grid / customer-history cards can show what was swapped without a drill-in.
+          exchanges: {
+            orderBy: { exchangeDate: "asc" },
+            select: {
+              id: true,
+              exchangeNumber: true,
+              exchangeDate: true,
+              returnedValue: true,
+              issuedValue: true,
+              priceDifference: true,
+              status: true,
+              returnedItems: {
+                select: {
+                  id: true,
+                  quantity: true,
+                  totalValue: true,
+                  variant: {
+                    select: {
+                      sku: true,
+                      product: { select: { name: true } },
+                      size: { select: { name: true } },
+                      color: { select: { name: true } },
+                    },
+                  },
+                },
+              },
+              issuedItems: {
+                select: {
+                  id: true,
+                  quantity: true,
+                  totalValue: true,
+                  variant: {
+                    select: {
+                      sku: true,
+                      product: { select: { name: true } },
+                      size: { select: { name: true } },
+                      color: { select: { name: true } },
+                    },
+                  },
+                },
+              },
+            },
+          },
           items: true,
         },
       }),
