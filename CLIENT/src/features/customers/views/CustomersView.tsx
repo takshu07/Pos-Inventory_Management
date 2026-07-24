@@ -21,7 +21,10 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useDebounce } from "@/hooks/useDebounce";
 import { formatCurrency } from "@/utils/formatters";
+import { PermissionGuard } from "@/features/auth/components/PermissionGuard";
+import { canAccessAdmin } from "@/features/auth/utils/permissions";
 import { useCustomers, useCustomer, useExchangeEligibility } from "../hooks/useCustomers";
+import OwnerCustomerDashboard from "../components/OwnerCustomerDashboard";
 import { useSalesHistory } from "@/features/sales/hooks/useSales";
 import { usePosStore } from "@/features/pos/store/usePosStore";
 import type { CustomerModel, ExchangeEligibilityItem } from "../types";
@@ -30,13 +33,41 @@ const fmtDate = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-IN", { dateStyle: "medium" }) : "—";
 
 /**
- * CustomersView — the daily cashier-facing customer lookup.
+ * CustomersView — the /customers page.
+ *
+ * Cashiers see only the daily lookup (search → view a customer). Owners and
+ * managers additionally get an analytics + full customer-management dashboard
+ * above the lookup, gated by the existing RBAC/PermissionGuard. The cashier
+ * experience is unchanged regardless of role.
+ */
+export default function CustomersView() {
+  return (
+    <div className="flex flex-col h-full gap-6 p-6 overflow-y-auto">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Search by mobile number or name to view a customer.
+        </p>
+      </div>
+
+      {/* Owner/manager-only management dashboard. Cashiers never render this. */}
+      <PermissionGuard check={canAccessAdmin}>
+        <OwnerCustomerDashboard />
+      </PermissionGuard>
+
+      <CashierLookup />
+    </div>
+  );
+}
+
+/**
+ * CashierLookup — the daily customer lookup, unchanged for all roles.
  *
  * Search by mobile or name → pick a customer → see their details, recent
  * purchases, exchange eligibility, and quick actions. Customer creation lives
  * in the POS checkout flow, not here.
  */
-export default function CustomersView() {
+function CashierLookup() {
   const [searchValue, setSearchValue] = useState("");
   const debouncedSearch = useDebounce(searchValue.trim(), 350);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -62,14 +93,7 @@ export default function CustomersView() {
   const showResults = debouncedSearch.length >= 2 && !selectedId;
 
   return (
-    <div className="flex flex-col h-full gap-4 p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Customers</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Search by mobile number or name to view a customer.
-        </p>
-      </div>
-
+    <div className="flex flex-col gap-4">
       <div className="max-w-xl">
         <SearchBox
           value={searchValue}

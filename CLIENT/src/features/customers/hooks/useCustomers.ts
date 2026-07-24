@@ -6,13 +6,17 @@ import {
   getCustomerByPhone,
   getCustomerById,
   getExchangeEligibility,
+  fetchCustomerTable,
+  fetchCustomerAnalytics,
 } from "../api/customerApi";
-import { CustomerQueryFilters, CustomerCreateDTO } from "../types";
+import { CustomerQueryFilters, CustomerCreateDTO, CustomerTableFilters } from "../types";
 
 export const customerKeys = {
   all: ["customers"] as const,
   lists: () => [...customerKeys.all, "list"] as const,
   list: (filters: CustomerQueryFilters) => [...customerKeys.lists(), filters] as const,
+  table: (filters: CustomerTableFilters) => [...customerKeys.all, "table", filters] as const,
+  analytics: () => [...customerKeys.all, "analytics"] as const,
   walkIn: () => [...customerKeys.all, "walk-in"] as const,
   detail: (id: string) => [...customerKeys.all, "detail", id] as const,
   eligibility: (id: string) => [...customerKeys.all, "eligibility", id] as const,
@@ -23,6 +27,28 @@ export function useCustomers(filters: CustomerQueryFilters) {
     queryKey: customerKeys.list(filters),
     queryFn: () => fetchCustomers(filters),
     placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * Owner/manager customer table. Server-side pagination — `placeholderData`
+ * keeps the previous page visible while the next page loads (no flash).
+ */
+export function useCustomerTable(filters: CustomerTableFilters) {
+  return useQuery({
+    queryKey: customerKeys.table(filters),
+    queryFn: () => fetchCustomerTable(filters),
+    placeholderData: (prev) => prev,
+  });
+}
+
+/** Owner analytics cards. */
+export function useCustomerAnalytics(enabled = true) {
+  return useQuery({
+    queryKey: customerKeys.analytics(),
+    queryFn: fetchCustomerAnalytics,
+    enabled,
+    staleTime: 1000 * 60 * 2, // metrics tolerate a couple minutes of staleness
   });
 }
 

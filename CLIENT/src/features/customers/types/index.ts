@@ -67,6 +67,65 @@ export interface CustomersPaginatedResponse {
   data: CustomerModel[];
 }
 
+// ─── Owner dashboard (MANAGER+) ─────────────────────────────────────────────
+
+/** Aggregate metrics for the owner analytics cards. */
+export interface CustomerAnalytics {
+  totalCustomers: number;
+  newToday: number;
+  newThisMonth: number;
+  activeCustomers: number;
+  repeatCustomers: number;
+  averageCustomerSpend: number;
+  totalRevenue: number;
+  topCustomer: { id: string; name: string; totalSpend: number } | null;
+  activeWindowDays: number;
+}
+
+/** One row of the owner customer table (customer columns + sale aggregates). */
+export interface CustomerTableRow {
+  id: string;
+  customerCode: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  rewardPoints: number;
+  storeCredit: number;
+  isActive: boolean;
+  createdAt: string;
+  totalPurchases: number;
+  totalSpend: number;
+  lastVisit: string | null;
+  /** Purchasing-recency status: last visit within the active window. */
+  active: boolean;
+}
+
+export type CustomerTableSortField =
+  | "name"
+  | "lastVisit"
+  | "totalSpend"
+  | "totalPurchases"
+  | "createdAt";
+
+/** Query params for the owner customer table — all applied server-side. */
+export interface CustomerTableFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: CustomerTableSortField;
+  sortOrder?: "asc" | "desc";
+  /** undefined = both; "true"/"false" narrows purchasing-active status. */
+  active?: "true" | "false";
+  hasStoreCredit?: boolean;
+  hasRewardPoints?: boolean;
+  newWithinDays?: number;
+}
+
+export interface CustomerTableResponse {
+  total: number;
+  data: CustomerTableRow[];
+}
+
 /** A single recent sale with its exchange-window status. */
 export interface ExchangeEligibilityItem {
   saleId: string;
