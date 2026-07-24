@@ -7,6 +7,7 @@ import { auditRepository } from "../repositories/audit.repository";
 import { exchangeRepository } from "../repositories/exchange.repository";
 import { executeMovement } from "./inventoryMovement.service";
 import { formatPaginatedResponse } from "../utils/queryEngine";
+import { evaluateExchangeWindow } from "../utils/exchangeWindow";
 import type { PaginationParams } from "../types/common.types";
 import type { CreateExchangeInput } from "../validation/exchange.validation";
 
@@ -44,14 +45,16 @@ export const exchangeService = {
       throw new AppError(HTTP_STATUS.BAD_REQUEST, "Customer mismatch: Exchange must belong to the original customer.");
     }
 
-    // NEW VALIDATION: 3-Day Purchase Window
-    const saleDate = new Date(originalSale.createdAt);
-    const currentDate = new Date();
-    const diffTime = Math.abs(currentDate.getTime() - saleDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
-    if (diffDays > 3) {
-      throw new AppError(HTTP_STATUS.BAD_REQUEST, "Exchange rejected: Purchase is older than 3 days.");
+    // VALIDATION: Purchase within the configured exchange window.
+    // The window length comes from the ConfigurationEngine via the shared
+    // evaluateExchangeWindow helper — the same source of truth the customer
+    // eligibility endpoint uses — so UI and enforcement never diverge.
+    const windowStatus = evaluateExchangeWindow(originalSale.saleDate);
+    if (!windowStatus.eligible) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        `Exchange rejected: Purchase is older than the ${windowStatus.windowDays}-day exchange window.`
+      );
     }
 
     // 2. Validate Returns

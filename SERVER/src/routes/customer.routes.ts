@@ -18,6 +18,7 @@ router.get("/walk-in", requireRole("CASHIER"), customerController.getWalkInCusto
 router.get("/phone/:phone", requireRole("CASHIER"), customerController.getCustomerByPhone);
 router.get("/:id", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerById);
 router.get("/:id/purchases", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerPurchases);
+router.get("/:id/exchange-eligibility", validateParam("id"), requireRole("CASHIER"), customerController.getExchangeEligibility);
 
 // =============================================================================
 // WRITE OPERATIONS (CASHIER AND ABOVE)

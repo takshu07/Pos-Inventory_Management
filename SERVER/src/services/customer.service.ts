@@ -7,6 +7,9 @@ import { auditRepository } from "../repositories/audit.repository";
 import { stripUndefined } from "../utils/object";
 import type { PaginationParams, PaginatedResponse } from "../types/common.types";
 import { formatPaginatedResponse } from "../utils/queryEngine";
+import { ConfigurationEngine } from "../engines/configuration.engine";
+import { evaluateExchangeWindow } from "../utils/exchangeWindow";
+import { prisma } from "../config/prisma";
 
 /**
  * Normalizes a phone number by stripping country codes and non-digit characters.
@@ -215,5 +218,60 @@ export const customerService = {
     ]);
 
     return formatPaginatedResponse(data, total, params);
-  }
+  },
+
+  /**
+   * Computes exchange eligibility for a customer's recent sales.
+   *
+   * A sale is eligible when it is still exchangeable (COMPLETED or PARTIAL) and
+   * its age has not exceeded the configured exchange window. The window is read
+   * from the ConfigurationEngine so the cashier UI reflects the same rule the
+   * exchange flow enforces.
+   */
+  async getExchangeEligibility(id: string, limit = 10) {
+    const customer = await customerRepository.findById(id);
+    if (!customer) {
+      throw new AppError(HTTP_STATUS.NOT_FOUND, "Customer not found");
+    }
+
+    const sales = await prisma.sale.findMany({
+      where: {
+        customerId: id,
+        status: { in: ["COMPLETED", "PARTIAL"] },
+      },
+      orderBy: { saleDate: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        saleNumber: true,
+        saleDate: true,
+        grandTotal: true,
+        status: true,
+      },
+    });
+
+    // Same evaluateExchangeWindow helper the exchange enforcement uses, so the
+    // eligibility shown here always matches what processExchange will accept.
+    const now = new Date();
+    const windowDays = ConfigurationEngine.getExchangeSettings().exchangeWindowDays;
+
+    const items = sales.map((sale) => {
+      const status = evaluateExchangeWindow(sale.saleDate, now);
+      return {
+        saleId: sale.id,
+        saleNumber: sale.saleNumber,
+        saleDate: sale.saleDate,
+        grandTotal: sale.grandTotal,
+        eligible: status.eligible,
+        daysRemaining: status.daysRemaining,
+        elapsedDays: status.elapsedDays,
+        expiresOn: status.expiresOn,
+      };
+    });
+
+    return {
+      windowDays,
+      items,
+    };
+  },
 };

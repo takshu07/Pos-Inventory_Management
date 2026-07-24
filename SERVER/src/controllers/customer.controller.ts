@@ -91,4 +91,18 @@ export const customerController = {
       data: result,
     });
   }),
+
+  /**
+   * GET /api/v1/customers/:id/exchange-eligibility
+   */
+  getExchangeEligibility: asyncHandler(async (req: Request, res: Response) => {
+    const limitRaw = req.query["limit"];
+    const limit = limitRaw ? Math.min(Math.max(parseInt(String(limitRaw), 10) || 10, 1), 50) : 10;
+    const result = await customerService.getExchangeEligibility(req.params["id"] as string, limit);
+    res.status(200).json({
+      success: true,
+      message: "Exchange eligibility retrieved successfully.",
+      data: result,
+    });
+  }),
 };
