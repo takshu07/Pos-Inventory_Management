@@ -15,6 +15,14 @@ router.use(authenticate);
 // =============================================================================
 router.get("/", requireRole("CASHIER"), customerController.getCustomers);
 router.get("/walk-in", requireRole("CASHIER"), customerController.getWalkInCustomer);
+
+// =============================================================================
+// OWNER DASHBOARD (MANAGER AND ABOVE)
+// Analytics + aggregate customer table. Declared before "/:id" so these literal
+// paths are not captured as an id param.
+// =============================================================================
+router.get("/table", requireRole("MANAGER"), customerController.getCustomerTable);
+router.get("/analytics", requireRole("MANAGER"), customerController.getCustomerAnalytics);
 router.get("/phone/:phone", requireRole("CASHIER"), customerController.getCustomerByPhone);
 router.get("/:id", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerById);
 router.get("/:id/purchases", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerPurchases);

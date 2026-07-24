@@ -33,6 +33,49 @@ export const customerService = {
   },
 
   /**
+   * Owner/manager customer table — server-side paginated rows with per-customer
+   * sale aggregates. Returns the standard paginated envelope so the client can
+   * reuse the same DataTable/pagination plumbing as every other list.
+   */
+  async getCustomerTable(query: {
+    page: number;
+    limit: number;
+    search?: string | undefined;
+    sortBy: "name" | "lastVisit" | "totalSpend" | "totalPurchases" | "createdAt";
+    sortOrder: "asc" | "desc";
+    active?: "true" | "false" | undefined;
+    hasStoreCredit?: boolean | undefined;
+    hasRewardPoints?: boolean | undefined;
+    newWithinDays?: number | undefined;
+  }) {
+    const { rows, total } = await customerRepository.findAllWithStats({
+      page: query.page,
+      limit: query.limit,
+      search: query.search,
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder,
+      active:
+        query.active === undefined ? undefined : query.active === "true",
+      hasStoreCredit: query.hasStoreCredit,
+      hasRewardPoints: query.hasRewardPoints,
+      newWithinDays: query.newWithinDays,
+    });
+
+    // Reuse the shared envelope; it derives meta from total/page/limit.
+    return formatPaginatedResponse(rows, total, {
+      page: query.page,
+      limit: query.limit,
+    });
+  },
+
+  /**
+   * Aggregate metrics for the owner analytics cards.
+   */
+  async getCustomerAnalytics() {
+    return customerRepository.getOwnerAnalytics();
+  },
+
+  /**
    * Retrieves a single customer with their calculated statistics.
    */
   async getCustomerById(id: string) {

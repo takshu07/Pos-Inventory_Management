@@ -18,6 +18,33 @@ export const customerController = {
   }),
 
   /**
+   * GET /api/v1/customers/table  (owner/manager only)
+   * Server-side paginated customer table with sale aggregates.
+   */
+  getCustomerTable: asyncHandler(async (req: Request, res: Response) => {
+    const query = customerValidation.tableQuery.parse(req.query);
+    const result = await customerService.getCustomerTable(query);
+    res.status(200).json({
+      success: true,
+      message: "Customer table retrieved successfully.",
+      data: result,
+    });
+  }),
+
+  /**
+   * GET /api/v1/customers/analytics  (owner/manager only)
+   * Aggregate metrics for the owner dashboard cards.
+   */
+  getCustomerAnalytics: asyncHandler(async (_req: Request, res: Response) => {
+    const result = await customerService.getCustomerAnalytics();
+    res.status(200).json({
+      success: true,
+      message: "Customer analytics retrieved successfully.",
+      data: result,
+    });
+  }),
+
+  /**
    * GET /api/v1/customers/walk-in
    */
   getWalkInCustomer: asyncHandler(async (req: Request, res: Response) => {

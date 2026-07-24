@@ -37,4 +37,25 @@ export const customerValidation = {
   }),
 
   query: paginationSchema,
+
+  /**
+   * Owner/manager customer-table query. Extends pagination with the aggregate
+   * sort fields and the dashboard filters. Booleans arrive as query strings, so
+   * they are coerced from "true"/"false". All filtering/sorting is server-side.
+   */
+  tableQuery: z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    search: z.string().trim().max(100).optional(),
+    sortBy: z
+      .enum(["name", "lastVisit", "totalSpend", "totalPurchases", "createdAt"])
+      .default("lastVisit"),
+    sortOrder: z.enum(["asc", "desc"]).default("desc"),
+    // Presence of the key with "true"/"false" narrows; omit for "both".
+    active: z.enum(["true", "false"]).optional(),
+    hasStoreCredit: z.coerce.boolean().optional(),
+    hasRewardPoints: z.coerce.boolean().optional(),
+    // "new customers" filter — window in days (defaults applied in service).
+    newWithinDays: z.coerce.number().int().min(1).max(365).optional(),
+  }),
 };
