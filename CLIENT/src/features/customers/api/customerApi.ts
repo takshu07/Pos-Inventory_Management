@@ -1,5 +1,11 @@
 import { apiClient } from "@/lib/api/axios";
-import { CustomerModel, CustomerCreateDTO, CustomerQueryFilters, CustomersPaginatedResponse } from "../types";
+import {
+  CustomerModel,
+  CustomerCreateDTO,
+  CustomerQueryFilters,
+  CustomersPaginatedResponse,
+  ExchangeEligibilityResponse,
+} from "../types";
 
 export async function fetchCustomers(filters: CustomerQueryFilters): Promise<CustomersPaginatedResponse> {
   const cleanFilters = Object.fromEntries(
@@ -27,4 +33,14 @@ export async function getWalkInCustomer(): Promise<CustomerModel> {
 export async function getCustomerByPhone(phone: string): Promise<CustomerModel | null> {
   const response = await apiClient.get<any>(`/customers/phone/${phone}`);
   return response.data || null;
+}
+
+export async function getCustomerById(id: string): Promise<CustomerModel> {
+  const response = await apiClient.get<any>(`/customers/${id}`);
+  return response.data;
+}
+
+export async function getExchangeEligibility(id: string): Promise<ExchangeEligibilityResponse> {
+  const response = await apiClient.get<any>(`/customers/${id}/exchange-eligibility`);
+  return response.data ?? { windowDays: 0, items: [] };
 }

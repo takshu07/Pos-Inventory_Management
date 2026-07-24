@@ -30,7 +30,8 @@ export function EmployeeDashboard() {
 
   const employeeActions = [
     { label: "New Sale", icon: "ShoppingCart", href: "/pos", color: "#3b82f6" },
-    { label: "Check Inventory", icon: "Package", href: "/products/lookup", color: "#8b5cf6" },
+    // "Check Inventory" (Product Lookup) removed — that screen is restricted to
+    // Manager/Owner, so a cashier clicking it would only hit /unauthorized.
     { label: "Customers", icon: "Users", href: "/customers", color: "#10b981" },
   ];
 

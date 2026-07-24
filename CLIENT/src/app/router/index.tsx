@@ -110,25 +110,14 @@ export const router = createBrowserRouter([
       {
         path: "customers",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="Customers" /> };
+          const { CustomersView } = await import("@/features/customers");
+          return { Component: CustomersView };
         },
       },
       {
         path: "customers/:customerId",
         async lazy() {
           return { Component: () => <PlaceholderPage title="Customer Profile" /> };
-        },
-      },
-      {
-        path: "products/lookup",
-        async lazy() {
-          return { Component: () => <PlaceholderPage title="Product Lookup" /> };
-        },
-      },
-      {
-        path: "finance/register",
-        async lazy() {
-          return { Component: () => <PlaceholderPage title="Cash Register" /> };
         },
       },
       {
@@ -148,6 +137,20 @@ export const router = createBrowserRouter([
       {
         Component: AdminRoute,
         children: [
+          // Manager/Owner only — cashiers hitting these URLs are redirected to
+          // /unauthorized by AdminRoute (nav links are also hidden for cashiers).
+          {
+            path: "products/lookup",
+            async lazy() {
+              return { Component: () => <PlaceholderPage title="Product Lookup" /> };
+            },
+          },
+          {
+            path: "finance/register",
+            async lazy() {
+              return { Component: () => <PlaceholderPage title="Cash Register" /> };
+            },
+          },
           {
             path: "admin/products",
             async lazy() {

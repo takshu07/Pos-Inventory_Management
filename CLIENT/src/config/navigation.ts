@@ -51,8 +51,6 @@ export const EMPLOYEE_NAV: NavSection[] = [
       { label: "POS Checkout",    path: "/pos",            icon: ShoppingCart },
       { label: "Sales History",   path: "/sales",          icon: History },
       { label: "Customers",       path: "/customers",      icon: Users },
-      { label: "Product Lookup",  path: "/products/lookup", icon: Package },
-      { label: "Cash Register",   path: "/finance/register", icon: Wallet },
     ],
   },
   {
@@ -69,9 +67,11 @@ export const ADMIN_NAV: NavSection[] = [
   {
     title: "Catalog",
     items: [
-      { label: "Products",    path: "/admin/products",    icon: Boxes,         allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Categories",  path: "/admin/categories",  icon: Tag,           allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Brands",      path: "/admin/brands",      icon: Award,         allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Products",       path: "/admin/products",   icon: Boxes,   allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Categories",     path: "/admin/categories", icon: Tag,     allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Brands",         path: "/admin/brands",     icon: Award,   allowedRoles: ["MANAGER", "OWNER"] },
+      // Restricted to Manager/Owner — cashiers must not see product lookup.
+      { label: "Product Lookup", path: "/products/lookup",  icon: Package, allowedRoles: ["MANAGER", "OWNER"] },
     ],
   },
   {
@@ -85,10 +85,12 @@ export const ADMIN_NAV: NavSection[] = [
   {
     title: "Business",
     items: [
-      { label: "Employees",   path: "/admin/employees",   icon: UserCog,       allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Reports",     path: "/admin/reports",     icon: BarChart3,     allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Finance",     path: "/admin/finance",     icon: DollarSign,    allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Discounts",   path: "/admin/discounts",   icon: BadgePercent,  allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Employees",     path: "/admin/employees",  icon: UserCog,      allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Reports",       path: "/admin/reports",    icon: BarChart3,    allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Finance",       path: "/admin/finance",    icon: DollarSign,   allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Discounts",     path: "/admin/discounts",  icon: BadgePercent, allowedRoles: ["MANAGER", "OWNER"] },
+      // Restricted to Manager/Owner — cashiers must not access the cash register here.
+      { label: "Cash Register", path: "/finance/register", icon: Wallet,       allowedRoles: ["MANAGER", "OWNER"] },
     ],
   },
   {

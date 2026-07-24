@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useSalesHistory } from "../hooks/useSales";
 import { useTableState } from "@/hooks/useTableState";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -13,6 +13,8 @@ import { SaleHistoryRowModel } from "../types";
 export default function SalesHistoryView() {
   const navigate = useNavigate();
   const tableState = useTableState(10);
+  const [searchParams] = useSearchParams();
+  const customerId = searchParams.get("customerId") || undefined;
   
   // Local state for immediate input feedback, synchronized with debounced URL state
   const [searchValue, setSearchValue] = useState(tableState.search);
@@ -36,6 +38,7 @@ export default function SalesHistoryView() {
     limit: tableState.limit,
     search: tableState.search,
     status: tableState.status,
+    customerId,
   });
 
   const columns: ColumnDef<SaleHistoryRowModel>[] = [
