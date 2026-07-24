@@ -16,10 +16,12 @@ export async function fetchCustomers(filters: CustomerQueryFilters): Promise<Cus
   );
 
   const response = await apiClient.get<any>("/customers", { params: cleanFilters });
-  
+
+  // `/customers` returns the shared paginated envelope: { data, meta: { total, ... } }.
+  // Read `total` from `meta.total` — same contract as fetchCustomerTable (/customers/table).
   return {
-    total: response.data?.total || 0,
-    data: response.data?.data || [],
+    total: response.data?.meta?.total ?? 0,
+    data: response.data?.data ?? [],
   };
 }
 
