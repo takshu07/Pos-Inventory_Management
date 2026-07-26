@@ -26,7 +26,8 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useAuthStore } from "@/store/auth.store";
 import { loginRequest } from "../api/authApi";
-import { AUTH_QUERY_KEYS, AUTH_ROUTES } from "../constants";
+import { AUTH_QUERY_KEYS } from "../constants";
+import { portalHomeForRole } from "../utils/permissions";
 import type { LoginFormValues } from "../validation";
 
 export function useLogin() {
@@ -65,8 +66,10 @@ export function useLogin() {
       //    action gets feedback; use entity name in the toast message).
       toast.success(`Welcome back, ${employee.firstName} 👋`);
 
-      // 4. Navigate to dashboard. 'replace' prevents "back" returning to login.
-      navigate(AUTH_ROUTES.dashboard, { replace: true });
+      // 4. Navigate to the portal this role owns — MANAGER/OWNER to the
+      //    management shell, CASHIER to the checkout shell. 'replace' prevents
+      //    "back" returning to login.
+      navigate(portalHomeForRole(employee.role), { replace: true });
     },
 
     onError: (_error: Error) => {

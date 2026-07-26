@@ -37,7 +37,7 @@ export { useCurrentUser } from "./hooks/useCurrentUser";
 export { useChangePassword } from "./hooks/useChangePassword";
 
 // ── Route Guards (consumed by router) ────────────────────────────────────────
-export { GuestRoute, ProtectedRoute, AdminRoute } from "./components/RouteGuards";
+export { GuestRoute, ProtectedRoute, AdminRoute, ManagerRoute, CashierRoute } from "./components/RouteGuards";
 
 // ── Reusable Components (consumed by shell and other features) ────────────────
 export { PermissionGuard } from "./components/PermissionGuard";
@@ -50,6 +50,9 @@ export { AuthBootstrapper } from "./components/AuthBootstrapper";
 export {
   hasAtLeastRole,
   canAccessAdmin,
+  canAccessManagerPortal,
+  canAccessCashierPortal,
+  portalHomeForRole,
   canAccessOwnerOnly,
   canVoidSale,
   canAdjustInventory,

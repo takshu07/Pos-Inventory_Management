@@ -13,7 +13,15 @@
 
 import { createBrowserRouter, Outlet } from "react-router";
 import { MainLayout } from "@/components/layouts/MainLayout";
-import { GuestRoute, AdminRoute, AuthBootstrapper, SessionExpiredModal } from "@/features/auth";
+import { CashierLayout } from "@/components/layouts/CashierLayout";
+import {
+  GuestRoute,
+  AdminRoute,
+  ManagerRoute,
+  CashierRoute,
+  AuthBootstrapper,
+  SessionExpiredModal,
+} from "@/features/auth";
 
 /** 
  * RootLayout runs inside the Router context, providing global auth utilities 
@@ -73,12 +81,19 @@ export const router = createBrowserRouter([
     },
   },
 
-  // ─── Authenticated Routes (all roles — protected by MainLayout) ──────────
+  // ─── Manager / Owner Portal (management shell) ───────────────────────────
+  // ManagerRoute gates the entire subtree: a CASHIER who types any of these
+  // URLs is redirected to their own portal (/cashier/pos). MainLayout then
+  // provides the shell (Sidebar + Navbar). AdminRoute further narrows the
+  // admin-only screens to MANAGER/OWNER within this manager portal.
+  {
+    Component: ManagerRoute,
+    children: [
   {
     path: "/",
     Component: MainLayout, // Contains isAuthenticated guard + Sidebar + Navbar
     children: [
-      // Employee-level screens (Cashier + Manager + Owner)
+      // Manager + Owner screens
       {
         index: true,
         async lazy() {
@@ -221,6 +236,46 @@ export const router = createBrowserRouter([
             path: "admin/audit-logs",
             async lazy() {
               return { Component: () => <PlaceholderPage title="Audit Logs" /> };
+            },
+          },
+        ],
+      },
+    ],
+  },
+    ],
+  },
+
+  // ─── Cashier Portal (checkout-first shell) ───────────────────────────────
+  // CashierRoute gates the entire subtree to the CASHIER role: a MANAGER/OWNER
+  // who navigates here is redirected to their management shell. CashierLayout
+  // provides the minimal shell (POS Checkout + My Profile only). The POS screen
+  // is the SAME PosView component the manager portal uses — no duplicated
+  // checkout logic; only the surrounding shell and permitted routes differ.
+  {
+    Component: CashierRoute,
+    children: [
+      {
+        path: "/cashier",
+        Component: CashierLayout,
+        children: [
+          {
+            index: true,
+            async lazy() {
+              const { PosView } = await import("@/features/pos");
+              return { Component: PosView };
+            },
+          },
+          {
+            path: "pos",
+            async lazy() {
+              const { PosView } = await import("@/features/pos");
+              return { Component: PosView };
+            },
+          },
+          {
+            path: "profile",
+            async lazy() {
+              return { Component: () => <PlaceholderPage title="My Profile" /> };
             },
           },
         ],

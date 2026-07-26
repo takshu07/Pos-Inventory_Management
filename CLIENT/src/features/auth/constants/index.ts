@@ -22,7 +22,10 @@ export const AUTH_ROUTES = {
   login: "/login",
   unauthorized: "/unauthorized",
   sessionExpired: "/session-expired",
+  /** Landing route for the Manager/Owner portal (the full management shell). */
   dashboard: "/",
+  /** Landing route for the Cashier portal (checkout-first, minimal shell). */
+  cashierHome: "/cashier/pos",
 } as const;
 
 /** localStorage key — must match auth.store.ts persist config */

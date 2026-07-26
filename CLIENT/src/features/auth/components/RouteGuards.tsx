@@ -30,7 +30,12 @@
 import { Navigate, Outlet } from "react-router";
 import { useAuthStore, selectIsAuthenticated, selectSessionStatus, selectRole } from "@/store/auth.store";
 import { FullScreenLoader } from "@/components/ui";
-import { canAccessAdmin } from "../utils/permissions";
+import {
+  canAccessAdmin,
+  canAccessManagerPortal,
+  canAccessCashierPortal,
+  portalHomeForRole,
+} from "../utils/permissions";
 import { AUTH_ROUTES } from "../constants";
 
 // ─── Protected Route ──────────────────────────────────────────────────────────
@@ -60,13 +65,16 @@ export function ProtectedRoute() {
 export function GuestRoute() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const sessionStatus = useAuthStore(selectSessionStatus);
+  const role = useAuthStore(selectRole);
 
   if (sessionStatus === "idle" || sessionStatus === "loading") {
     return <FullScreenLoader />;
   }
 
   if (isAuthenticated) {
-    return <Navigate to={AUTH_ROUTES.dashboard} replace />;
+    // Send each role to the portal it owns, never a fixed route — a CASHIER
+    // landing on "/" would otherwise bounce through ManagerRoute.
+    return <Navigate to={portalHomeForRole(role)} replace />;
   }
 
   return <Outlet />;
@@ -90,6 +98,58 @@ export function AdminRoute() {
 
   if (!canAccessAdmin(role)) {
     return <Navigate to={AUTH_ROUTES.unauthorized} replace />;
+  }
+
+  return <Outlet />;
+}
+
+// ─── Manager Route ────────────────────────────────────────────────────────────
+// Gate for the entire Manager/Owner portal shell (everything under "/").
+// A CASHIER who manually types a management URL (/, /sales, /customers) is not
+// merely nav-hidden — they are redirected into their own portal. This is the
+// frontend half of RBAC; the backend independently rejects privileged calls.
+
+export function ManagerRoute() {
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const sessionStatus = useAuthStore(selectSessionStatus);
+  const role = useAuthStore(selectRole);
+
+  if (sessionStatus === "idle" || sessionStatus === "loading") {
+    return <FullScreenLoader />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to={AUTH_ROUTES.login} replace />;
+  }
+
+  if (!canAccessManagerPortal(role)) {
+    // Cashier trying to reach the management shell → back to their portal.
+    return <Navigate to={AUTH_ROUTES.cashierHome} replace />;
+  }
+
+  return <Outlet />;
+}
+
+// ─── Cashier Route ────────────────────────────────────────────────────────────
+// Gate for the Cashier portal shell (everything under "/cashier"). Only a
+// CASHIER may enter. A MANAGER/OWNER who navigates here is sent to their own
+// management shell — a manager should never see the cashier portal.
+
+export function CashierRoute() {
+  const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const sessionStatus = useAuthStore(selectSessionStatus);
+  const role = useAuthStore(selectRole);
+
+  if (sessionStatus === "idle" || sessionStatus === "loading") {
+    return <FullScreenLoader />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to={AUTH_ROUTES.login} replace />;
+  }
+
+  if (!canAccessCashierPortal(role)) {
+    return <Navigate to={AUTH_ROUTES.dashboard} replace />;
   }
 
   return <Outlet />;

@@ -24,21 +24,22 @@
  */
 
 import { Navigate } from "react-router";
-import { useAuthStore, selectIsAuthenticated, selectSessionStatus } from "@/store/auth.store";
+import { useAuthStore, selectIsAuthenticated, selectSessionStatus, selectRole } from "@/store/auth.store";
 import { LoginForm } from "../components/LoginForm";
-import { AUTH_ROUTES } from "../constants";
+import { portalHomeForRole } from "../utils/permissions";
 import { Store } from "lucide-react";
 import { FullScreenLoader } from "@/components/ui";
 
 export default function LoginView() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const sessionStatus = useAuthStore(selectSessionStatus);
+  const role = useAuthStore(selectRole);
 
   // If the user is already authenticated (e.g., valid session on browser refresh),
-  // redirect them away from the login page immediately.
+  // redirect them to the portal their role owns immediately.
   // This prevents the back-button returning to login after a successful session.
   if (isAuthenticated) {
-    return <Navigate to={AUTH_ROUTES.dashboard} replace />;
+    return <Navigate to={portalHomeForRole(role)} replace />;
   }
 
   // While Zustand is rehydrating from localStorage on first paint, show nothing
