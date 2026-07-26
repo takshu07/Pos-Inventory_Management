@@ -1,17 +1,20 @@
 /**
  * @file features/dashboard/components/employee/EmployeeDashboard.tsx
  *
- * Purpose: The daily operational view for Cashiers.
+ * Purpose: The daily OPERATIONAL dashboard, shown to MANAGER and CASHIER.
  *
  * Notes:
- * - Excludes sensitive financial data (gross margin, profit, etc).
- * - Focuses on daily execution: today's sales, active shifts, register status.
+ * - Excludes owner analytics (gross margin, profit, collections, reports).
+ * - Today's figures come from GET /sales (all-roles) via useOperationalTodayStats
+ *   — never the owner-only analytics engine, so nothing 403s or shows mock data.
+ * - Quick actions adapt to role: managers get Product Lookup (they may view the
+ *   catalog); cashiers do not (that screen would 403 for them).
  */
 
-import { 
-  useSalesKPIs, 
+import {
+  useOperationalTodayStats,
   useRecentSales,
-  useNotifications 
+  useNotifications
 } from "../../hooks/useDashboard";
 import { StatCard } from "../widgets/StatCard";
 import { RecentSalesWidget } from "../widgets/RecentSalesWidget";
@@ -21,17 +24,24 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { formatCurrency, formatTimeAgo } from "@/utils/formatters";
 import { IndianRupee, ShoppingBag, Bell, CircleCheck } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { useAuthStore, selectRole } from "@/store/auth.store";
+import { canViewProducts } from "@/features/auth";
+import type { QuickAction } from "../../types";
 
 export function EmployeeDashboard() {
-  // Employees only care about "Today"
-  const { data: kpis, isLoading: isLoadingKPIs } = useSalesKPIs({ range: "today" });
+  const role = useAuthStore(selectRole);
+  const isManager = role === "MANAGER";
+
+  // Today's operational figures — from /sales, not the owner analytics engine.
+  const { data: today, isLoading: isLoadingToday } = useOperationalTodayStats();
   const { data: recentSales, isLoading: isLoadingSales } = useRecentSales();
   const { data: notifications, isLoading: isLoadingNotifs } = useNotifications();
 
-  const employeeActions = [
+  const quickActions: QuickAction[] = [
     { label: "New Sale", icon: "ShoppingCart", href: "/pos", color: "#3b82f6" },
-    // "Check Inventory" (Product Lookup) removed — that screen is restricted to
-    // Manager/Owner, so a cashier clicking it would only hit /unauthorized.
+    ...(canViewProducts(role)
+      ? [{ label: "Product Lookup", icon: "Package", href: "/products/lookup", color: "#8b5cf6" }]
+      : []),
     { label: "Customers", icon: "Users", href: "/customers", color: "#10b981" },
   ];
 
@@ -39,26 +49,30 @@ export function EmployeeDashboard() {
     <div className="space-y-6 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Today's Shift</h1>
-        <p className="text-muted-foreground text-sm">Have a great day at work!</p>
+        <h1 className="text-2xl font-bold tracking-tight">
+          {isManager ? "Store Operations" : "Today's Shift"}
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          {isManager ? "Today's activity at a glance." : "Have a great day at work!"}
+        </p>
       </div>
 
       {/* Primary Actions (Prominent for POS) */}
-      <QuickActionsWidget actions={employeeActions} />
+      <QuickActionsWidget actions={quickActions} />
 
-      {/* KPI Row (Filtered for Cashiers) */}
+      {/* Operational KPI Row — today's sales, from /sales (no owner analytics) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <StatCard
-          title="Your Sales Today"
-          value={kpis ? formatCurrency(kpis.revenue) : "₹0"}
+          title={isManager ? "Sales Today" : "Your Sales Today"}
+          value={today ? formatCurrency(today.revenue) : "₹0"}
           icon={<IndianRupee className="h-4 w-4" />}
-          isLoading={isLoadingKPIs}
+          isLoading={isLoadingToday}
         />
         <StatCard
           title="Transactions Today"
-          value={kpis ? kpis.orderCount.toLocaleString() : "0"}
+          value={today ? today.orderCount.toLocaleString() : "0"}
           icon={<ShoppingBag className="h-4 w-4" />}
-          isLoading={isLoadingKPIs}
+          isLoading={isLoadingToday}
         />
       </div>
 

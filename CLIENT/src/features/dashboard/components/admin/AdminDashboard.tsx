@@ -33,9 +33,18 @@ import { TIME_RANGES } from "../../constants";
 import { Select } from "@/components/ui/Select";
 import { formatCurrency } from "@/utils/formatters";
 import { Activity, IndianRupee, ShoppingBag, Tags } from "lucide-react";
+import { useAuthStore, selectRole } from "@/store/auth.store";
+import { canAccessAdmin } from "@/features/auth";
+import type { QuickAction } from "../../types";
 
 export function AdminDashboard() {
   const [timeRange, setTimeRange] = useState("7d");
+  const role = useAuthStore(selectRole);
+  // Managers are operational: they never see owner-only quick actions (New
+  // Product, Inventory, Reports, Settings all require OWNER). They get shortcuts
+  // to what they actually do. Owners keep the full admin set. This mirrors the
+  // route/nav RBAC — the buttons here can only ever deep-link to permitted pages.
+  const isOwner = canAccessAdmin(role);
 
   // Fetch data
   const { data: kpis, isLoading: isLoadingKPIs } = useSalesKPIs({ range: timeRange });
@@ -44,12 +53,22 @@ export function AdminDashboard() {
   const { data: topProducts, isLoading: isLoadingProducts } = useTopProducts();
   const { data: inventoryAlerts, isLoading: isLoadingAlerts } = useInventoryAlerts();
 
-  const adminActions = [
-    { label: "New Product", icon: "PackagePlus", href: "/admin/products/new", color: "#3b82f6" },
+  const ownerActions: QuickAction[] = [
+    { label: "New Product", icon: "PackagePlus", href: "/admin/products", color: "#3b82f6" },
     { label: "Inventory", icon: "Boxes", href: "/admin/inventory", color: "#8b5cf6" },
     { label: "Reports", icon: "BarChart3", href: "/admin/reports", color: "#10b981" },
-    { label: "Settings", icon: "Settings", href: "/settings", color: "#64748b" },
+    { label: "Settings", icon: "Settings", href: "/admin/settings", color: "#64748b" },
   ];
+
+  // Operational shortcuts for managers — all point at pages a manager can open.
+  const managerActions: QuickAction[] = [
+    { label: "POS Checkout", icon: "ShoppingCart", href: "/pos", color: "#3b82f6" },
+    { label: "Product Lookup", icon: "Package", href: "/products/lookup", color: "#8b5cf6" },
+    { label: "Sales History", icon: "BarChart3", href: "/sales", color: "#10b981" },
+    { label: "Customers", icon: "Users", href: "/customers", color: "#64748b" },
+  ];
+
+  const quickActions = isOwner ? ownerActions : managerActions;
 
   return (
     <div className="space-y-6 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -147,8 +166,8 @@ export function AdminDashboard() {
 
         {/* Right Column (Narrower) */}
         <div className="space-y-6">
-          <QuickActionsWidget 
-            actions={adminActions} 
+          <QuickActionsWidget
+            actions={quickActions}
           />
           <InventoryAlertsWidget 
             alerts={inventoryAlerts} 

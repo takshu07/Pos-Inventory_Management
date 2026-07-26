@@ -20,11 +20,15 @@ export default function DashboardView() {
   // If user is somehow null (should be caught by route guard, but type safety), return empty
   if (!user) return null;
 
-  // Owners and Managers get the full enterprise analytics dashboard
-  if (user.role === "OWNER" || user.role === "MANAGER") {
+  // Only the OWNER sees the enterprise analytics dashboard (revenue, margin,
+  // collections, reports). Analytics is owner-only business administration, so
+  // routing a MANAGER here would only produce a 403 → fabricated mock numbers.
+  if (user.role === "OWNER") {
     return <AdminDashboard />;
   }
 
-  // Cashiers get the operational daily execution dashboard
+  // MANAGER and CASHIER get the operational dashboard — daily execution, no
+  // owner analytics. It draws its figures from data these roles can actually
+  // read (their own sales), never from the owner-only analytics engine.
   return <EmployeeDashboard />;
 }

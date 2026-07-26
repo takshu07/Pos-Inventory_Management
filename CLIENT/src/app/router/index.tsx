@@ -14,7 +14,6 @@
 import { createBrowserRouter, Outlet } from "react-router";
 import { MainLayout } from "@/components/layouts/MainLayout";
 import { CashierLayout } from "@/components/layouts/CashierLayout";
-import { useAuthStore, selectRole } from "@/store/auth.store";
 import {
   GuestRoute,
   OwnerRoute,
@@ -22,7 +21,6 @@ import {
   CashierRoute,
   AuthBootstrapper,
   SessionExpiredModal,
-  canManageProducts,
 } from "@/features/auth";
 
 /** 
@@ -49,44 +47,6 @@ function PlaceholderPage({ title }: { title: string }) {
       </p>
       <div className="mt-6 h-48 rounded-xl border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
         {title} — Implementation in Progress
-      </div>
-    </div>
-  );
-}
-
-/**
- * Products screen placeholder that is role-aware: OWNER sees a "full CRUD"
- * affordance, MANAGER sees an explicit read-only banner. This makes the
- * read-only-for-manager rule concrete today and models how the real Products
- * view should gate its create/edit actions behind `canManageProducts`.
- */
-function ProductsPlaceholder() {
-  const role = useAuthStore(selectRole);
-  const canEdit = canManageProducts(role);
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Products</h1>
-        {canEdit ? (
-          <button
-            type="button"
-            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
-          >
-            + New Product
-          </button>
-        ) : (
-          <span className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">
-            Read-only — editing is owner-only
-          </span>
-        )}
-      </div>
-      <p className="text-muted-foreground text-sm">
-        {canEdit
-          ? "Full catalog management. Create, edit, and price products."
-          : "You can view the catalog. Product changes are restricted to the owner."}
-      </p>
-      <div className="mt-6 h-48 rounded-xl border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
-        Products — Implementation in Progress
       </div>
     </div>
   );
@@ -189,20 +149,23 @@ export const router = createBrowserRouter([
       },
 
       // ── Operational screens visible to MANAGER + OWNER ────────────────────
-      // Products and Product Lookup are READ-ONLY for managers (the view hides
-      // create/edit actions via canManageProducts); owners get full CRUD on the
-      // same screens. Employee Activity is a read-only staff monitor. These are
-      // deliberately OUTSIDE OwnerRoute so managers can reach them.
+      // The Manager Product Catalog (/products and /products/lookup) is the
+      // READ-ONLY operational module: fast search, filters, and read-only product
+      // detail. It is deliberately OUTSIDE OwnerRoute so managers can reach it,
+      // and hits the manager-scoped (financial-free, GET-only) backend. Employee
+      // Activity is a read-only staff monitor.
       {
-        path: "products/lookup",
+        path: "products",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="Product Lookup (read-only)" /> };
+          const { ManagerProductsPage } = await import("@/features/manager/products");
+          return { Component: ManagerProductsPage };
         },
       },
       {
-        path: "admin/products",
+        path: "products/lookup",
         async lazy() {
-          return { Component: ProductsPlaceholder };
+          const { ManagerProductsPage } = await import("@/features/manager/products");
+          return { Component: ManagerProductsPage };
         },
       },
       {
@@ -219,6 +182,18 @@ export const router = createBrowserRouter([
       {
         Component: OwnerRoute,
         children: [
+          // ── Owner Product Management — full catalog CRUD (OWNER only) ─────────
+          // The complete administration module: dashboard, financial columns,
+          // create/edit/delete/archive/duplicate, pricing & stock. A MANAGER who
+          // types this URL is redirected to /unauthorized by OwnerRoute, and every
+          // write independently returns 403 from the OWNER-gated backend.
+          {
+            path: "admin/products",
+            async lazy() {
+              const { OwnerProductsPage } = await import("@/features/owner/products");
+              return { Component: OwnerProductsPage };
+            },
+          },
           {
             path: "finance/register",
             async lazy() {

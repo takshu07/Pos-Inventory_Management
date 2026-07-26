@@ -38,6 +38,8 @@ import employeeRoutes from "./routes/employee.routes";
 import exchangeRoutes from "./routes/exchange.routes";
 import inventoryMovementRoutes from "./routes/inventoryMovement.routes";
 import productRoutes from "./routes/product.routes";
+import ownerProductRoutes from "./routes/owner.products.routes";
+import managerProductRoutes from "./routes/manager.products.routes";
 import productVariantRoutes from "./routes/productVariant.routes";
 import purchaseRoutes from "./routes/purchase.routes";
 import saleRoutes from "./routes/sale.routes";
@@ -187,6 +189,10 @@ app.use("/api/v1/categories", categoryRoutes);
 app.use("/api/v1/brands", brandRoutes);
 app.use("/api/v1/suppliers", supplierRoutes);
 app.use("/api/v1/products", productRoutes);
+// Role-scoped product modules (independently routed + independently authorized).
+// owner/products = full CRUD (OWNER only); manager/products = read-only catalog.
+app.use("/api/v1/owner/products", ownerProductRoutes);
+app.use("/api/v1/manager/products", managerProductRoutes);
 app.use("/api/v1/product-variants", productVariantRoutes);
 app.use("/api/v1/inventory-movements", inventoryMovementRoutes);
 app.use("/api/v1/exchanges", exchangeRoutes);

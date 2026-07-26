@@ -70,9 +70,10 @@ export const EMPLOYEE_NAV: NavSection[] = [
   {
     title: "Catalog",
     items: [
-      // Read-only for managers; owners get full CRUD on the same screens.
-      { label: "Products",       path: "/admin/products",  icon: Boxes },
-      { label: "Product Lookup", path: "/products/lookup", icon: Package },
+      // Read-only operational catalog — MANAGER only. Owners don't see this;
+      // they use the full-CRUD "Product Management" screen (Catalog Admin below)
+      // instead, so there is a single product entry point per role.
+      { label: "Product Catalog", path: "/products", icon: Package, allowedRoles: ["MANAGER"] },
     ],
   },
   {
@@ -101,8 +102,10 @@ export const ADMIN_NAV: NavSection[] = [
   {
     title: "Catalog Admin",
     items: [
-      { label: "Categories",     path: "/admin/categories", icon: Tag,     allowedRoles: ["OWNER"] },
-      { label: "Brands",         path: "/admin/brands",     icon: Award,   allowedRoles: ["OWNER"] },
+      // Full catalog CRUD (dashboard, pricing, inventory, bulk). OWNER only.
+      { label: "Product Management", path: "/admin/products",   icon: Boxes, allowedRoles: ["OWNER"] },
+      { label: "Categories",         path: "/admin/categories", icon: Tag,   allowedRoles: ["OWNER"] },
+      { label: "Brands",             path: "/admin/brands",     icon: Award, allowedRoles: ["OWNER"] },
     ],
   },
   {

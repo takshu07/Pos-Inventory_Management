@@ -10,6 +10,7 @@ export const DASHBOARD_QUERY_KEYS = {
   charts: (filters: Record<string, any>) => [...DASHBOARD_QUERY_KEYS.all, "charts", filters] as const,
   topProducts: () => [...DASHBOARD_QUERY_KEYS.all, "topProducts"] as const,
   recentSales: () => [...DASHBOARD_QUERY_KEYS.all, "recentSales"] as const,
+  operationalToday: () => [...DASHBOARD_QUERY_KEYS.all, "operationalToday"] as const,
   inventoryAlerts: () => [...DASHBOARD_QUERY_KEYS.all, "inventoryAlerts"] as const,
   notifications: () => [...DASHBOARD_QUERY_KEYS.all, "notifications"] as const,
 };

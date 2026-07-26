@@ -13,42 +13,56 @@ import { apiClient } from "@/lib/api/axios";
 import { type SalesKPI, type ChartDataPoint, type TopProduct, type RecentSale, type InventoryAlert, type DashboardNotification } from "../types";
 
 /**
- * Fetches the Sales KPIs.
- * For Admin/Manager, this hits the real backend analytics engine.
+ * Fetches the Sales KPIs from the analytics engine.
+ *
+ * This endpoint (/analytics/generate) is OWNER-only — it powers the owner's
+ * enterprise analytics dashboard. It deliberately does NOT fall back to mock
+ * data on failure: a 403 (e.g. a manager) or an error must surface as a real
+ * error so the UI shows an honest empty state, never fabricated revenue/margin
+ * numbers. Only the OWNER dashboard calls this.
  */
 export async function getSalesKPIs(filters: { startDate?: string; endDate?: string }): Promise<SalesKPI> {
-  // Try to use the real backend endpoint.
-  try {
-    const params = new URLSearchParams({ reportName: "SalesDashboardKPI" });
-    if (filters.startDate) params.append("startDate", filters.startDate);
-    if (filters.endDate) params.append("endDate", filters.endDate);
-    
-    const response = await apiClient.get<any>(`/analytics/generate?${params.toString()}`);
-    return response.data.data; // The interceptor gives response.data, inside which is { success, message, data }
-  } catch (error) {
-    // If the backend endpoint fails (e.g., unauthorized for CASHIER, or not seeded), 
-    // fallback to mock data to ensure UI development can proceed.
-    console.warn("Analytics endpoint failed or unavailable. Using mock data.", error);
-    
-    return {
-      revenue: 125430,
-      revenueGrowth: 12.5,
-      orderCount: 142,
-      averageOrderValue: 883.3,
-      totalDiscount: 4500,
-      totalTax: 12500,
-      grossMarginPercent: 45.2,
-      comparative: {
-        previousRevenue: 111500,
-        previousOrderCount: 125,
-      },
-      paymentBreakdown: {
-        CASH: 45000,
-        UPI: 55430,
-        CARD: 25000
-      }
-    };
-  }
+  const params = new URLSearchParams({ reportName: "SalesDashboardKPI" });
+  if (filters.startDate) params.append("startDate", filters.startDate);
+  if (filters.endDate) params.append("endDate", filters.endDate);
+
+  // Interceptor unwraps to response.data = { success, message, data }.
+  const response = await apiClient.get<any>(`/analytics/generate?${params.toString()}`);
+  return response.data.data;
+}
+
+/**
+ * Operational "today" summary for the MANAGER/CASHIER dashboard.
+ *
+ * Sourced from GET /sales (accessible to all roles) filtered to today — NOT the
+ * owner-only analytics engine. Returns an exact transaction count (the paginated
+ * `total`, independent of page size) and the summed revenue of today's sales.
+ * A store's daily volume is small, so a single high-limit page covers it; if a
+ * day ever exceeds the limit, the count stays exact and revenue reflects the
+ * fetched page (never a fabricated number).
+ */
+export interface OperationalTodayStats {
+  orderCount: number;
+  revenue: number;
+}
+
+export async function getOperationalTodayStats(): Promise<OperationalTodayStats> {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const response = await apiClient.get<any>("/sales", {
+    params: { startDate: startOfDay.toISOString(), limit: 200, page: 1 },
+  });
+
+  // Interceptor unwraps to response.data = { total, data: Sale[] }.
+  const payload = response.data ?? {};
+  const rows: any[] = payload.data ?? [];
+  const revenue = rows.reduce((sum, sale) => sum + Number(sale.grandTotal ?? 0), 0);
+
+  return {
+    orderCount: Number(payload.total ?? rows.length),
+    revenue,
+  };
 }
 
 /**

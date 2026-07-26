@@ -18,6 +18,7 @@ import {
   getRecentSales,
   getInventoryAlerts,
   getNotifications,
+  getOperationalTodayStats,
 } from "../api/dashboardApi";
 
 /**
@@ -50,6 +51,21 @@ export function useSalesKPIs(filters: { range?: string; startDate?: string; endD
     queryKey: DASHBOARD_QUERY_KEYS.kpis(filters),
     queryFn: () => getSalesKPIs(apiFilters),
     staleTime: 1000 * 60 * 2,
+  });
+}
+
+/**
+ * Operational "today" stats for the MANAGER/CASHIER dashboard. Uses /sales
+ * (all-roles) rather than the owner-only analytics engine, so it never 403s or
+ * shows fabricated data. Refreshes on the same cadence as the recent-sales feed.
+ */
+export function useOperationalTodayStats() {
+  return useQuery({
+    queryKey: DASHBOARD_QUERY_KEYS.operationalToday(),
+    queryFn: getOperationalTodayStats,
+    refetchInterval: 1000 * 60, // keep today's figures reasonably fresh
+    refetchIntervalInBackground: false,
+    staleTime: 1000 * 30,
   });
 }
 
