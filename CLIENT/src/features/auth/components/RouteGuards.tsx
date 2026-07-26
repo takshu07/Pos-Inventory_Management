@@ -80,10 +80,14 @@ export function GuestRoute() {
   return <Outlet />;
 }
 
-// ─── Admin Route ──────────────────────────────────────────────────────────────
-// Only permits MANAGER and OWNER roles. Cashiers get sent to /unauthorized.
+// ─── Owner Route ──────────────────────────────────────────────────────────────
+// Gates business ADMINISTRATION routes (catalog CRUD, procurement, inventory,
+// finance, reports, discounts, cash register, settings, audit logs) to OWNER.
+// A MANAGER who manually types one of these URLs is sent to /unauthorized — nav
+// hiding is not the boundary; this guard is. (`canAccessAdmin` resolves to
+// OWNER-only under the operational-manager model.)
 
-export function AdminRoute() {
+export function OwnerRoute() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const sessionStatus = useAuthStore(selectSessionStatus);
   const role = useAuthStore(selectRole);
@@ -102,6 +106,12 @@ export function AdminRoute() {
 
   return <Outlet />;
 }
+
+/**
+ * @deprecated Use OwnerRoute. Kept as an alias so existing imports keep working;
+ * semantics are now OWNER-only (the "admin" surface belongs to the owner).
+ */
+export const AdminRoute = OwnerRoute;
 
 // ─── Manager Route ────────────────────────────────────────────────────────────
 // Gate for the entire Manager/Owner portal shell (everything under "/").

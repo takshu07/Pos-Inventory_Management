@@ -20,12 +20,14 @@ router.get("/search", requireRole("CASHIER"), customerController.searchCustomers
 router.get("/walk-in", requireRole("CASHIER"), customerController.getWalkInCustomer);
 
 // =============================================================================
-// OWNER DASHBOARD (MANAGER AND ABOVE)
-// Analytics + aggregate customer table. Declared before "/:id" so these literal
-// paths are not captured as an id param.
+// OWNER DASHBOARD (OWNER ONLY)
+// Aggregate analytics + customer table are business administration, not shop-
+// floor operations — reserved for OWNER. The operational customer list/search/
+// CRUD above stays available to CASHIER/MANAGER. Declared before "/:id" so
+// these literal paths are not captured as an id param.
 // =============================================================================
-router.get("/table", requireRole("MANAGER"), customerController.getCustomerTable);
-router.get("/analytics", requireRole("MANAGER"), customerController.getCustomerAnalytics);
+router.get("/table", requireRole("OWNER"), customerController.getCustomerTable);
+router.get("/analytics", requireRole("OWNER"), customerController.getCustomerAnalytics);
 router.get("/phone/:phone", requireRole("CASHIER"), customerController.getCustomerByPhone);
 router.get("/:id", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerById);
 router.get("/:id/purchases", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerPurchases);

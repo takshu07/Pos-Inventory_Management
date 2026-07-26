@@ -16,10 +16,10 @@ const upload = multer({
 
 router.use(authenticate);
 
-router.post("/upload", requireRole("MANAGER"), upload.single("file"), assetController.uploadAsset);
-router.get("/", requireRole("MANAGER"), assetController.getAssets);
+router.post("/upload", requireRole("OWNER"), upload.single("file"), assetController.uploadAsset);
+router.get("/", requireRole("OWNER"), assetController.getAssets);
 
 router.get("/:id/download", assetController.downloadAsset); // Anyone authenticated can attempt, AssetEngine checks permissions
-router.delete("/:id", requireRole("MANAGER"), assetController.deleteAsset);
+router.delete("/:id", requireRole("OWNER"), assetController.deleteAsset);
 
 export default router;

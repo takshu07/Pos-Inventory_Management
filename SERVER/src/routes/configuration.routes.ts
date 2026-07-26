@@ -5,10 +5,12 @@ import { requireRole } from "../middleware/role.middleware";
 
 const router = Router();
 
-// Configuration is extremely sensitive. Only Owner can mutate. Manager can read.
+// Settings are business administration — OWNER only for both read and write.
+// (Operational server logic reads settings directly via ConfigurationEngine,
+// not through this HTTP endpoint, so locking it does not affect POS/receipts.)
 router.use(authenticate);
 
-router.get("/", requireRole("MANAGER"), configurationController.getSettings);
+router.get("/", requireRole("OWNER"), configurationController.getSettings);
 router.patch("/", requireRole("OWNER"), configurationController.updateSettings);
 
 export default router;

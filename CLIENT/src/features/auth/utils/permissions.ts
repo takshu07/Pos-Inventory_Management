@@ -47,10 +47,24 @@ export function hasAtLeastRole(
 }
 
 // ─── Feature-Level Guards ─────────────────────────────────────────────────────
+//
+// Authorization model (2026-07): the MANAGER role is OPERATIONAL, not
+// administrative. Managers run the shop floor — POS, Sales, Customers, and
+// read-only visibility into Products and Employee Activity. All *business
+// administration* (catalog CRUD, procurement, inventory, finance, reports,
+// discounts, cash register, settings, audit logs) is reserved for OWNER.
+//
+// Every guard below is the single source of truth for one capability; the nav
+// config, route guards, and in-view action buttons all read from here so the
+// frontend never drifts from the backend rules it mirrors.
 
-/** Can access the admin section (Catalog, Procurement, Business, System). */
+/**
+ * Can access business ADMINISTRATION (Catalog CRUD, Procurement, Inventory,
+ * Finance, Reports, Discounts, Cash Register, Settings, Audit Logs, and the
+ * customer analytics dashboard). OWNER only — managers are operational.
+ */
 export function canAccessAdmin(role: Role | null): boolean {
-  return hasAtLeastRole(role, "MANAGER");
+  return hasAtLeastRole(role, "OWNER");
 }
 
 // ─── Portal Routing ─────────────────────────────────────────────────────────
@@ -88,14 +102,14 @@ export function canAccessOwnerOnly(role: Role | null): boolean {
   return hasAtLeastRole(role, "OWNER");
 }
 
-/** Can void a completed sale. */
+/** Can void a completed sale. Operational — managers run returns/voids. */
 export function canVoidSale(role: Role | null): boolean {
   return hasAtLeastRole(role, "MANAGER");
 }
 
-/** Can adjust inventory manually. */
+/** Can adjust inventory manually. Administrative → OWNER only. */
 export function canAdjustInventory(role: Role | null): boolean {
-  return hasAtLeastRole(role, "MANAGER");
+  return hasAtLeastRole(role, "OWNER");
 }
 
 /** Can apply discounts during checkout (all roles can apply; limit is configured server-side). */
@@ -103,14 +117,36 @@ export function canApplyDiscount(role: Role | null): boolean {
   return role !== null;
 }
 
-/** Can view reports. */
+/** Can view business reports/analytics. Administrative → OWNER only. */
 export function canViewReports(role: Role | null): boolean {
+  return hasAtLeastRole(role, "OWNER");
+}
+
+// ─── Products (read vs. write) ────────────────────────────────────────────────
+// Managers get read-only visibility into the catalog; only OWNER may mutate it.
+
+/** Can view products / product lookup (read-only for managers, full for owner). */
+export function canViewProducts(role: Role | null): boolean {
   return hasAtLeastRole(role, "MANAGER");
 }
 
-/** Can manage employees (create, edit, deactivate). */
-export function canManageEmployees(role: Role | null): boolean {
+/** Can create/edit products, variants, categories, brands. OWNER only. */
+export function canManageProducts(role: Role | null): boolean {
+  return hasAtLeastRole(role, "OWNER");
+}
+
+// ─── Employees (monitor vs. manage) ───────────────────────────────────────────
+// Managers get read-only "Employee Activity" monitoring; only OWNER may create,
+// edit, deactivate, or change roles.
+
+/** Can view the Employee Activity monitor (read-only list/detail). MANAGER + OWNER. */
+export function canMonitorEmployees(role: Role | null): boolean {
   return hasAtLeastRole(role, "MANAGER");
+}
+
+/** Can create/edit/deactivate employees or change their roles. OWNER only. */
+export function canManageEmployees(role: Role | null): boolean {
+  return hasAtLeastRole(role, "OWNER");
 }
 
 /**

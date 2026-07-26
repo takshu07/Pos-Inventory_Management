@@ -7,9 +7,10 @@ import { validateParam } from "../middleware/validateParam.middleware";
 
 const router = Router();
 
-// Purchases can only be accessed by MANAGER and OWNER
+// Procurement is business administration — OWNER only. Managers are operational
+// and have no access to purchases.
 router.use(authenticate);
-router.use(requireRole("MANAGER"));
+router.use(requireRole("OWNER"));
 
 router.get("/", purchaseController.list);
 router.get("/:id", validateParam("id"), purchaseController.getById);

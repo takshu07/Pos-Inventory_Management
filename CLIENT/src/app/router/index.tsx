@@ -14,13 +14,15 @@
 import { createBrowserRouter, Outlet } from "react-router";
 import { MainLayout } from "@/components/layouts/MainLayout";
 import { CashierLayout } from "@/components/layouts/CashierLayout";
+import { useAuthStore, selectRole } from "@/store/auth.store";
 import {
   GuestRoute,
-  AdminRoute,
+  OwnerRoute,
   ManagerRoute,
   CashierRoute,
   AuthBootstrapper,
   SessionExpiredModal,
+  canManageProducts,
 } from "@/features/auth";
 
 /** 
@@ -47,6 +49,44 @@ function PlaceholderPage({ title }: { title: string }) {
       </p>
       <div className="mt-6 h-48 rounded-xl border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
         {title} — Implementation in Progress
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Products screen placeholder that is role-aware: OWNER sees a "full CRUD"
+ * affordance, MANAGER sees an explicit read-only banner. This makes the
+ * read-only-for-manager rule concrete today and models how the real Products
+ * view should gate its create/edit actions behind `canManageProducts`.
+ */
+function ProductsPlaceholder() {
+  const role = useAuthStore(selectRole);
+  const canEdit = canManageProducts(role);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Products</h1>
+        {canEdit ? (
+          <button
+            type="button"
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
+          >
+            + New Product
+          </button>
+        ) : (
+          <span className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">
+            Read-only — editing is owner-only
+          </span>
+        )}
+      </div>
+      <p className="text-muted-foreground text-sm">
+        {canEdit
+          ? "Full catalog management. Create, edit, and price products."
+          : "You can view the catalog. Product changes are restricted to the owner."}
+      </p>
+      <div className="mt-6 h-48 rounded-xl border border-dashed border-border flex items-center justify-center text-muted-foreground text-sm">
+        Products — Implementation in Progress
       </div>
     </div>
   );
@@ -148,28 +188,41 @@ export const router = createBrowserRouter([
         },
       },
 
-      // Admin-level screens (Manager + Owner only — wrapped in AdminRoute)
+      // ── Operational screens visible to MANAGER + OWNER ────────────────────
+      // Products and Product Lookup are READ-ONLY for managers (the view hides
+      // create/edit actions via canManageProducts); owners get full CRUD on the
+      // same screens. Employee Activity is a read-only staff monitor. These are
+      // deliberately OUTSIDE OwnerRoute so managers can reach them.
       {
-        Component: AdminRoute,
+        path: "products/lookup",
+        async lazy() {
+          return { Component: () => <PlaceholderPage title="Product Lookup (read-only)" /> };
+        },
+      },
+      {
+        path: "admin/products",
+        async lazy() {
+          return { Component: ProductsPlaceholder };
+        },
+      },
+      {
+        path: "admin/employees",
+        async lazy() {
+          return { Component: () => <PlaceholderPage title="Employee Activity" /> };
+        },
+      },
+
+      // ── Business administration — OWNER only (wrapped in OwnerRoute) ───────
+      // A MANAGER who types any of these URLs is redirected to /unauthorized by
+      // OwnerRoute; the backend independently returns 403. Nav links are hidden
+      // from managers, but the guard — not the hiding — is the boundary.
+      {
+        Component: OwnerRoute,
         children: [
-          // Manager/Owner only — cashiers hitting these URLs are redirected to
-          // /unauthorized by AdminRoute (nav links are also hidden for cashiers).
-          {
-            path: "products/lookup",
-            async lazy() {
-              return { Component: () => <PlaceholderPage title="Product Lookup" /> };
-            },
-          },
           {
             path: "finance/register",
             async lazy() {
               return { Component: () => <PlaceholderPage title="Cash Register" /> };
-            },
-          },
-          {
-            path: "admin/products",
-            async lazy() {
-              return { Component: () => <PlaceholderPage title="Product Management" /> };
             },
           },
           {
@@ -200,12 +253,6 @@ export const router = createBrowserRouter([
             path: "admin/inventory",
             async lazy() {
               return { Component: () => <PlaceholderPage title="Inventory" /> };
-            },
-          },
-          {
-            path: "admin/employees",
-            async lazy() {
-              return { Component: () => <PlaceholderPage title="Employee Management" /> };
             },
           },
           {

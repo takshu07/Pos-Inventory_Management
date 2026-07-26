@@ -8,7 +8,6 @@ import {
   Wallet,
   Bell,
   User,
-  // Admin
   Boxes,
   Tag,
   Award,
@@ -19,20 +18,31 @@ import {
   BadgePercent,
   Settings,
   Shield,
-  UserCog,
+  Activity,
 } from "lucide-react";
 
 /**
  * Navigation Configuration
- * Single source of truth for all sidebar routes, icons, labels, and RBAC permissions.
- * Adding a new page = adding one entry here.
+ * Single source of truth for all sidebar routes, icons, labels, and RBAC.
+ *
+ * Authorization model (2026-07): MANAGER is an OPERATIONAL role, OWNER is the
+ * administrator.
+ *   • MANAGER_NAV  → shop-floor operations, visible to MANAGER + OWNER. Product
+ *     and Employee entries here are read-only monitoring surfaces.
+ *   • OWNER_NAV    → business administration, OWNER only (allowedRoles:["OWNER"]).
+ *
+ * Both are rendered only inside the manager shell (MainLayout), which is already
+ * gated to MANAGER+OWNER by ManagerRoute — cashiers have their own portal/nav.
+ * Adding a page = adding one entry here; the sidebar filters by `allowedRoles`
+ * and the router enforces the same rule with route guards (nav hiding alone is
+ * never the security boundary).
  */
 
 export interface NavItem {
   label: string;
   path: string;
   icon: React.ElementType;
-  /** Roles that can see this item. Empty = all authenticated users. */
+  /** Roles that can see this item. Empty = all roles that can reach this shell. */
   allowedRoles?: Role[];
   badge?: string;
 }
@@ -42,7 +52,11 @@ export interface NavSection {
   items: NavItem[];
 }
 
-/** Employee-level navigation (Cashier + Manager + Owner see these) */
+/**
+ * Operational navigation — MANAGER + OWNER.
+ * The Manager's complete surface: run the floor, oversee catalog and staff
+ * read-only. No `allowedRoles` filter → visible to everyone in this shell.
+ */
 export const EMPLOYEE_NAV: NavSection[] = [
   {
     title: "Operations",
@@ -54,6 +68,22 @@ export const EMPLOYEE_NAV: NavSection[] = [
     ],
   },
   {
+    title: "Catalog",
+    items: [
+      // Read-only for managers; owners get full CRUD on the same screens.
+      { label: "Products",       path: "/admin/products",  icon: Boxes },
+      { label: "Product Lookup", path: "/products/lookup", icon: Package },
+    ],
+  },
+  {
+    title: "Team",
+    items: [
+      // Read-only monitoring — renamed from "Employees" since managers only
+      // observe activity here; hiring/edits are owner-only under Business below.
+      { label: "Employee Activity", path: "/admin/employees", icon: Activity },
+    ],
+  },
+  {
     title: "Account",
     items: [
       { label: "My Profile",      path: "/profile",        icon: User },
@@ -62,35 +92,34 @@ export const EMPLOYEE_NAV: NavSection[] = [
   },
 ];
 
-/** Admin-level navigation (Manager + Owner only) */
+/**
+ * Business administration navigation — OWNER only.
+ * Every item is explicitly `allowedRoles:["OWNER"]` so a manager never sees it
+ * and (paired with OwnerRoute) can never route to it.
+ */
 export const ADMIN_NAV: NavSection[] = [
   {
-    title: "Catalog",
+    title: "Catalog Admin",
     items: [
-      { label: "Products",       path: "/admin/products",   icon: Boxes,   allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Categories",     path: "/admin/categories", icon: Tag,     allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Brands",         path: "/admin/brands",     icon: Award,   allowedRoles: ["MANAGER", "OWNER"] },
-      // Restricted to Manager/Owner — cashiers must not see product lookup.
-      { label: "Product Lookup", path: "/products/lookup",  icon: Package, allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Categories",     path: "/admin/categories", icon: Tag,     allowedRoles: ["OWNER"] },
+      { label: "Brands",         path: "/admin/brands",     icon: Award,   allowedRoles: ["OWNER"] },
     ],
   },
   {
     title: "Procurement",
     items: [
-      { label: "Suppliers",   path: "/admin/suppliers",   icon: Truck,         allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Purchases",   path: "/admin/purchases",   icon: ClipboardList, allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Inventory",   path: "/admin/inventory",   icon: Boxes,         allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Suppliers",   path: "/admin/suppliers",   icon: Truck,         allowedRoles: ["OWNER"] },
+      { label: "Purchases",   path: "/admin/purchases",   icon: ClipboardList, allowedRoles: ["OWNER"] },
+      { label: "Inventory",   path: "/admin/inventory",   icon: Boxes,         allowedRoles: ["OWNER"] },
     ],
   },
   {
     title: "Business",
     items: [
-      { label: "Employees",     path: "/admin/employees",  icon: UserCog,      allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Reports",       path: "/admin/reports",    icon: BarChart3,    allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Finance",       path: "/admin/finance",    icon: DollarSign,   allowedRoles: ["MANAGER", "OWNER"] },
-      { label: "Discounts",     path: "/admin/discounts",  icon: BadgePercent, allowedRoles: ["MANAGER", "OWNER"] },
-      // Restricted to Manager/Owner — cashiers must not access the cash register here.
-      { label: "Cash Register", path: "/finance/register", icon: Wallet,       allowedRoles: ["MANAGER", "OWNER"] },
+      { label: "Reports",       path: "/admin/reports",    icon: BarChart3,    allowedRoles: ["OWNER"] },
+      { label: "Finance",       path: "/admin/finance",    icon: DollarSign,   allowedRoles: ["OWNER"] },
+      { label: "Discounts",     path: "/admin/discounts",  icon: BadgePercent, allowedRoles: ["OWNER"] },
+      { label: "Cash Register", path: "/finance/register", icon: Wallet,       allowedRoles: ["OWNER"] },
     ],
   },
   {

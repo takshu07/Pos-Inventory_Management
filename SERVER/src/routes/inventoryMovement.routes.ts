@@ -12,10 +12,10 @@ router.use(authenticate);
 
 // List and View: Accessible by MANAGER and OWNER
 // Cashiers do not need to view raw movement ledgers
-router.get("/", requireRole("MANAGER"), inventoryMovementController.list);
+router.get("/", requireRole("OWNER"), inventoryMovementController.list);
 router.get(
   "/:id",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   validateParam("id"),
   inventoryMovementController.getById
 );
@@ -24,7 +24,7 @@ router.get(
 // Cashiers cannot manually alter stock, they can only do it via Sales.
 router.post(
   "/",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   inventoryMovementController.createManualAdjustment
 );
 

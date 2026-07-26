@@ -11,19 +11,19 @@ const router = Router();
 router.use(authenticate);
 
 // List and View: Accessible by MANAGER and OWNER
-router.get("/", requireRole("MANAGER"), categoryController.list);
+router.get("/", requireRole("OWNER"), categoryController.list);
 router.get(
   "/:id",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   validateParam("id"),
   categoryController.getById
 );
 
 // Create and Update: Accessible by MANAGER and OWNER
-router.post("/", requireRole("MANAGER"), categoryController.create);
+router.post("/", requireRole("OWNER"), categoryController.create);
 router.patch(
   "/:id",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   validateParam("id"),
   categoryController.update
 );

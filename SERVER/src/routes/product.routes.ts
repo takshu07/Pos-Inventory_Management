@@ -24,11 +24,12 @@ router.get(
   productController.getVariantsByProductId
 );
 
-// Create and Update: Restricted to MANAGER and OWNER
-router.post("/", requireRole("MANAGER"), productController.create);
+// Create and Update: OWNER only. Managers have read-only catalog visibility;
+// only the owner may mutate the catalog.
+router.post("/", requireRole("OWNER"), productController.create);
 router.patch(
   "/:id",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   validateParam("id"),
   productController.update
 );

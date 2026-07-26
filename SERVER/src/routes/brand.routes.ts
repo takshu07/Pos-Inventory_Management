@@ -9,18 +9,18 @@ const router = Router();
 
 router.use(authenticate);
 
-router.get("/", requireRole("MANAGER"), brandController.list);
+router.get("/", requireRole("OWNER"), brandController.list);
 router.get(
   "/:id",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   validateParam("id"),
   brandController.getById
 );
 
-router.post("/", requireRole("MANAGER"), brandController.create);
+router.post("/", requireRole("OWNER"), brandController.create);
 router.patch(
   "/:id",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   validateParam("id"),
   brandController.update
 );

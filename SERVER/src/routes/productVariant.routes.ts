@@ -23,12 +23,12 @@ router.get(
   productVariantController.getById
 );
 
-// Create and Update: Restricted to MANAGER and OWNER
-// Changing pricing or SKUs is a management function
-router.post("/", requireRole("MANAGER"), productVariantController.create);
+// Create and Update: OWNER only. Reads stay open (cashiers scan barcodes,
+// managers view the catalog); mutating pricing/SKUs is an owner function.
+router.post("/", requireRole("OWNER"), productVariantController.create);
 router.patch(
   "/:id",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   validateParam("id"),
   productVariantController.update
 );

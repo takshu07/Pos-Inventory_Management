@@ -9,14 +9,14 @@ router.use(authenticate);
 
 // --- EXPENSES ---
 // Cashiers cannot view all expenses or create them (unless we want them to, but usually Manager/Owner)
-router.post("/expenses", requireRole("MANAGER"), financeController.createExpense);
-router.get("/expenses", requireRole("MANAGER"), financeController.getExpenses);
+router.post("/expenses", requireRole("OWNER"), financeController.createExpense);
+router.get("/expenses", requireRole("OWNER"), financeController.getExpenses);
 
 // --- CASH REGISTER ---
 // Cashiers can interact with the drawer
 router.get("/register", financeController.getActiveRegister);
-router.post("/register/open", requireRole("MANAGER"), financeController.openRegister);
-router.post("/register/close", requireRole("MANAGER"), financeController.closeRegister);
+router.post("/register/open", requireRole("OWNER"), financeController.openRegister);
+router.post("/register/close", requireRole("OWNER"), financeController.closeRegister);
 router.post("/register/transactions", financeController.addCashTransaction);
 
 export default router;

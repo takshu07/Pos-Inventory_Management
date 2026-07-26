@@ -14,7 +14,8 @@ const router = Router();
 // All employee endpoints require authentication
 router.use(authenticate);
 
-// List and View: Accessible by MANAGER and OWNER
+// List and View: MANAGER + OWNER. This is the read-only "Employee Activity"
+// monitor managers use to oversee staff — no mutation implied.
 router.get("/", requireRole("MANAGER"), employeeController.list);
 router.get(
   "/:id",
@@ -23,12 +24,12 @@ router.get(
   employeeController.getById
 );
 
-// Create and Update: Accessible by MANAGER and OWNER
-// (The service layer further restricts managers from creating/updating owners)
-router.post("/", requireRole("MANAGER"), employeeController.create);
+// Create and Update: OWNER only. Hiring, editing, deactivating, and role
+// changes are business administration reserved for the owner.
+router.post("/", requireRole("OWNER"), employeeController.create);
 router.patch(
   "/:id",
-  requireRole("MANAGER"),
+  requireRole("OWNER"),
   validateParam("id"),
   employeeController.update
 );
