@@ -110,7 +110,7 @@ export const customerRepository = {
     if (!clean) {
       return prisma.$queryRaw<CustomerSearchRow[]>`
         SELECT c."id", c."name", c."phone", c."customerCode", c."createdAt"
-        FROM "Customer" c
+        FROM "customers" c
         WHERE c."isWalkIn" = false
         ORDER BY c."createdAt" DESC
         LIMIT ${take}
@@ -122,7 +122,7 @@ export const customerRepository = {
 
     return prisma.$queryRaw<CustomerSearchRow[]>`
       SELECT c."id", c."name", c."phone", c."customerCode", c."createdAt"
-      FROM "Customer" c
+      FROM "customers" c
       WHERE c."isWalkIn" = false
         AND (
           c."name" ILIKE ${contains}
