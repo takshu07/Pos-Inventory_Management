@@ -39,6 +39,15 @@ export const customerValidation = {
   query: paginationSchema,
 
   /**
+   * Live typeahead search query. `q` may be empty (→ recent customers). `limit`
+   * caps the dropdown size; the repository clamps further for safety.
+   */
+  search: z.object({
+    q: z.string().trim().max(100).default(""),
+    limit: z.coerce.number().int().min(1).max(25).default(8),
+  }),
+
+  /**
    * Owner/manager customer-table query. Extends pagination with the aggregate
    * sort fields and the dashboard filters. Booleans arrive as query strings, so
    * they are coerced from "true"/"false". All filtering/sorting is server-side.

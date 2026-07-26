@@ -62,6 +62,19 @@ export interface CustomerQueryFilters {
   search?: string;
 }
 
+/**
+ * One row returned by the ranked typeahead search (`GET /customers/search`).
+ * Lightweight by design — only what the dropdown renders. Ordered by the
+ * server (prefix matches first), so the client renders it as-is.
+ */
+export interface CustomerSearchResult {
+  id: string;
+  name: string;
+  phone: string;
+  customerCode: string;
+  createdAt: string;
+}
+
 export interface CustomersPaginatedResponse {
   total: number;
   data: CustomerModel[];

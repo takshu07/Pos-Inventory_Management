@@ -1,6 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import {
   fetchCustomers,
+  searchCustomers,
   createCustomer,
   getWalkInCustomer,
   getCustomerByPhone,
@@ -15,6 +16,7 @@ export const customerKeys = {
   all: ["customers"] as const,
   lists: () => [...customerKeys.all, "list"] as const,
   list: (filters: CustomerQueryFilters) => [...customerKeys.lists(), filters] as const,
+  search: (q: string, limit: number) => [...customerKeys.all, "search", q, limit] as const,
   table: (filters: CustomerTableFilters) => [...customerKeys.all, "table", filters] as const,
   analytics: () => [...customerKeys.all, "analytics"] as const,
   walkIn: () => [...customerKeys.all, "walk-in"] as const,
@@ -27,6 +29,31 @@ export function useCustomers(filters: CustomerQueryFilters) {
     queryKey: customerKeys.list(filters),
     queryFn: () => fetchCustomers(filters),
     placeholderData: (prev) => prev,
+  });
+}
+
+/**
+ * Live ranked typeahead search — the engine behind the customer search combobox.
+ *
+ * The caller passes the *debounced* term (debounce lives in the component so the
+ * input stays instant). Behaviour:
+ *  - Each distinct term is its own cache key, so results are memoized and a
+ *    re-typed term is served instantly from cache (no flicker, no refetch).
+ *  - React Query hands the queryFn an AbortSignal; a newer keystroke cancels the
+ *    older in-flight request, so the latest query always wins (no race).
+ *  - `placeholderData: keepPreviousData` keeps the previous matches on screen
+ *    while the next term loads — the list updates in place instead of flashing
+ *    empty. `isFetching` drives the in-box spinner.
+ *  - Empty term is still queried on purpose: the server returns recent customers
+ *    for the empty-state list.
+ */
+export function useCustomerSearch(term: string, limit = 8, enabled = true) {
+  return useQuery({
+    queryKey: customerKeys.search(term, limit),
+    queryFn: ({ signal }) => searchCustomers(term, limit, signal),
+    enabled,
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 30, // a term's results are stable for ~30s
   });
 }
 

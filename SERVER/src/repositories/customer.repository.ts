@@ -28,6 +28,15 @@ export interface CustomerTableRow {
   active: boolean;
 }
 
+/** One lightweight row returned by the typeahead `search` (dropdown fields only). */
+export interface CustomerSearchRow {
+  id: string;
+  name: string;
+  phone: string;
+  customerCode: string;
+  createdAt: Date;
+}
+
 /** Whitelisted sort columns for the owner table (guards against SQL injection). */
 const TABLE_SORT_COLUMNS = {
   name: Prisma.sql`c."name"`,
@@ -75,6 +84,61 @@ export const customerRepository = {
         include: { addresses: true },
       }),
     ]);
+  },
+
+  /**
+   * Ranked typeahead search — powers the live customer search combobox.
+   *
+   * Substring (ILIKE '%term%') match across name, phone, and customerCode, but
+   * ordered so the most relevant rows come first regardless of pagination:
+   *   0. name starts with the term
+   *   1. customerCode starts with the term
+   *   2. phone contains the term (digits — no meaningful prefix)
+   *   3. any other substring hit (name/code contains mid-word)
+   * Ties break by name A→Z. All ranking, filtering, and LIMIT happen in
+   * PostgreSQL, so the browser never receives more than `limit` rows even with
+   * 100k+ customers. When `term` is empty we return the most recent customers
+   * ("Recent Customers" empty-state) instead of matching nothing.
+   *
+   * Only lightweight fields the dropdown needs are selected.
+   */
+  async search(term: string, limit: number): Promise<CustomerSearchRow[]> {
+    const clean = term.trim();
+    const take = Math.min(Math.max(limit, 1), 25);
+
+    // Empty query → most recently created real customers (empty-state list).
+    if (!clean) {
+      return prisma.$queryRaw<CustomerSearchRow[]>`
+        SELECT c."id", c."name", c."phone", c."customerCode", c."createdAt"
+        FROM "Customer" c
+        WHERE c."isWalkIn" = false
+        ORDER BY c."createdAt" DESC
+        LIMIT ${take}
+      `;
+    }
+
+    const contains = `%${clean}%`;
+    const prefix = `${clean}%`;
+
+    return prisma.$queryRaw<CustomerSearchRow[]>`
+      SELECT c."id", c."name", c."phone", c."customerCode", c."createdAt"
+      FROM "Customer" c
+      WHERE c."isWalkIn" = false
+        AND (
+          c."name" ILIKE ${contains}
+          OR c."phone" ILIKE ${contains}
+          OR c."customerCode" ILIKE ${contains}
+        )
+      ORDER BY
+        CASE
+          WHEN c."name" ILIKE ${prefix} THEN 0
+          WHEN c."customerCode" ILIKE ${prefix} THEN 1
+          WHEN c."phone" ILIKE ${prefix} THEN 2
+          ELSE 3
+        END,
+        c."name" ASC
+      LIMIT ${take}
+    `;
   },
 
   /**

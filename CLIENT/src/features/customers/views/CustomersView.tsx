@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import {
   User,
@@ -12,18 +12,15 @@ import {
   Printer,
   Plus,
   History,
-  ChevronRight,
-  Users as UsersIcon,
 } from "lucide-react";
-import { SearchBox } from "@/components/ui/SearchBox";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { useDebounce } from "@/hooks/useDebounce";
 import { formatCurrency } from "@/utils/formatters";
 import { PermissionGuard } from "@/features/auth/components/PermissionGuard";
 import { canAccessAdmin } from "@/features/auth/utils/permissions";
-import { useCustomers, useCustomer, useExchangeEligibility } from "../hooks/useCustomers";
+import { useCustomer, useExchangeEligibility } from "../hooks/useCustomers";
+import { CustomerSearchCombobox } from "../components/CustomerSearchCombobox";
 import OwnerCustomerDashboard from "../components/OwnerCustomerDashboard";
 import { useSalesHistory } from "@/features/sales/hooks/useSales";
 import { usePosStore } from "@/features/pos/store/usePosStore";
@@ -68,124 +65,34 @@ export default function CustomersView() {
  * in the POS checkout flow, not here.
  */
 function CashierLookup() {
-  const [searchValue, setSearchValue] = useState("");
-  const debouncedSearch = useDebounce(searchValue.trim(), 350);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const { data: results, isFetching } = useCustomers({
-    search: debouncedSearch,
-    limit: 8,
-  });
-
-  // Exclude the permanent walk-in record from the pickable results.
-  const matches = useMemo(
-    () => (results?.data ?? []).filter((c) => !c.isWalkIn),
-    [results]
-  );
-
-  // Auto-select when the search resolves to exactly one real customer.
-  useEffect(() => {
-    if (debouncedSearch.length >= 2 && matches.length === 1) {
-      setSelectedId(matches[0].id);
-    }
-  }, [debouncedSearch, matches]);
-
-  const showResults = debouncedSearch.length >= 2 && !selectedId;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="max-w-xl">
-        <SearchBox
-          value={searchValue}
-          onChange={(v) => {
-            setSearchValue(v);
-            setSelectedId(null);
-          }}
-          loading={isFetching}
-          placeholder="Search mobile number or name…"
+        <CustomerSearchCombobox
+          onSelect={(c) => setSelectedId(c.id)}
+          placeholder="Search mobile number, name, or code…"
         />
       </div>
 
-      {showResults && (
-        <SearchResults
-          matches={matches}
-          isFetching={isFetching}
-          onSelect={setSelectedId}
-        />
-      )}
-
-      {selectedId && (
+      {selectedId ? (
         <CustomerDetail
           customerId={selectedId}
-          onBack={() => {
-            setSelectedId(null);
-          }}
+          onBack={() => setSelectedId(null)}
         />
+      ) : (
+        <IdlePrompt />
       )}
-
-      {!showResults && !selectedId && <IdlePrompt hasQuery={debouncedSearch.length > 0} />}
     </div>
   );
 }
 
-function IdlePrompt({ hasQuery }: { hasQuery: boolean }) {
+function IdlePrompt() {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3 opacity-70">
-      <UsersIcon className="h-12 w-12" />
-      <p className="text-sm">
-        {hasQuery ? "Keep typing to search…" : "Start typing a mobile number or name."}
-      </p>
-    </div>
-  );
-}
-
-function SearchResults({
-  matches,
-  isFetching,
-  onSelect,
-}: {
-  matches: CustomerModel[];
-  isFetching: boolean;
-  onSelect: (id: string) => void;
-}) {
-  if (isFetching && matches.length === 0) {
-    return <div className="text-sm text-muted-foreground px-1">Searching…</div>;
-  }
-
-  if (matches.length === 0) {
-    return (
-      <Card className="p-8 flex flex-col items-center justify-center text-center gap-2">
-        <UsersIcon className="h-8 w-8 text-muted-foreground" />
-        <p className="text-sm font-medium">No customer found.</p>
-        <p className="text-xs text-muted-foreground">
-          New customers are added at POS checkout when their mobile number is entered.
-        </p>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="max-w-xl flex flex-col gap-2">
-      {matches.map((c) => (
-        <button
-          key={c.id}
-          onClick={() => onSelect(c.id)}
-          className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-left hover:bg-accent transition-colors"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0">
-              <User className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="font-medium truncate">{c.name}</div>
-              <div className="text-xs text-muted-foreground flex items-center gap-1">
-                <Phone className="h-3 w-3" /> {c.phone}
-              </div>
-            </div>
-          </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-        </button>
-      ))}
+    <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3 opacity-70 py-10">
+      <User className="h-12 w-12" />
+      <p className="text-sm">Search above, then pick a customer to view their details.</p>
     </div>
   );
 }

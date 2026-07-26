@@ -33,6 +33,16 @@ export const customerService = {
   },
 
   /**
+   * Ranked typeahead search for the live customer combobox. Returns a flat,
+   * relevance-ordered list of lightweight rows (no pagination envelope) — the
+   * dropdown only ever shows the top `limit` matches. Empty query yields the
+   * most recent customers for the "Recent Customers" empty state.
+   */
+  async searchCustomers(term: string, limit: number) {
+    return customerRepository.search(term, limit);
+  },
+
+  /**
    * Owner/manager customer table — server-side paginated rows with per-customer
    * sale aggregates. Returns the standard paginated envelope so the client can
    * reuse the same DataTable/pagination plumbing as every other list.

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { UserPlus, Search, ArrowRight, ShoppingBag } from "lucide-react";
 import { Input, Button } from "@/components/ui";
 import { useCustomerByPhone, useCreateCustomer } from "@/features/customers/hooks/useCustomers";
+import { CustomerSearchCombobox } from "@/features/customers/components/CustomerSearchCombobox";
 import { useSalesHistory } from "@/features/sales/hooks/useSales";
 import { useShallow } from "zustand/react/shallow";
 import { usePosStore } from "../store/usePosStore";
@@ -81,6 +82,23 @@ function CustomerForm() {
       <div>
         <h2 className="text-lg font-bold tracking-tight">Customer details</h2>
         <p className="text-sm text-muted-foreground">Enter the mobile number to begin.</p>
+      </div>
+
+      {/* Fast lookup of an existing customer by name / mobile / code. Picking
+          one fills the fields below and continues via the same flow. Creating a
+          new customer still happens through the mobile field. */}
+      <CustomerSearchCombobox
+        placeholder="Find existing customer by name, mobile, or code…"
+        limit={6}
+        onSelect={(c) => {
+          setPhone(c.phone);
+          setName(c.name);
+          startSession({ id: c.id, phone: c.phone, name: c.name });
+        }}
+      />
+
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+        <span className="h-px flex-1 bg-border" /> or enter mobile <span className="h-px flex-1 bg-border" />
       </div>
 
       <Input

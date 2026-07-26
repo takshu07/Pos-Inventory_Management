@@ -4,6 +4,7 @@ import {
   CustomerCreateDTO,
   CustomerQueryFilters,
   CustomersPaginatedResponse,
+  CustomerSearchResult,
   ExchangeEligibilityResponse,
   CustomerAnalytics,
   CustomerTableFilters,
@@ -23,6 +24,26 @@ export async function fetchCustomers(filters: CustomerQueryFilters): Promise<Cus
     total: response.data?.meta?.total ?? 0,
     data: response.data?.data ?? [],
   };
+}
+
+/**
+ * Ranked live typeahead search. Returns a flat, relevance-ordered list (prefix
+ * matches first) of lightweight rows — never the full paginated envelope.
+ *
+ * Accepts an AbortSignal (supplied by React Query) so a keystroke that fires a
+ * newer request cancels the in-flight older one — the latest query always wins
+ * and stale responses can never overwrite fresh results.
+ */
+export async function searchCustomers(
+  q: string,
+  limit: number,
+  signal?: AbortSignal
+): Promise<CustomerSearchResult[]> {
+  const response = await apiClient.get<any>("/customers/search", {
+    params: { q, limit },
+    signal,
+  });
+  return response.data ?? [];
 }
 
 /**

@@ -18,6 +18,21 @@ export const customerController = {
   }),
 
   /**
+   * GET /api/v1/customers/search?q=ta&limit=8
+   * Ranked live typeahead — substring match across name/phone/code, prefix
+   * matches first. Empty `q` returns the most recent customers.
+   */
+  searchCustomers: asyncHandler(async (req: Request, res: Response) => {
+    const { q, limit } = customerValidation.search.parse(req.query);
+    const result = await customerService.searchCustomers(q, limit);
+    res.status(200).json({
+      success: true,
+      message: "Customer search results.",
+      data: result,
+    });
+  }),
+
+  /**
    * GET /api/v1/customers/table  (owner/manager only)
    * Server-side paginated customer table with sale aggregates.
    */

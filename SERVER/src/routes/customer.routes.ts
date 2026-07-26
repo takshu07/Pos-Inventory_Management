@@ -14,6 +14,9 @@ router.use(authenticate);
 // Cashiers need to read customers to attach them to sales.
 // =============================================================================
 router.get("/", requireRole("CASHIER"), customerController.getCustomers);
+// Live typeahead search. Literal path — declared before "/:id" so it is not
+// captured as an id param.
+router.get("/search", requireRole("CASHIER"), customerController.searchCustomers);
 router.get("/walk-in", requireRole("CASHIER"), customerController.getWalkInCustomer);
 
 // =============================================================================
