@@ -1,4 +1,4 @@
-import { Menu, Bell, Moon, Sun, ChevronRight } from "lucide-react";
+import { Menu, Bell, Moon, Sun, ChevronRight, LogOut } from "lucide-react";
 import { useUIStore } from "@/store/ui.store";
 import { useAuthStore } from "@/store/auth.store";
 import { useTheme } from "@/components/theme-provider";
@@ -19,7 +19,7 @@ export function Navbar() {
   const { toggleSidebar, sidebarCollapsed, toggleCollapsed } = useUIStore();
   const user = useAuthStore((s) => s.user);
   const { theme, setTheme } = useTheme();
-  useLogout(); // Keep wired — logout will be called from user menu in future
+  const { logout } = useLogout();
 
   return (
     <header className="flex h-14 items-center gap-3 border-b border-border bg-card px-4 shrink-0">
@@ -83,6 +83,19 @@ export function Navbar() {
           )}>
             {user.firstName[0]}{user.lastName[0]}
           </div>
+        )}
+
+        {/* Logout */}
+        {user && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={logout}
+            aria-label="Log out"
+            title="Log out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
         )}
       </div>
     </header>
