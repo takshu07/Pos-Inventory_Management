@@ -296,6 +296,7 @@ model Supplier {
   updatedAt     DateTime @updatedAt
 
   purchases Purchase[]
+  variants  ProductVariant[]
 
   @@index([businessName])
   @@index([phone])
@@ -306,8 +307,20 @@ model Supplier {
 // PRODUCT & PRODUCT VARIANT
 // =============================================================================
 
+// Lifecycle status for a catalog item. DRAFT products are created by the wizard
+// but not yet sellable; ACTIVE are live; INACTIVE are temporarily hidden;
+// ARCHIVED are retired but retained for history. `isActive` is kept in sync
+// (ACTIVE => true, everything else => false) so existing queries that filter on
+// isActive continue to work unchanged.
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
 model Product {
-  id             String   @id @default(cuid())
+  id             String        @id @default(cuid())
   name           String
   description    String?
   categoryId     String
@@ -318,9 +331,26 @@ model Product {
   // raw SQL migration when needed. A standard B-tree index on this field
   // is useless for partial-text search, so no @@index here.
   searchKeywords String?
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  status         ProductStatus @default(ACTIVE)
+  isActive       Boolean       @default(true)
+
+  // ── Clothing-retail attributes (product-level, not per-variant) ────────────
+  // Optional descriptive traits captured once for the whole product. Variants
+  // differ only by size/color; these traits describe the garment itself.
+  gender         String?
+  season         String?
+  collectionName String? // "collection" is reserved-ish; stored as collectionName
+  fabricMaterial String?
+  sleeveType     String?
+  neckType       String?
+  fit            String?
+  pattern        String?
+  occasion       String?
+  hsnCode        String?
+  gstRate        Decimal? @db.Decimal(5, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   category  Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   brand     Brand?           @relation(fields: [brandId], references: [id], onDelete: Restrict)
@@ -330,6 +360,7 @@ model Product {
   @@index([name])
   @@index([categoryId])
   @@index([brandId])
+  @@index([status])
   // Trigram GIN indexes for cashier partial-text product search.
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
   @@index([searchKeywords(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_searchkeywords_trgm_idx")
@@ -355,12 +386,35 @@ model ProductVariant {
   weight       Decimal? @db.Decimal(8, 3)
   imageUrl     String?
   isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
-  size    Size    @relation(fields: [sizeId], references: [id], onDelete: Restrict)
-  color   Color   @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  // ── Physical dimensions (cm) ───────────────────────────────────────────────
+  lengthCm Decimal? @db.Decimal(8, 2)
+  widthCm  Decimal? @db.Decimal(8, 2)
+  heightCm Decimal? @db.Decimal(8, 2)
+
+  // ── Storage location ───────────────────────────────────────────────────────
+  warehouse     String?
+  rack          String?
+  shelf         String?
+  bin           String?
+  shelfLocation String? // free-text convenience label ("A-12-3")
+
+  // ── Pricing rules ──────────────────────────────────────────────────────────
+  discountAllowed Boolean  @default(true)
+  maxDiscountPct  Decimal? @db.Decimal(5, 2)
+
+  // ── Supplier link (per variant; nullable) ─────────────────────────────────
+  supplierId   String?
+  supplierSku  String?
+  leadTimeDays Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product  Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  size     Size      @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+  color    Color     @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
   inventoryMovements  InventoryMovement[]
   purchaseItems       PurchaseItem[]
@@ -626,8 +680,8 @@ model SaleItem {
 
 model Payment {
   id             String        @id @default(cuid())
-  saleId         String?       // Made optional to support exchange payments without a new sale
-  exchangeId     String?       // Links payment to an exchange
+  saleId         String? // Made optional to support exchange payments without a new sale
+  exchangeId     String? // Links payment to an exchange
   method         PaymentMethod
   amount         Decimal       @db.Decimal(10, 2)
   transactionRef String?
@@ -717,13 +771,13 @@ model Exchange {
 }
 
 model ExchangeReturnItem {
-  id          String  @id @default(cuid())
+  id          String          @id @default(cuid())
   exchangeId  String
   variantId   String
   quantity    Int
   condition   ReturnCondition @default(GOOD)
-  priceAtSale Decimal @db.Decimal(10, 2)
-  totalValue  Decimal @db.Decimal(10, 2)
+  priceAtSale Decimal         @db.Decimal(10, 2)
+  totalValue  Decimal         @db.Decimal(10, 2)
 
   exchange Exchange       @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
   variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
@@ -796,26 +850,26 @@ model Expense {
 // =============================================================================
 
 model CashRegister {
-  id              String         @id @default(cuid())
-  status          RegisterStatus @default(OPEN)
-  openedAt        DateTime       @default(now())
-  closedAt        DateTime?
-  
-  openingBalance  Decimal        @db.Decimal(10, 2)
-  closingBalance  Decimal?       @db.Decimal(10, 2)
-  expectedBalance Decimal?       @db.Decimal(10, 2)
-  difference      Decimal?       @db.Decimal(10, 2) // positive = excess, negative = shortage
-  
-  openedById      String
-  closedById      String?
-  notes           String?
-  
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id       String         @id @default(cuid())
+  status   RegisterStatus @default(OPEN)
+  openedAt DateTime       @default(now())
+  closedAt DateTime?
 
-  openedBy        Employee       @relation("OpenedRegisters", fields: [openedById], references: [id], onDelete: Restrict)
-  closedBy        Employee?      @relation("ClosedRegisters", fields: [closedById], references: [id], onDelete: Restrict)
-  transactions    CashTransaction[]
+  openingBalance  Decimal  @db.Decimal(10, 2)
+  closingBalance  Decimal? @db.Decimal(10, 2)
+  expectedBalance Decimal? @db.Decimal(10, 2)
+  difference      Decimal? @db.Decimal(10, 2) // positive = excess, negative = shortage
+
+  openedById String
+  closedById String?
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  openedBy     Employee          @relation("OpenedRegisters", fields: [openedById], references: [id], onDelete: Restrict)
+  closedBy     Employee?         @relation("ClosedRegisters", fields: [closedById], references: [id], onDelete: Restrict)
+  transactions CashTransaction[]
 
   @@index([status])
   @@index([openedAt])
@@ -833,8 +887,8 @@ model CashTransaction {
   employeeId    String
   createdAt     DateTime            @default(now())
 
-  register      CashRegister        @relation(fields: [registerId], references: [id], onDelete: Cascade)
-  employee      Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  register CashRegister @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  employee Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([registerId])
   @@index([type])
@@ -900,28 +954,28 @@ model Coupon {
 /// Application layer must always upsert with id = "singleton".
 /// This guarantees exactly one row without a separate UNIQUE constraint hack.
 model Settings {
-  id                  String   @id @default("singleton")
-  version             Int      @default(1)
+  id      String @id @default("singleton")
+  version Int    @default(1)
 
   // Top-level indexing properties
-  storeName           String   @default("Default Store")
-  currency            String   @default("INR")
-  timeZone            String   @default("Asia/Kolkata")
+  storeName String @default("Default Store")
+  currency  String @default("INR")
+  timeZone  String @default("Asia/Kolkata")
 
   // Modular JSON Configuration Blocks (Strongly typed in application layer)
-  storeConfig         Json     @default("{}")
-  invoiceConfig       Json     @default("{}")
-  pricingConfig       Json     @default("{}")
-  promotionConfig     Json     @default("{}")
-  exchangeConfig      Json     @default("{}")
-  inventoryConfig     Json     @default("{}")
-  customerConfig      Json     @default("{}")
-  securityConfig      Json     @default("{}")
-  reportingConfig     Json     @default("{}")
-  notificationConfig  Json     @default("{}")
+  storeConfig        Json @default("{}")
+  invoiceConfig      Json @default("{}")
+  pricingConfig      Json @default("{}")
+  promotionConfig    Json @default("{}")
+  exchangeConfig     Json @default("{}")
+  inventoryConfig    Json @default("{}")
+  customerConfig     Json @default("{}")
+  securityConfig     Json @default("{}")
+  reportingConfig    Json @default("{}")
+  notificationConfig Json @default("{}")
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("settings")
 }
@@ -930,21 +984,21 @@ model Settings {
 // NOTIFICATIONS
 // ============================================================================
 model Notification {
-  id            String   @id @default(cuid())
-  type          String   // e.g., "LOW_STOCK", "SALE_COMPLETED"
-  title         String
-  message       String
-  isRead        Boolean  @default(false)
-  
+  id      String  @id @default(cuid())
+  type    String // e.g., "LOW_STOCK", "SALE_COMPLETED"
+  title   String
+  message String
+  isRead  Boolean @default(false)
+
   referenceId   String?
   referenceType String?
-  
+
   // Audience
-  targetUserId  String?
-  targetRole    EmployeeRole?
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  targetUserId String?
+  targetRole   EmployeeRole?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([targetUserId, isRead])
   @@index([targetRole, isRead])
@@ -966,25 +1020,25 @@ enum AssetVisibility {
 }
 
 model Asset {
-  id              String         @id @default(cuid())
-  originalName    String
-  storedName      String         @unique
-  storagePath     String
-  provider        String         @default("LOCAL") // e.g. LOCAL, S3, R2
-  contentType     String
-  sizeBytes       Int
-  checksum        String?
-  visibility      AssetVisibility @default(PRIVATE)
-  status          AssetStatus    @default(ACTIVE)
-  
-  ownerModule     String
-  ownerEntityId   String?
-  
-  uploadedById    String?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  
-  uploadedBy      Employee?      @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  id           String          @id @default(cuid())
+  originalName String
+  storedName   String          @unique
+  storagePath  String
+  provider     String          @default("LOCAL") // e.g. LOCAL, S3, R2
+  contentType  String
+  sizeBytes    Int
+  checksum     String?
+  visibility   AssetVisibility @default(PRIVATE)
+  status       AssetStatus     @default(ACTIVE)
+
+  ownerModule   String
+  ownerEntityId String?
+
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  uploadedBy Employee? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
 
   @@index([ownerModule, ownerEntityId])
   @@index([status])
@@ -997,26 +1051,26 @@ model Asset {
 // =============================================================================
 
 model Promotion {
-  id          String    @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  
+
   // 0 is lowest priority. Higher numbers execute first.
-  priority    Int       @default(0)
-  
+  priority Int @default(0)
+
   // If true, no other promotions can be stacked if this one applies.
-  isExclusive Boolean   @default(false)
-  
+  isExclusive Boolean @default(false)
+
   // Stored as JSON to allow absolute extensibility (Buy X Get Y, Min Spend, etc.)
-  conditions  Json
-  actions     Json
-  
-  startDate   DateTime?
-  endDate     DateTime?
-  isActive    Boolean   @default(true)
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  conditions Json
+  actions    Json
+
+  startDate DateTime?
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([isActive])
   @@index([startDate, endDate])

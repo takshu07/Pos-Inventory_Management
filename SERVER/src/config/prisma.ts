@@ -101,6 +101,21 @@ function createPrismaClient(): PrismaClient {
       process.env["DB_POOL_CONNECT_TIMEOUT_MS"] ?? "10000",
       10
     ),
+    // ── Neon serverless resilience ───────────────────────────────────────────
+    // Neon (and its pooler) silently drops idle server connections. A long-lived
+    // pg.Pool can otherwise keep handing out dead sockets, which surfaces as
+    // "Unable to start a transaction in the given time" on the NEXT request that
+    // needs a connection — every $transaction call then 500s until restart.
+    //   • maxLifetimeSeconds  Proactively retire each connection after a bounded
+    //                         lifetime so a socket is never reused long enough to
+    //                         go stale on Neon's side.
+    //   • keepAlive           Send TCP keep-alives so idle-but-live sockets don't
+    //                         get reaped by intermediate NAT/idle timeouts.
+    maxLifetimeSeconds: Number.parseInt(
+      process.env["DB_POOL_MAX_LIFETIME_S"] ?? "300",
+      10
+    ),
+    keepAlive: true,
     allowExitOnIdle: !isProduction,
   });
 
@@ -110,6 +125,19 @@ function createPrismaClient(): PrismaClient {
   return new PrismaClient({
     adapter,
     log: isProduction ? ["warn", "error"] : ["warn", "error"],
+    // ── Transaction acquisition tuning (Neon serverless) ─────────────────────
+    // Prisma's default maxWait to ACQUIRE a connection for a $transaction is
+    // 2000ms. Against Neon that's too tight: a cold connection must complete a
+    // TLS + channel_binding handshake (and Neon may cold-start the compute),
+    // which regularly exceeds 2s — surfacing as "Unable to start a transaction
+    // in the given time" and a 500 on every transactional endpoint. We give the
+    // client a realistic window to obtain a connection, and a generous per-
+    // transaction timeout so the multi-step product-creation transaction (many
+    // variants + opening-stock movements) can complete.
+    transactionOptions: {
+      maxWait: Number.parseInt(process.env["DB_TX_MAX_WAIT_MS"] ?? "15000", 10),
+      timeout: Number.parseInt(process.env["DB_TX_TIMEOUT_MS"] ?? "30000", 10),
+    },
   });
 }
 

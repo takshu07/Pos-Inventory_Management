@@ -27,6 +27,14 @@ router.get("/", ownerProductController.list);
 router.get("/stats", ownerProductController.stats);
 router.post("/", ownerProductController.create);
 
+// Full transactional create (product creation wizard).
+router.post("/full", ownerProductController.createFull);
+
+// Wizard lookups.
+router.get("/lookups/sizes", ownerProductController.listSizes);
+router.get("/lookups/colors", ownerProductController.listColors);
+router.get("/lookups/suppliers", ownerProductController.listSuppliers);
+
 router.post("/import", ownerProductController.importProducts);
 router.post("/export", ownerProductController.exportProducts);
 

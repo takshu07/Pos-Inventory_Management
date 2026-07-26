@@ -9,12 +9,16 @@ import type { FilterOption } from "@/shared/product";
 import {
   adjustOwnerStock,
   archiveOwnerProduct,
+  createFullProduct,
   createOwnerProduct,
   deleteOwnerProduct,
   duplicateOwnerProduct,
+  fetchColorOptions,
   fetchOwnerProduct,
   fetchOwnerProducts,
   fetchOwnerStats,
+  fetchSizeOptions,
+  fetchSupplierOptions,
   restoreOwnerProduct,
   updateOwnerPricing,
   updateOwnerProduct,
@@ -126,6 +130,41 @@ export function useUpdateOwnerPricing() {
   return useMutation({
     mutationFn: updateOwnerPricing,
     onSuccess: invalidate,
+  });
+}
+
+/** The product creation wizard's atomic submit. */
+export function useCreateFullProduct() {
+  const invalidate = useInvalidateOwnerProducts();
+  return useMutation({
+    mutationFn: (payload: unknown) => createFullProduct(payload),
+    onSuccess: invalidate,
+  });
+}
+
+// ── Wizard lookups (sizes / colors / suppliers) ───────────────────────────────
+
+export function useSizeOptions() {
+  return useQuery({
+    queryKey: ["owner-product-lookups", "sizes"],
+    queryFn: fetchSizeOptions,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useColorOptions() {
+  return useQuery({
+    queryKey: ["owner-product-lookups", "colors"],
+    queryFn: fetchColorOptions,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useSupplierOptions() {
+  return useQuery({
+    queryKey: ["owner-product-lookups", "suppliers"],
+    queryFn: fetchSupplierOptions,
+    staleTime: 1000 * 60 * 5,
   });
 }
 

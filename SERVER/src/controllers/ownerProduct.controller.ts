@@ -9,8 +9,11 @@ import type { Request, Response } from "express";
 
 import { HTTP_STATUS } from "../constants/httpStatus";
 import * as ownerProductService from "../services/ownerProduct.service";
+import * as ownerProductFullService from "../services/ownerProductFull.service";
+import { prisma } from "../config/prisma";
 import { asyncHandler } from "../utils/asyncHandler";
 import { ownerProductValidation } from "../validation/ownerProduct.validation";
+import { ownerProductFullValidation } from "../validation/ownerProductFull.validation";
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   const query = ownerProductValidation.listQuery.parse(req.query);
@@ -48,6 +51,49 @@ export const create = asyncHandler(async (req: Request, res: Response) => {
     message: "Product created successfully.",
     data,
   });
+});
+
+/**
+ * Full transactional create — the product creation wizard's submit endpoint.
+ * Creates product + variants + opening-stock movements + audit atomically.
+ */
+export const createFull = asyncHandler(async (req: Request, res: Response) => {
+  const body = ownerProductFullValidation.create.parse(req.body);
+  const data = await ownerProductFullService.createFullProduct(body, req.user.id);
+  return res.status(HTTP_STATUS.CREATED).json({
+    success: true,
+    message: "Product created successfully with variants and opening stock.",
+    data,
+  });
+});
+
+// ── Wizard lookups (sizes / colors / suppliers) — OWNER only ──────────────────
+
+export const listSizes = asyncHandler(async (_req: Request, res: Response) => {
+  const sizes = await prisma.size.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true },
+    orderBy: { sortOrder: "asc" },
+  });
+  return res.status(HTTP_STATUS.OK).json({ success: true, message: "OK", data: sizes });
+});
+
+export const listColors = asyncHandler(async (_req: Request, res: Response) => {
+  const colors = await prisma.color.findMany({
+    where: { isActive: true },
+    select: { id: true, name: true, hexCode: true },
+    orderBy: { name: "asc" },
+  });
+  return res.status(HTTP_STATUS.OK).json({ success: true, message: "OK", data: colors });
+});
+
+export const listSuppliers = asyncHandler(async (_req: Request, res: Response) => {
+  const suppliers = await prisma.supplier.findMany({
+    where: { isActive: true },
+    select: { id: true, businessName: true },
+    orderBy: { businessName: "asc" },
+  });
+  return res.status(HTTP_STATUS.OK).json({ success: true, message: "OK", data: suppliers });
 });
 
 export const update = asyncHandler(async (req: Request, res: Response) => {

@@ -83,7 +83,21 @@ export async function getProductById(id: string) {
   const { avgMargin: _m, inventoryValue: _v, ...rollup } = detail.rollup;
 
   const variants = detail.variants.map((v) => {
-    const { costPrice: _cost, ...safeVariant } = v;
+    // Strip everything a manager must never see: cost, supplier linkage,
+    // discount ceilings. They keep price/stock/barcode/size/color/location.
+    const {
+      costPrice: _cost,
+      supplierId: _sid,
+      supplierSku: _ssku,
+      leadTimeDays: _lt,
+      maxDiscountPct: _mdp,
+      ...safeVariant
+    } = v as typeof v & {
+      supplierId?: unknown;
+      supplierSku?: unknown;
+      leadTimeDays?: unknown;
+      maxDiscountPct?: unknown;
+    };
     return safeVariant;
   });
 

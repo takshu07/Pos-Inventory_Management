@@ -25,6 +25,7 @@ import {
 import { OwnerProductDashboard } from "../components/OwnerProductDashboard";
 import { OwnerProductFormDrawer } from "../components/OwnerProductFormDrawer";
 import { OwnerProductRowActions } from "../components/OwnerProductRowActions";
+import { ProductWizard } from "../wizard/ProductWizard";
 import type { ProductDetail } from "@/shared/product";
 
 /**
@@ -44,6 +45,7 @@ export default function OwnerProductsPage() {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ProductDetail | null>(null);
+  const [wizardOpen, setWizardOpen] = useState(false);
 
   const { data, isLoading, isError, refetch, isFetching } = useOwnerProducts(serverParams);
   const { data: detail, isLoading: detailLoading } = useOwnerProduct(detailId ?? undefined);
@@ -54,16 +56,12 @@ export default function OwnerProductsPage() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  const openCreate = () => {
-    setEditing(null);
-    setFormOpen(true);
-  };
+  // "New Product" launches the full guided creation wizard (transactional).
+  const openCreate = () => setWizardOpen(true);
 
-  const openEdit = async (row: ProductRow) => {
-    // Open the detail then let user hit edit, or edit directly: we fetch fresh
-    // detail via the detail drawer path. For a direct edit we pass a light detail.
-    setDetailId(row.id);
-  };
+  // Editing an existing product uses the lighter product-level form drawer;
+  // variants/pricing/stock of an existing product are managed via their modules.
+  const openEdit = (row: ProductRow) => setDetailId(row.id);
 
   const editFromDetail = () => {
     if (detail) {
@@ -174,6 +172,16 @@ export default function OwnerProductsPage() {
       />
 
       <OwnerProductFormDrawer open={formOpen} onClose={() => setFormOpen(false)} editing={editing} />
+
+      <ProductWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={(productId) => {
+          setWizardOpen(false);
+          refetch();
+          setDetailId(productId); // open the newly created product's details
+        }}
+      />
     </div>
   );
 }

@@ -123,3 +123,39 @@ export async function updateOwnerPricing(input: {
   const res = await apiClient.patch<any>("/owner/products/pricing", input);
   return res.data;
 }
+
+// ── Full transactional create (product creation wizard) ───────────────────────
+
+export async function createFullProduct(payload: unknown): Promise<ProductDetail> {
+  const res = await apiClient.post<any>("/owner/products/full", payload);
+  return res.data;
+}
+
+// ── Wizard lookups ────────────────────────────────────────────────────────────
+
+export interface SizeOption {
+  id: string;
+  name: string;
+}
+export interface ColorOption {
+  id: string;
+  name: string;
+  hexCode: string | null;
+}
+export interface SupplierOption {
+  id: string;
+  businessName: string;
+}
+
+export async function fetchSizeOptions(): Promise<SizeOption[]> {
+  const res = await apiClient.get<any>("/owner/products/lookups/sizes");
+  return res.data ?? [];
+}
+export async function fetchColorOptions(): Promise<ColorOption[]> {
+  const res = await apiClient.get<any>("/owner/products/lookups/colors");
+  return res.data ?? [];
+}
+export async function fetchSupplierOptions(): Promise<SupplierOption[]> {
+  const res = await apiClient.get<any>("/owner/products/lookups/suppliers");
+  return res.data ?? [];
+}
