@@ -240,21 +240,72 @@ model Color {
 // CATEGORY & BRAND
 // =============================================================================
 
+/// Lifecycle of a master-catalog category.
+/// ARCHIVED is a soft, reversible retirement — the row and its product links
+/// survive, it simply leaves the active catalog. Deletion is separate and is
+/// blocked while products remain attached (see category.service safe delete).
+enum CategoryStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
 model Category {
-  id           String   @id @default(cuid())
-  name         String   @unique
+  id           String  @id @default(cuid())
+  name         String  @unique
   description  String?
   imageUrl     String?
-  displayOrder Int      @default(0)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  displayOrder Int     @default(0)
+
+  /// Legacy boolean kept in lockstep with `status` (ACTIVE <-> true) so the
+  /// existing Product/POS/pricing queries that filter on isActive keep working
+  /// untouched. `status` is the source of truth; the service writes both.
+  isActive Boolean @default(true)
+
+  /// Phase 1 lifecycle. Replaces the isActive boolean as the modelling primitive
+  /// without breaking the readers listed above.
+  status CategoryStatus @default(ACTIVE)
+
+  /// Free-text synonyms powering search ("tees, tshirt, half sleeve"). Indexed
+  /// with the same trigram strategy as Product.searchKeywords.
+  searchKeywords String?
+
+  // ── Hierarchy (Phase 3 — schema-ready, intentionally not yet exposed) ───────
+  // Adjacency list + a denormalised `path`/`level` so a subtree can be fetched
+  // in ONE indexed query instead of a recursive walk. Nothing in Phase 1/2 sets
+  // these; they exist so nesting ships as a feature, not a migration.
+  parentId String?
+  /// Materialised ancestor path, e.g. "/men/shirts". Root categories: "/<slug>".
+  path     String?
+  /// Depth from root. 0 for a root category.
+  level    Int     @default(0)
+
+  // ── Audit attribution (Phase 1 "Created By" column) ────────────────────────
+  createdById String?
+  updatedById String?
+
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   products      Product[]
   discountRules DiscountRule[]
 
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryHierarchy")
+
+  createdBy Employee? @relation("CategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy Employee? @relation("CategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
   @@index([name])
   @@index([displayOrder])
+  @@index([status])
+  @@index([parentId])
+  @@index([path])
+  @@index([createdAt])
+  @@index([searchKeywords(ops: raw("gin_trgm_ops"))], type: Gin, map: "categories_searchkeywords_trgm_idx")
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "categories_name_trgm_idx")
   @@map("categories")
 }
 
@@ -313,6 +364,8 @@ model Employee {
   closedRegisters    CashRegister[]      @relation("ClosedRegisters")
   cashTransactions   CashTransaction[]
   assetsUploaded     Asset[]
+  categoriesCreated  Category[]          @relation("CategoryCreatedBy")
+  categoriesUpdated  Category[]          @relation("CategoryUpdatedBy")
 
   @@index([email])
   @@index([phone])
@@ -714,7 +767,7 @@ model SaleItem {
 
   // --- QUANTITY & FINANCIALS ---
   quantity     Int
-  sellingPrice Decimal @db.Decimal(10, 2)
+  sellingPrice Decimal  @db.Decimal(10, 2)
   // MRP at the moment of sale. Nullable because rows created before this column
   // existed have no MRP to recover. Snapshotting it lets a receipt (and a
   // rehydrated held bill) render the strike-through "was ₹1000, now ₹700"

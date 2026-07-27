@@ -40,6 +40,8 @@ import inventoryMovementRoutes from "./routes/inventoryMovement.routes";
 import productRoutes from "./routes/product.routes";
 import ownerProductRoutes from "./routes/owner.products.routes";
 import managerProductRoutes from "./routes/manager.products.routes";
+import ownerCategoryRoutes from "./routes/owner.categories.routes";
+import managerCategoryRoutes from "./routes/manager.categories.routes";
 import ownerDiscountRoutes from "./routes/owner.discounts.routes";
 import pricingRoutes from "./routes/pricing.routes";
 import productVariantRoutes from "./routes/productVariant.routes";
@@ -195,6 +197,11 @@ app.use("/api/v1/products", productRoutes);
 // owner/products = full CRUD (OWNER only); manager/products = read-only catalog.
 app.use("/api/v1/owner/products", ownerProductRoutes);
 app.use("/api/v1/manager/products", managerProductRoutes);
+// Role-scoped category modules. owner/categories = full administration incl.
+// analytics, discounts, bulk ops and export (OWNER only); manager/categories =
+// read-only, and deliberately WITHOUT the analytics endpoints.
+app.use("/api/v1/owner/categories", ownerCategoryRoutes);
+app.use("/api/v1/manager/categories", managerCategoryRoutes);
 // Catalog discount administration (OWNER-only) and the shared read-only
 // effective-pricing surface (MANAGER+OWNER).
 app.use("/api/v1/owner/discounts", ownerDiscountRoutes);

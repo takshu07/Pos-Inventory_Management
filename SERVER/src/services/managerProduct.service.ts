@@ -110,7 +110,10 @@ export async function getProductById(id: string) {
 // projection sourced from their repositories.
 
 export async function listCategories() {
-  const { data } = await categoryRepository.findMany({ page: 1, limit: 100, isActive: true });
+  // findOptions is the purpose-built non-archived projection for pickers — it
+  // replaces the old `isActive: true` list filter, which no longer exists now
+  // that Category uses a lifecycle status enum.
+  const data = await categoryRepository.findOptions();
   return data.map((c) => ({ id: c.id, name: c.name }));
 }
 

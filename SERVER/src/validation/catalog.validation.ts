@@ -2,37 +2,14 @@ import { z } from "zod";
 import { paginationSchema } from "./common.validation";
 
 // =============================================================================
-// CATEGORY VALIDATION
+// CATEGORY VALIDATION — MOVED
+//
+// The category schemas now live in `validation/category.validation.ts`, which
+// covers the full enterprise module (lifecycle status, keywords, hierarchy,
+// bulk actions, discounts, analytics, export). They were removed from here so
+// there is exactly ONE category contract; a second, weaker schema in this file
+// would inevitably drift and let older callers write invalid rows.
 // =============================================================================
-
-export const categoryValidation = {
-  create: z.object({
-    name: z.string().trim().min(2, "Category name must be at least 2 characters").max(50),
-    description: z.string().trim().max(500).optional(),
-    imageUrl: z.string().url("Must be a valid URL").optional(),
-    displayOrder: z.number().int().min(0).default(0),
-  }),
-
-  update: z.object({
-    name: z.string().trim().min(2).max(50).optional(),
-    description: z.string().trim().max(500).optional(),
-    imageUrl: z.string().url().optional(),
-    displayOrder: z.number().int().min(0).optional(),
-    isActive: z.boolean().optional(),
-  }),
-
-  listQuery: paginationSchema.extend({
-    search: z.string().optional(),
-    isActive: z
-      .enum(["true", "false"])
-      .transform((val) => val === "true")
-      .optional(),
-  }),
-} as const;
-
-export type CreateCategoryInput = z.infer<typeof categoryValidation.create>;
-export type UpdateCategoryInput = z.infer<typeof categoryValidation.update>;
-export type ListCategoriesQuery = z.infer<typeof categoryValidation.listQuery>;
 
 // =============================================================================
 // BRAND VALIDATION

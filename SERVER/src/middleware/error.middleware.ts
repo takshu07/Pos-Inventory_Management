@@ -79,6 +79,9 @@ export function errorHandler(
     res.status(error.statusCode).json({
       success: false,
       message: error.message,
+      // Present only when the error carries an actionable payload (e.g. the
+      // safe-delete 409 that tells the UI how many products block the delete).
+      ...(error.details !== undefined && { details: error.details }),
     });
     return;
   }
