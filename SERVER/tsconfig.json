@@ -2,8 +2,12 @@
   // Visit https://aka.ms/tsconfig to read more about this file
   "compilerOptions": {
     // File Layout
-    // "rootDir": "./src",
-    // "outDir": "./dist",
+    // Both are required: with outDir unset, `npm run build` emitted every
+    // compiled .js NEXT TO its .ts source inside src/, which vitest then
+    // collected as a second (stale) copy of each test suite. "start" already
+    // expects dist/server.js.
+    "rootDir": "./src",
+    "outDir": "./dist",
 
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
@@ -41,5 +45,11 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+  },
+
+  // Without this, the default "**/*" include pulls in root-level helper scripts
+  // (seedProducts.ts, testDb.ts, scratch/, prisma/seed.ts …) which sit outside
+  // rootDir. Only the application source is compiled to dist/.
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/__tests__/**"]
 }

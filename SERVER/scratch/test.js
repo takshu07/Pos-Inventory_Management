@@ -1,13 +1,10 @@
-require('dotenv').config();
-const { Client } = require('pg');
-
-const client = new Client({ connectionString: process.env.DATABASE_URL });
-
+import { PrismaClient } from '../generated/prisma';
+const prisma = new PrismaClient();
 async function main() {
-  await client.connect();
-  const res = await client.query('SELECT id, role, "refreshTokenVersion" FROM employees LIMIT 1');
-  console.log('Employee:', res.rows[0]);
-  await client.end();
+    const customers = await prisma.customer.findMany();
+    console.log('All Customers:', customers.map(c => ({ id: c.id, phone: c.phone, name: c.name })));
+    const sales = await prisma.sale.findMany();
+    console.log('All Sales:', sales.map(s => ({ id: s.id, status: s.status, customerId: s.customerId })));
 }
-
-main().catch(console.error);
+main().catch(console.error).finally(() => prisma.$disconnect());
+//# sourceMappingURL=test.js.map

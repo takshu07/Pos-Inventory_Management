@@ -2,8 +2,11 @@
 // PRODUCT VARIANT SERVICE
 // =============================================================================
 
+import { Prisma } from "../../generated/prisma";
 import { HTTP_STATUS } from "../constants/httpStatus";
 import { AppError } from "../errors/AppError";
+import { backSolveDiscount } from "../engines/catalogPricing.engine";
+import { recomputeVariant } from "./effectivePrice.service";
 import { productVariantRepository } from "../repositories/productVariant.repository";
 import { productRepository } from "../repositories/product.repository";
 import { auditRepository } from "../repositories/audit.repository";
@@ -84,13 +87,31 @@ export async function createProductVariant(data: CreateProductVariantInput, exec
     throw new AppError(HTTP_STATUS.CONFLICT, "A variant with this exact Product, Size, and Color already exists.");
   }
 
-  // 4. Create Variant (Notice: currentStock is strictly omitted. Only Inventory adjustments can alter stock)
+  // 4. Create Variant (Notice: currentStock is strictly omitted. Only Inventory
+  //    adjustments can alter stock).
+  //
+  //    The caller supplies an explicit selling price, so the variant is created
+  //    as manually priced and we back-solve the default discount from
+  //    (mrp − sellingPrice). That keeps MRP / discount / selling price
+  //    consistent from the very first write, and lets the pricing engine take
+  //    over from here. sellingPrice is seeded with the engine's own derivation
+  //    rather than the raw input so the stored value can never disagree with
+  //    the stored discount.
+  const seeded = backSolveDiscount(
+    new Prisma.Decimal(data.mrp),
+    new Prisma.Decimal(data.sellingPrice)
+  );
+
   const variant = await productVariantRepository.create({
     sku: data.sku,
     barcode: data.barcode ?? null,
     costPrice: data.costPrice,
     sellingPrice: data.sellingPrice,
     mrp: data.mrp,
+    defaultDiscountType: seeded.type,
+    defaultDiscountValue: seeded.value,
+    isManualPricing: true,
+    priceComputedAt: new Date(),
     reorderLevel: data.reorderLevel,
     maximumStock: data.maximumStock ?? null,
     weight: data.weight ?? null,
@@ -99,6 +120,10 @@ export async function createProductVariant(data: CreateProductVariantInput, exec
     size: { connect: { id: data.sizeId } },
     color: { connect: { id: data.colorId } },
   });
+
+  // Let the engine own the final value — a rule targeting this product/category
+  // may already be live, in which case the shelf price is not simply mrp−input.
+  await recomputeVariant(variant.id);
 
   auditRepository.create({
     performedBy: executorId,
@@ -164,15 +189,32 @@ export async function updateProductVariant(
   }
 
   // 4. Build Update Payload
-  const { sizeId, colorId, ...restData } = data;
+  //
+  //    sellingPrice is pulled OUT of the spread: it is derived, not stored
+  //    directly. (It previously reached the database implicitly via
+  //    `...stripUndefined(restData)` — invisible to a `sellingPrice:` grep.)
+  //    When the caller supplies one we treat it as manual pricing and
+  //    back-solve the discount, then let the engine write the actual column.
+  const { sizeId, colorId, sellingPrice: requestedSellingPrice, ...restData } = data;
   const updatePayload: any = { ...stripUndefined(restData) };
+
+  if (requestedSellingPrice !== undefined) {
+    const solved = backSolveDiscount(new Prisma.Decimal(newMrp), new Prisma.Decimal(requestedSellingPrice));
+    updatePayload.defaultDiscountType = solved.type;
+    updatePayload.defaultDiscountValue = solved.value;
+    updatePayload.isManualPricing = true;
+  }
 
   if (sizeId) updatePayload.size = { connect: { id: sizeId } };
   if (colorId) updatePayload.color = { connect: { id: colorId } };
-  
+
   // NOTE: We do not allow changing the `productId` once a variant is created to prevent accounting/inventory nightmares.
 
-  const updatedVariant = await productVariantRepository.update(id, updatePayload);
+  await productVariantRepository.update(id, updatePayload);
+
+  // Derive and persist sellingPrice from the new inputs.
+  await recomputeVariant(id);
+  const updatedVariant = await productVariantRepository.findById(id);
 
   auditRepository.create({
     performedBy: executorId,

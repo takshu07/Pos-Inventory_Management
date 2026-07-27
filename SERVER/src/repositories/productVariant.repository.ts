@@ -125,8 +125,17 @@ export const productVariantRepository = {
         id: true,
         currentStock: true,
         isActive: true,
+        // sellingPrice is the engine's cached value. Checkout does NOT trust it
+        // blindly — sale.service re-resolves the effective price live from the
+        // fields below so a discount that expired since the last cache write
+        // can never charge a stale price.
         sellingPrice: true,
         costPrice: true,
+        mrp: true,
+        defaultDiscountType: true,
+        defaultDiscountValue: true,
+        maxDiscountPct: true,
+        discountAllowed: true,
         sku: true,
         barcode: true,
         product: { select: { id: true, name: true, categoryId: true, brandId: true } },

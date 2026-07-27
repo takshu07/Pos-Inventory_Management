@@ -9,6 +9,11 @@ import { productVariantRepository } from "../repositories/productVariant.reposit
 import { saleRepository } from "../repositories/sale.repository";
 import { PricingEngine, type PricingVariantItem } from "../engines/pricing.engine";
 import { PromotionEngine, type PromotionContext } from "../engines/promotion.engine";
+import {
+  resolve as resolveEffectivePrice,
+  type PricingRuleInput,
+} from "../engines/catalogPricing.engine";
+import { loadActiveRules } from "./effectivePrice.service";
 import { ConfigurationEngine } from "../engines/configuration.engine";
 import { PaymentService } from "./payment.service";
 import { InvoiceService } from "./invoice.service";
@@ -61,24 +66,34 @@ export class SaleService {
     // Enterprise Configuration Retrieval (O(1) Memory Lookup)
     const pricingConfig = ConfigurationEngine.getPricingSettings();
     
-    const activePromotions = await prisma.promotion.findMany({ 
-      where: { 
+    const activePromotions = await prisma.promotion.findMany({
+      where: {
         isActive: true,
         OR: [
           { endDate: null },
           { endDate: { gte: new Date() } }
         ],
+        // NOTE (pre-existing bug, intentionally left as-is): this AND requires
+        // startDate to be simultaneously NULL and <= now, which is impossible,
+        // so no Promotion carrying a start date ever applies. Fixing it changes
+        // live checkout behaviour and belongs in its own change — flagged, not
+        // silently altered here. The catalog DiscountRule query in
+        // effectivePrice.service#loadActiveRules uses the correct OR form.
         AND: [
           { startDate: null },
           { startDate: { lte: new Date() } }
         ]
-      } 
+      }
     });
+
+    // Catalog discount rules — the shelf-price layer. Loaded once per checkout
+    // and applied per item before cart-level promotions run on top.
+    const discountRules = await loadActiveRules();
 
     // 4. Execute the core transaction with resiliency
     const saleId = await executeWithRetry(
       () => this.executeCheckoutTransaction(
-        payload, variants, employee, activePromotions, pricingConfig.defaultTaxRate, idempotencyKey
+        payload, variants, employee, activePromotions, pricingConfig.defaultTaxRate, idempotencyKey, discountRules
       ),
       (error: any) => error?.code === "P2002", // Retry only on Unique Constraint (Invoice collision)
       3 // Max 3 retries
@@ -214,15 +229,41 @@ export class SaleService {
     employee: any,
     activePromotions: any[],
     taxRate: any,
-    finalCustomerId: string
+    finalCustomerId: string,
+    discountRules: PricingRuleInput[] = [],
+    now: Date = new Date()
   ) {
     const pricingItems: PricingVariantItem[] = items.map((item) => {
       const dbVariant = variants.find((v) => v.id === item.variantId)!;
+
+      // Resolve the CATALOG shelf price live rather than trusting the cached
+      // sellingPrice column. The cache is refreshed on every price-affecting
+      // mutation, but a rule can expire (or activate) purely by the clock with
+      // no write in between — re-resolving here guarantees the customer is
+      // always charged the price that is genuinely in effect right now.
+      const effective = resolveEffectivePrice(
+        {
+          id: dbVariant.id,
+          productId: dbVariant.product.id,
+          categoryId: dbVariant.product.categoryId,
+          brandId: dbVariant.product.brandId,
+          mrp: dbVariant.mrp,
+          costPrice: dbVariant.costPrice,
+          defaultDiscountType: dbVariant.defaultDiscountType,
+          defaultDiscountValue: dbVariant.defaultDiscountValue,
+          maxDiscountPct: dbVariant.maxDiscountPct,
+          discountAllowed: dbVariant.discountAllowed,
+        },
+        discountRules,
+        now
+      );
+
       return {
         variantId: item.variantId,
         quantity: item.quantity,
-        dbSellingPrice: dbVariant.sellingPrice,
+        dbSellingPrice: effective.sellingPrice,
         dbCostPrice: dbVariant.costPrice,
+        dbMrp: dbVariant.mrp,
         productId: dbVariant.product.id,
         categoryId: dbVariant.product.categoryId,
         brandId: dbVariant.product.brandId,
@@ -253,7 +294,8 @@ export class SaleService {
     employee: any,
     activePromotions: any[],
     taxRate: any,
-    idempotencyKey: string
+    idempotencyKey: string,
+    discountRules: PricingRuleInput[] = []
   ): Promise<string> {
     return prisma.$transaction(async (tx) => {
       // 0. Determine or Create Customer inside transaction
@@ -303,7 +345,7 @@ export class SaleService {
       }
 
       // 1. Math Pipeline
-      const pricing = this.calculatePricing(variants, payload.items, payload.manualDiscountAmount || 0, employee, activePromotions, taxRate, finalCustomerId);
+      const pricing = this.calculatePricing(variants, payload.items, payload.manualDiscountAmount || 0, employee, activePromotions, taxRate, finalCustomerId, discountRules);
       const payments = PaymentService.processPayments(payload.payments as any, pricing.grandTotal);
 
       // 2. Invoice Sequencing
@@ -400,8 +442,17 @@ export class SaleService {
         barcode: dbVariant.barcode || null,
         quantity: item.quantity,
         sellingPrice: calcItem.sellingPrice,
+        // Snapshot the MRP alongside the price actually charged, so a receipt
+        // (and a rehydrated held bill) can always render the "was ₹1000, now
+        // ₹700" strike-through — even after the product's MRP or the discount
+        // rules change. Historical invoices must never move.
+        mrp: dbVariant.mrp,
         taxRate: calcItem.taxRate,
         taxAmount: calcItem.taxAmount,
+        // Per-line discount computed by the pricing pipeline. Previously left
+        // at its column default of 0, which understated discounts on every
+        // historical line item.
+        discountAmount: calcItem.itemDiscount,
         costAtSale: calcItem.costAtSale,
         totalPrice: calcItem.totalPrice,
       };

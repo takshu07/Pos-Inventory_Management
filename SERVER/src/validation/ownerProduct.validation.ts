@@ -67,13 +67,62 @@ export const ownerProductValidation = {
     reason: z.string().trim().min(3).max(200),
   }),
 
-  // PATCH /owner/products/pricing — update a variant's prices.
-  pricingUpdate: z.object({
-    variantId: z.string().cuid(),
-    costPrice: z.number().min(0).optional(),
-    sellingPrice: z.number().min(0).optional(),
-    mrp: z.number().min(0).optional(),
-  }),
+  // PATCH /owner/products/pricing — update a variant's BASE pricing.
+  //
+  // sellingPrice is NOT accepted as a free-form field: it is derived by the
+  // pricing engine from (mrp − discount). There are exactly two ways to set it:
+  //
+  //   • derived (default)      send mrp and/or discountType+discountValue
+  //   • manual (isManualPricing) send manualSellingPrice; the engine back-solves
+  //                              the discount so both stay synchronised
+  //
+  // This mirrors the Product Wizard's Pricing step exactly.
+  pricingUpdate: z
+    .object({
+      variantId: z.string().cuid(),
+      costPrice: z.number().min(0).optional(),
+      mrp: z.number().min(0).optional(),
+      discountType: z.enum(["PERCENTAGE", "FLAT"]).optional(),
+      discountValue: z.number().min(0).optional(),
+      // Present only when the owner has enabled manual pricing.
+      isManualPricing: z.boolean().optional(),
+      manualSellingPrice: z.number().min(0).optional(),
+    })
+    .refine(
+      (d) =>
+        d.costPrice !== undefined ||
+        d.mrp !== undefined ||
+        d.discountType !== undefined ||
+        d.discountValue !== undefined ||
+        d.isManualPricing !== undefined ||
+        d.manualSellingPrice !== undefined,
+      { message: "No pricing fields provided." }
+    )
+    .refine((d) => !(d.isManualPricing === true && d.manualSellingPrice === undefined), {
+      message: "manualSellingPrice is required when manual pricing is enabled.",
+      path: ["manualSellingPrice"],
+    })
+    .refine((d) => !(d.discountType === "PERCENTAGE" && (d.discountValue ?? 0) > 100), {
+      message: "A percentage discount cannot exceed 100%.",
+      path: ["discountValue"],
+    })
+    // The cross-field money invariant. This endpoint previously had NO such
+    // refinement — unlike variantSchema and the wizard's payload — so it could
+    // set sellingPrice above MRP or below cost. Only the pairs actually present
+    // in the request are compared; the service re-checks the final derived
+    // triplet against the variant's stored values.
+    .refine((d) => d.mrp === undefined || d.manualSellingPrice === undefined || d.mrp >= d.manualSellingPrice, {
+      message: "MRP must be greater than or equal to the selling price.",
+      path: ["manualSellingPrice"],
+    })
+    .refine((d) => d.costPrice === undefined || d.manualSellingPrice === undefined || d.manualSellingPrice >= d.costPrice, {
+      message: "Selling price must be greater than or equal to the cost price.",
+      path: ["manualSellingPrice"],
+    })
+    .refine((d) => d.costPrice === undefined || d.mrp === undefined || d.mrp >= d.costPrice, {
+      message: "MRP must be greater than or equal to the cost price.",
+      path: ["mrp"],
+    }),
 } as const;
 
 export type OwnerListProductsQuery = z.infer<typeof ownerProductValidation.listQuery>;

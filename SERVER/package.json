@@ -15,7 +15,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:unit": "vitest run --config vitest.unit.config.ts"
   },
   "author": "",
   "license": "ISC",

@@ -15,7 +15,7 @@
 // new size/color inline without a separate admin trip.
 // =============================================================================
 
-import type { Prisma } from "../../generated/prisma";
+import { Prisma } from "../../generated/prisma";
 import { prisma } from "../config/prisma";
 import { logger } from "../config/logger";
 import { HTTP_STATUS } from "../constants/httpStatus";
@@ -23,6 +23,8 @@ import { AppError } from "../errors/AppError";
 import { auditRepository } from "../repositories/audit.repository";
 import { categoryRepository } from "../repositories/category.repository";
 import { brandRepository } from "../repositories/brand.repository";
+import { backSolveDiscount } from "../engines/catalogPricing.engine";
+import { recomputeVariants } from "./effectivePrice.service";
 import { executeMovement } from "./inventoryMovement.service";
 import * as catalogService from "./catalog.service";
 import type {
@@ -125,15 +127,31 @@ function variantCreateData(
   sizeId: string,
   colorId: string
 ): Prisma.ProductVariantUncheckedCreateInput {
+  // Base discount for this variant. When the wizard sends an explicit
+  // discountType/discountValue we store it as-is; otherwise we back-solve a
+  // FLAT discount from (mrp − sellingPrice) so the stored discount always
+  // reproduces the price the owner saw in the wizard.
+  const explicitDiscount = v.discountType !== undefined && v.discountValue !== undefined;
+  const discount = explicitDiscount
+    ? { type: v.discountType!, value: new Prisma.Decimal(v.discountValue!) }
+    : backSolveDiscount(new Prisma.Decimal(v.mrp), new Prisma.Decimal(v.sellingPrice));
+
   return {
     productId,
     sizeId,
     colorId,
     sku: v.sku,
     barcode: v.barcode ?? null,
+    isActive: v.isActive,
     costPrice: v.costPrice,
+    // Seeded here so the column is never null; the engine recomputes the
+    // authoritative value inside the same transaction (see createFullProduct),
+    // which matters when a discount rule already targets this category.
     sellingPrice: v.sellingPrice,
     mrp: v.mrp,
+    defaultDiscountType: discount.type,
+    defaultDiscountValue: discount.value,
+    isManualPricing: v.isManualPricing ?? !explicitDiscount,
     // currentStock stays 0 here — opening stock is applied via a movement below.
     currentStock: 0,
     reorderLevel: v.reorderLevel,
@@ -190,6 +208,8 @@ export async function createFullProduct(data: CreateFullProductInput, executorId
     });
 
     // 2. Variants + 3/4. Opening-stock movements
+    const createdVariantIds: string[] = [];
+
     for (const v of data.variants) {
       const sizeId = await resolveSizeId(tx, v.sizeName);
       const colorId = await resolveColorId(tx, v.colorName, v.colorHex);
@@ -197,6 +217,7 @@ export async function createFullProduct(data: CreateFullProductInput, executorId
       const variant = await tx.productVariant.create({
         data: variantCreateData(v, createdProduct.id, sizeId, colorId),
       });
+      createdVariantIds.push(variant.id);
 
       // Opening stock via the inventory-movement engine (ledgered, sets stock).
       if (v.openingStock > 0) {
@@ -212,6 +233,11 @@ export async function createFullProduct(data: CreateFullProductInput, executorId
         );
       }
     }
+
+    // 5. Derive the authoritative selling prices, inside the same transaction.
+    // A discount rule may already target this product's category, in which case
+    // the shelf price is NOT simply the value typed into the wizard.
+    await recomputeVariants(createdVariantIds, { tx });
 
     return createdProduct;
   });

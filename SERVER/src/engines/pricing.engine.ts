@@ -10,8 +10,16 @@ import type { AppliedPromotionAction } from "./promotion.engine";
 export interface PricingVariantItem {
   variantId: string;
   quantity: number;
+  /**
+   * The CATALOG shelf price for this item — already resolved by
+   * catalogPricing.engine (product/category discount rules applied). This
+   * pipeline layers CART-level promotions and tax on top of it; it never
+   * re-derives the shelf price itself.
+   */
   dbSellingPrice: Prisma.Decimal;
   dbCostPrice: Prisma.Decimal;
+  /** MRP, carried through so the sale line can snapshot it. */
+  dbMrp?: Prisma.Decimal;
   productId: string;
   categoryId: string;
   brandId: string | null;

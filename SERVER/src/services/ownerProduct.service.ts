@@ -10,7 +10,7 @@
 // is never written directly and every change is ledgered + audited.
 // =============================================================================
 
-import type { Prisma } from "../../generated/prisma";
+import { Prisma } from "../../generated/prisma";
 import { HTTP_STATUS } from "../constants/httpStatus";
 import { AppError } from "../errors/AppError";
 import { logger } from "../config/logger";
@@ -21,6 +21,8 @@ import { brandRepository } from "../repositories/brand.repository";
 import { auditRepository } from "../repositories/audit.repository";
 import { stripUndefined } from "../utils/object";
 import * as catalogService from "./catalog.service";
+import { backSolveDiscount } from "../engines/catalogPricing.engine";
+import { recomputeVariant } from "./effectivePrice.service";
 import { createManualAdjustment } from "./inventoryMovement.service";
 import type {
   OwnerCreateProductInput,
@@ -245,26 +247,74 @@ export async function duplicateProduct(id: string, executorId: string) {
 // ─── Pricing & Stock (variant-level) ──────────────────────────────────────────
 
 /**
- * Update a variant's prices. Stock is NEVER touched here — that goes through
- * adjustStock so it is ledgered.
+ * Update a variant's BASE pricing (cost, MRP, default discount).
+ *
+ * sellingPrice is never written here — it is derived. This function persists
+ * only the inputs, then asks the pricing engine to recompute the price. Stock
+ * is likewise untouched; that goes through adjustStock so it is ledgered.
+ *
+ * Two modes, matching the wizard:
+ *   • derived — caller sends mrp / discountType / discountValue
+ *   • manual  — caller sends manualSellingPrice; we back-solve the discount so
+ *               MRP, discount and selling price can never drift apart
  */
 export async function updatePricing(data: OwnerPricingUpdateInput, executorId: string) {
   const variant = await prisma.productVariant.findUnique({ where: { id: data.variantId } });
   if (!variant) throw new AppError(HTTP_STATUS.NOT_FOUND, "Product variant not found.");
 
-  const payload = stripUndefined({
-    costPrice: data.costPrice,
-    sellingPrice: data.sellingPrice,
-    mrp: data.mrp,
-  });
+  // Resolve the final triplet against stored values so partial updates are
+  // still validated as a whole (e.g. lowering MRP below an existing cost).
+  const nextCost = new Prisma.Decimal(data.costPrice ?? variant.costPrice);
+  const nextMrp = new Prisma.Decimal(data.mrp ?? variant.mrp);
 
-  if (Object.keys(payload).length === 0) {
-    throw new AppError(HTTP_STATUS.BAD_REQUEST, "No pricing fields provided.");
+  if (nextMrp.lt(nextCost)) {
+    throw new AppError(
+      HTTP_STATUS.BAD_REQUEST,
+      `MRP (${nextMrp.toFixed(2)}) cannot be lower than the cost price (${nextCost.toFixed(2)}).`
+    );
   }
 
-  const updated = await prisma.productVariant.update({
-    where: { id: data.variantId },
-    data: payload as Prisma.ProductVariantUpdateInput,
+  const goingManual = data.isManualPricing ?? variant.isManualPricing;
+
+  let discountType = data.discountType ?? variant.defaultDiscountType;
+  let discountValue = new Prisma.Decimal(data.discountValue ?? variant.defaultDiscountValue);
+
+  if (data.manualSellingPrice !== undefined) {
+    const manual = new Prisma.Decimal(data.manualSellingPrice);
+    if (manual.gt(nextMrp)) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        `Selling price (${manual.toFixed(2)}) cannot exceed the MRP (${nextMrp.toFixed(2)}).`
+      );
+    }
+    if (manual.lt(nextCost)) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        `Selling price (${manual.toFixed(2)}) cannot be below the cost price (${nextCost.toFixed(2)}).`
+      );
+    }
+    // Back-solve so the stored discount always reproduces the typed price.
+    const solved = backSolveDiscount(nextMrp, manual);
+    discountType = solved.type;
+    discountValue = solved.value;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.productVariant.update({
+      where: { id: data.variantId },
+      data: {
+        costPrice: nextCost,
+        mrp: nextMrp,
+        defaultDiscountType: discountType,
+        defaultDiscountValue: discountValue,
+        isManualPricing: goingManual,
+      },
+    });
+
+    // THE derivation. Writes sellingPrice inside the same transaction.
+    await recomputeVariant(data.variantId, { tx });
+
+    return tx.productVariant.findUniqueOrThrow({ where: { id: data.variantId } });
   });
 
   auditRepository.create({

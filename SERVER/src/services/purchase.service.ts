@@ -19,6 +19,7 @@ import type {
   ListPurchasesQuery,
 } from "../validation/purchase.validation";
 import { executeMovement } from "./inventoryMovement.service";
+import { recomputeVariants } from "./effectivePrice.service";
 import crypto from "crypto";
 
 // -----------------------------------------------------------------------------
@@ -238,16 +239,30 @@ export async function receivePurchase(id: string, data: ReceivePurchaseInput, ex
         tx
       );
 
-      // Update variant's authoritative costPrice and sellingPrice
+      // Update the variant's cached costPrice from this receipt.
+      //
+      // sellingPrice is deliberately NOT written here. It used to be copied
+      // from item.sellingPriceAtPurchase, which silently overwrote the shelf
+      // price on every goods receipt — bypassing the mrp >= selling >= cost
+      // invariant and fighting any active discount. Selling price is now
+      // derived, so we update the cost input and let the pricing engine
+      // recompute the price below.
+      //
+      // item.sellingPriceAtPurchase is still recorded on the PurchaseItem as
+      // the planned-margin snapshot for that purchase; it is simply no longer
+      // treated as an instruction to reprice the catalog.
       await tx.productVariant.update({
         where: { id: item.variantId },
-        data: {
-          costPrice: item.costPrice,
-          // Optional: Only update sellingPrice if we want POs to dictate it, but usually yes.
-          sellingPrice: item.sellingPriceAtPurchase,
-        },
+        data: { costPrice: item.costPrice },
       });
     }
+
+    // Re-derive selling prices for everything this receipt touched. Inside the
+    // transaction, so a failure rolls the whole receipt back.
+    await recomputeVariants(
+      purchase.items.map((i) => i.variantId),
+      { tx }
+    );
 
     return purchase;
   });

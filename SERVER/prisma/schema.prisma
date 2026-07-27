@@ -44,15 +44,55 @@ enum MovementType {
   OPENING_STOCK
 }
 
+/// Discount arithmetic shared by Coupon and the catalog pricing engine.
 enum DiscountType {
   PERCENTAGE
   FLAT
 }
 
-enum DiscountScope {
+// ── Catalog pricing (DiscountRule) ──────────────────────────────────────────
+// These drive the CATALOG pricing layer: what a single item's shelf price is.
+// They are deliberately separate from `Promotion`, which is the BASKET layer
+// (min-spend offers, BOGO, coupons) evaluated at checkout. See
+// engines/catalogPricing.engine.ts for the resolution ladder.
+
+/// What a DiscountRule targets. BRAND is declared now so the resolution ladder,
+/// validation union and UI selector are complete; the engine's brand branch is
+/// not implemented yet and rejects BRAND rules at the service layer.
+enum DiscountRuleScope {
   PRODUCT
   CATEGORY
-  SALE
+  BRAND
+}
+
+/// PERCENTAGE and FLAT are implemented. BOGO/BUNDLE/TIERED are declared so that
+/// adding them later needs no migration — the engine throws NOT_IMPLEMENTED.
+enum DiscountRuleType {
+  PERCENTAGE
+  FLAT
+  BOGO
+  BUNDLE
+  TIERED
+}
+
+/// NEVER stored. Derived at query time from (isEnabled, startDate, endDate) so
+/// discounts activate and expire on a clock with no cron job. Modelled as an
+/// enum purely so the API response and the client share one vocabulary.
+enum DiscountStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  EXPIRED
+  DISABLED
+}
+
+/// Append-only audit trail actions for DiscountHistory.
+enum DiscountHistoryAction {
+  CREATED
+  UPDATED
+  ENABLED
+  DISABLED
+  DELETED
 }
 
 enum PurchaseStatus {
@@ -210,8 +250,8 @@ model Category {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  products  Product[]
-  discounts Discount[]
+  products      Product[]
+  discountRules DiscountRule[]
 
   @@index([name])
   @@index([displayOrder])
@@ -227,7 +267,8 @@ model Brand {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  products Product[]
+  products      Product[]
+  discountRules DiscountRule[]
 
   @@index([name])
   @@map("brands")
@@ -352,10 +393,10 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  category  Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  brand     Brand?           @relation(fields: [brandId], references: [id], onDelete: Restrict)
-  variants  ProductVariant[]
-  discounts Discount[]
+  category      Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand         Brand?           @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  variants      ProductVariant[]
+  discountRules DiscountRule[]
 
   @@index([name])
   @@index([categoryId])
@@ -377,6 +418,14 @@ model ProductVariant {
   // Cached value for display convenience — the authoritative cost history
   // is in PurchaseItem.costPrice. Updated by the application on each purchase.
   costPrice    Decimal  @db.Decimal(10, 2)
+  // DERIVED — DO NOT WRITE DIRECTLY.
+  // sellingPrice is a cache of the catalog pricing engine's output
+  // (mrp − effective discount). The ONLY writer is
+  // services/effectivePrice.service.ts. Every other path (owner pricing edit,
+  // variant create/update, wizard create, purchase receipt) must go through it.
+  // Reads are safe everywhere; the value is kept fresh on every price-affecting
+  // mutation, and checkout re-resolves live so an expired rule can never charge
+  // a stale price. Follows the same cache pattern already used by costPrice.
   sellingPrice Decimal  @db.Decimal(10, 2)
   mrp          Decimal  @db.Decimal(10, 2)
   // Never edit currentStock directly — always go through InventoryMovement.
@@ -402,6 +451,20 @@ model ProductVariant {
   // ── Pricing rules ──────────────────────────────────────────────────────────
   discountAllowed Boolean  @default(true)
   maxDiscountPct  Decimal? @db.Decimal(5, 2)
+
+  // ── Default (base) discount — the bottom rung of the pricing ladder ────────
+  // Applied when no DiscountRule targets this variant's product/category/brand.
+  // sellingPrice = mrp − (this discount), computed by the pricing engine.
+  defaultDiscountType  DiscountRuleType @default(PERCENTAGE)
+  defaultDiscountValue Decimal          @default(0) @db.Decimal(10, 2)
+  // When true the owner typed an explicit selling price and the engine
+  // back-solved defaultDiscount* from it, rather than deriving price from
+  // discount. Both directions keep mrp/discount/sellingPrice consistent.
+  isManualPricing      Boolean          @default(false)
+  // Diagnostics for the derived cache: which rule last won (null = the variant
+  // default won, or no discount), and when sellingPrice was last recomputed.
+  appliedRuleId        String?
+  priceComputedAt      DateTime?
 
   // ── Supplier link (per variant; nullable) ─────────────────────────────────
   supplierId   String?
@@ -652,6 +715,11 @@ model SaleItem {
   // --- QUANTITY & FINANCIALS ---
   quantity     Int
   sellingPrice Decimal @db.Decimal(10, 2)
+  // MRP at the moment of sale. Nullable because rows created before this column
+  // existed have no MRP to recover. Snapshotting it lets a receipt (and a
+  // rehydrated held bill) render the strike-through "was ₹1000, now ₹700"
+  // correctly forever, even after the product's MRP or discounts change.
+  mrp          Decimal? @db.Decimal(10, 2)
 
   // Item-level tax calculations for strict accounting
   taxRate   Decimal @default(0) @db.Decimal(5, 2) // e.g. 5.00 for 5%
@@ -900,28 +968,84 @@ model CashTransaction {
 // DISCOUNTS & COUPONS
 // =============================================================================
 
-model Discount {
-  id          String        @id @default(cuid())
+/// A catalog pricing rule: "Nike Polo is 30% off", "T-Shirts are 40% off".
+///
+/// Resolution is a strict ladder — highest tier wins OUTRIGHT, never stacked:
+///   PRODUCT rule → CATEGORY rule → BRAND rule → variant default → no discount
+/// Ties break deterministically on (priority, larger discount, createdAt DESC,
+/// id ASC). See engines/catalogPricing.engine.ts.
+///
+/// Exactly one of productId/categoryId/brandId is set, matching `scope` — this
+/// is enforced by a CHECK constraint (discount_rules_scope_target_ck) added in
+/// the migration, because Prisma cannot express it.
+///
+/// Status (Draft/Scheduled/Active/Expired/Disabled) is NOT a column. It is
+/// derived from (isEnabled, startDate, endDate) at query time so rules activate
+/// and expire on a clock with no cron job.
+model DiscountRule {
+  id          String            @id @default(cuid())
   name        String
   description String?
-  type        DiscountType
-  value       Decimal       @db.Decimal(10, 2)
-  scope       DiscountScope
-  productId   String?
-  categoryId  String?
-  startDate   DateTime?
-  endDate     DateTime?
-  isActive    Boolean       @default(true)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  scope       DiscountRuleScope
+  type        DiscountRuleType
+  value       Decimal           @db.Decimal(10, 2)
 
-  product  Product?  @relation(fields: [productId], references: [id], onDelete: Restrict)
-  category Category? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  // Exactly one is non-null, matching `scope`.
+  productId  String?
+  categoryId String?
+  brandId    String?
 
-  @@index([scope])
-  @@index([isActive])
-  @@index([startDate, endDate])
-  @@map("discounts")
+  /// Tie-breaker WITHIN a scope tier. Does not let a category rule outrank a
+  /// product rule — the tier always dominates.
+  priority Int @default(0)
+
+  /// Stored as UTC instants. The controller converts the owner's date input
+  /// using the store timezone (Settings.timeZone) before persisting.
+  startDate DateTime?
+  endDate   DateTime?
+
+  /// Owner's on/off switch. Combined with the dates to derive status.
+  isEnabled Boolean @default(true)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product  Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  brand    Brand?    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  history DiscountHistory[]
+
+  // The engine's hot query: enabled rules within a date window.
+  @@index([isEnabled, startDate, endDate], map: "discount_rules_active_lookup_idx")
+  @@index([scope, isEnabled])
+  @@index([productId])
+  @@index([categoryId])
+  @@index([brandId])
+  @@map("discount_rules")
+}
+
+/// Append-only audit of every change to a DiscountRule, for the Discount
+/// History screen. Separate from AuditLog because the owner needs a
+/// discount-specific timeline that survives rule deletion (ruleId is retained
+/// as a plain string, with the relation set null on delete).
+model DiscountHistory {
+  id       String                @id @default(cuid())
+  ruleId   String?
+  ruleName String // snapshot — survives deletion of the rule
+  action   DiscountHistoryAction
+  oldData  Json?
+  newData  Json?
+
+  employeeId String?
+  createdAt  DateTime @default(now())
+
+  rule DiscountRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@index([ruleId])
+  @@index([createdAt])
+  @@map("discount_history")
 }
 
 model Coupon {

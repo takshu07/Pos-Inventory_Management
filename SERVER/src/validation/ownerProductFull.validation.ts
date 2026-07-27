@@ -25,9 +25,28 @@ const variantSchema = z
     sku: z.string().trim().min(3, "SKU must be at least 3 chars").max(50),
     barcode: z.string().trim().max(100).optional().nullable(),
 
+    // Per-variant sellability, independent of the parent product's status.
+    isActive: z.boolean().default(true),
+
+    // Effective prices. The wizard stores pricing once at product level plus
+    // sparse per-variant overrides, and resolves them (override ?? default) on
+    // the client before sending; the API receives absolute values per variant.
+    //
+    // sellingPrice is accepted but treated as an INPUT to derivation, not as a
+    // stored value: the server records the discount that produces it and lets
+    // the pricing engine write the actual sellingPrice column. When
+    // discountType/discountValue are supplied, they win and sellingPrice is
+    // recomputed from the MRP.
     costPrice: money,
     sellingPrice: money,
     mrp: money,
+
+    // Base discount for this variant (the bottom rung of the pricing ladder).
+    // Optional so existing wizard payloads keep working — when omitted the
+    // server back-solves a FLAT discount from (mrp − sellingPrice).
+    discountType: z.enum(["PERCENTAGE", "FLAT"]).optional(),
+    discountValue: z.number().min(0).optional(),
+    isManualPricing: z.boolean().optional(),
 
     openingStock: z.number().int().min(0).default(0),
     reorderLevel: z.number().int().min(0).default(0),
