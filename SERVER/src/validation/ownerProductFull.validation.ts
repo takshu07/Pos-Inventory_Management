@@ -105,8 +105,21 @@ export const ownerProductFullValidation = {
       searchKeywords: z.string().trim().max(500).optional().nullable(),
 
       // ── Step 2: Images ────────────────────────────────────────────────────
+      // Accepts an absolute URL or a same-origin relative path: images uploaded
+      // through the wizard are stored by the asset module and referenced as
+      // `/api/v1/assets/<id>/download`, which `z.string().url()` rejects. Same
+      // rule as the category module's imageUrlSchema.
       imageUrls: z
-        .array(z.string().url("Each image must be a valid URL"))
+        .array(
+          z
+            .string()
+            .trim()
+            .max(2048)
+            .refine(
+              (v) => v.startsWith("/") || /^https?:\/\//i.test(v),
+              "Each image must be an absolute URL or a relative asset path"
+            )
+        )
         .max(10, "Maximum 10 images allowed")
         .default([]),
 

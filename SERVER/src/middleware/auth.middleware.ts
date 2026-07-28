@@ -110,3 +110,35 @@ export async function authenticate(
 
   next();
 }
+
+/**
+ * optionalAuthenticate — populates `req.user` when a valid token is present,
+ * but does NOT reject the request when one is absent.
+ *
+ * This exists for resources the browser fetches WITHOUT our API client: an
+ * `<img src="/api/v1/assets/…">` is a plain GET issued by the browser, which
+ * cannot attach an Authorization header (our JWT lives in memory, not a
+ * cookie). Under `authenticate` every such request is a guaranteed 401.
+ *
+ * IMPORTANT: this middleware authenticates, it does not authorize. It is only
+ * safe on a handler that performs its own per-resource access check — the asset
+ * download path does exactly that, serving PUBLIC assets to anyone and still
+ * requiring an identified requester for PRIVATE ones. A malformed or expired
+ * token is treated as "no token" rather than an error, so a stale session
+ * degrades to public access instead of a broken image.
+ */
+export async function optionalAuthenticate(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  if (!req.headers.authorization) return next();
+
+  // Delegate to the real implementation so token verification, the active-user
+  // check and the token-version check are never duplicated here. We swallow its
+  // rejection and continue anonymously.
+  await authenticate(req, res, (err?: unknown) => {
+    if (err) delete (req as { user?: unknown }).user;
+    next();
+  });
+}
