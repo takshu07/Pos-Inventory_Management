@@ -1,0 +1,11 @@
+PRODUCT: baggy-fit jeans  [ACTIVE]
+  variants: 8
+
+  2105673829458  Black / L         BG-BAG-BLA-L-0003  stock=1  mrp=1200  sell=1000.02  
+  2109942090006  Black / M         BG-BAG-BLA-M-0002  stock=1  mrp=1200  sell=1000.02  
+  2103894251324  Black / S         BG-BAG-BLA-S-0001  stock=1  mrp=1200  sell=1000.02  
+  2108862576201  Black / Xl        BG-BAG-BLA-XL-0004  stock=1  mrp=1200  sell=1000.02  
+  2100648206081  navy / L          BG-BAG-NAV-L-0007  stock=1  mrp=1200  sell=1000.02  
+  2107776813181  navy / M          BG-BAG-NAV-M-0006  stock=1  mrp=1200  sell=1000.02  
+  2101213514464  navy / S          BG-BAG-NAV-S-0005  stock=1  mrp=1200  sell=1000.02  
+  2107923101918  navy / Xl         BG-BAG-NAV-XL-0008  stock=1  mrp=1200  sell=1000.02  
