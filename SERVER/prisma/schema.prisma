@@ -159,6 +159,10 @@ enum ActionModule {
   SETTINGS
   AUTH
   ASSET
+  // Label Management & Printing Engine. Every print/preview/PDF/template/
+  // printer/settings action is audited under this module.
+  LABEL
+  PRINTER
 }
 
 enum ActionType {
@@ -172,6 +176,18 @@ enum ActionType {
   EXCHANGE_COMPLETE
   INVENTORY_ADJUST
   PRINT_INVOICE
+  // ── Label Engine audit actions ─────────────────────────────────────────────
+  // The spec requires each of these to be independently recorded so the audit
+  // trail distinguishes "looked at a label" from "consumed physical media".
+  LABEL_PREVIEW_GENERATED
+  LABEL_PDF_GENERATED
+  LABEL_PRINT_STARTED
+  LABEL_PRINT_COMPLETED
+  LABEL_PRINT_FAILED
+  LABEL_REPRINTED
+  PRINTER_CHANGED
+  LABEL_TEMPLATE_CHANGED
+  PRINTER_SETTINGS_CHANGED
 }
 
 /// Identifies the entity type that an EmployeeAction record refers to.
@@ -193,6 +209,9 @@ enum ReferenceType {
   SETTINGS
   CASH_TRANSACTION
   ASSET
+  LABEL_TEMPLATE
+  PRINTER
+  PRINT_JOB
 }
 
 enum CashTransactionType {
@@ -366,6 +385,8 @@ model Employee {
   assetsUploaded     Asset[]
   categoriesCreated  Category[]          @relation("CategoryCreatedBy")
   categoriesUpdated  Category[]          @relation("CategoryUpdatedBy")
+  labelTemplates     LabelTemplate[]     @relation("LabelTemplateCreatedBy")
+  printJobs          PrintJob[]          @relation("PrintJobRequestedBy")
 
   @@index([email])
   @@index([phone])
@@ -537,6 +558,7 @@ model ProductVariant {
   saleItems           SaleItem[]
   exchangeReturnItems ExchangeReturnItem[]
   exchangeIssuedItems ExchangeIssuedItem[]
+  printJobItems       PrintJobItem[]
 
   @@unique([productId, sizeId, colorId])
   // sku and barcode have @unique above — PostgreSQL automatically creates
@@ -1324,4 +1346,379 @@ model LoginHistory {
   @@index([loginAt])
   @@index([isSuccessful])
   @@map("login_history")
+}
+
+// =============================================================================
+// LABEL MANAGEMENT & PRINTING ENGINE
+//
+// The Label Engine is the single source of truth for every printable product
+// label in the system. Product, Purchase, Inventory, Sales and Search all
+// enqueue work here; none of them ever talks to a printer directly.
+//
+// Design rules encoded in this schema:
+//   1. Rendered labels are NEVER stored. We persist the *intent* to print
+//      (job + items + the template/printer/options that applied) and the
+//      *outcome*. Pixels and PDF bytes are regenerated on demand from
+//      ProductVariant data, so a price change is never frozen into history.
+//   2. Barcode IMAGES are never stored — only barcode values. Images are
+//      generated at preview/print time by the Barcode Engine.
+//   3. Printer configuration lives here, never inside Product tables.
+//   4. Templates are data, not code. New label formats are added as rows
+//      (or as registry-provided system templates) without touching modules.
+// =============================================================================
+
+/// What a template is for. Drives filtering in the template picker and lets
+/// modules request the right kind of label without hardcoding a template id.
+enum LabelTemplateKind {
+  PRODUCT
+  BARCODE_ONLY
+  PRICE_TAG
+  SALE_TAG
+  CLEARANCE_TAG
+  SHELF_LABEL
+  WAREHOUSE_LABEL
+  QR_LABEL
+  RFID_TAG
+  CUSTOM
+}
+
+/// Barcode symbologies the Barcode Engine can render. Adding a future standard
+/// (QR, DataMatrix, RFID EPC) is an enum + registry entry — no schema redesign.
+enum BarcodeSymbology {
+  EAN13
+  CODE128
+  CODE39
+  UPC
+  ITF14
+  QR
+  DATA_MATRIX
+  NONE
+}
+
+/// How the server reaches a physical printer.
+enum PrinterConnectionType {
+  NETWORK
+  USB
+  BLUETOOTH
+  CLOUD
+  VIRTUAL
+}
+
+/// The command dialect a printer speaks. Selecting a driver never requires a
+/// frontend change — the UI only ever sends a printerId.
+enum PrinterDriverType {
+  ESC_POS
+  TSPL
+  ZPL
+  DYMO
+  PDF
+  PREVIEW
+  NULL
+}
+
+enum PrinterStatus {
+  ONLINE
+  OFFLINE
+  ERROR
+  UNKNOWN
+}
+
+/// Print job lifecycle. QUEUED is accepted-but-not-yet-claimed; PENDING marks
+/// a job explicitly held (e.g. printer offline, awaiting retry).
+enum PrintJobStatus {
+  QUEUED
+  PENDING
+  PRINTING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PrintJobItemStatus {
+  PENDING
+  PRINTING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+/// Which module asked for the print. Powers reprint-from-source and the
+/// history filters, and lets analytics attribute label usage per workflow.
+enum PrintSourceModule {
+  PRODUCT
+  PURCHASE
+  INVENTORY
+  SALE
+  SEARCH
+  BATCH
+  MANUAL
+}
+
+/// Output target resolved at print time by the PrinterService. The rest of the
+/// application never knows which mode is active.
+enum PrintOutputMode {
+  PREVIEW
+  PDF
+  THERMAL
+}
+
+/// A label layout definition. Templates are DATA — the Template Engine renders
+/// any template row through the same layout pipeline for both PDF and thermal,
+/// so a new format never requires modifying existing code.
+model LabelTemplate {
+  id          String            @id @default(cuid())
+  /// Stable machine key (e.g. "default-clothing"). System templates are seeded
+  /// from the registry with a fixed code so modules can request them by name.
+  code        String            @unique
+  name        String
+  description String?
+  kind        LabelTemplateKind @default(PRODUCT)
+
+  /// Physical label dimensions in millimetres — the contract with the media.
+  widthMm  Decimal @db.Decimal(6, 2)
+  heightMm Decimal @db.Decimal(6, 2)
+
+  /// Margins in millimetres.
+  marginTopMm    Decimal @default(1) @db.Decimal(5, 2)
+  marginRightMm  Decimal @default(1) @db.Decimal(5, 2)
+  marginBottomMm Decimal @default(1) @db.Decimal(5, 2)
+  marginLeftMm   Decimal @default(1) @db.Decimal(5, 2)
+
+  /// Which fields render, in what order, at what size/position. Validated by
+  /// the application layer (labelTemplate.validation.ts). Stored as JSON so
+  /// new element types need no migration.
+  elements Json @default("[]")
+
+  /// Default symbology for this template's barcode element.
+  barcodeSymbology BarcodeSymbology @default(EAN13)
+
+  /// Print orientation in degrees (0/90/180/270).
+  rotation Int @default(0)
+
+  /// System templates ship with the product and cannot be deleted or renamed
+  /// by users — only cloned. Guarantees every install has working defaults.
+  isSystem  Boolean @default(false)
+  isActive  Boolean @default(true)
+  /// Optional per-store scoping for the future multi-store requirement.
+  storeCode String?
+
+  /// Denormalised usage counter for the template picker's most-used sort.
+  usageCount Int @default(0)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy Employee?       @relation("LabelTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  printJobs PrintJob[]
+  jobItems  PrintJobItem[]
+  settings  PrinterSetting[]
+
+  @@index([kind])
+  @@index([isActive])
+  @@index([isSystem])
+  @@index([storeCode])
+  @@map("label_templates")
+}
+
+/// A physical or virtual printer. Adding a manufacturer is a new driver in the
+/// registry plus a row here — no schema or frontend change.
+model Printer {
+  id         String                @id @default(cuid())
+  name       String
+  /// Machine key used by integrations/scripts to address a printer by name.
+  code       String                @unique
+  connection PrinterConnectionType @default(NETWORK)
+  driver     PrinterDriverType     @default(ESC_POS)
+  status     PrinterStatus         @default(UNKNOWN)
+
+  /// Transport coordinates. Which are populated depends on `connection`:
+  ///   NETWORK -> host + port     USB -> devicePath/vendorId/productId
+  ///   CLOUD   -> endpointUrl     VIRTUAL/PDF -> none
+  host        String?
+  port        Int?
+  devicePath  String?
+  vendorId    String?
+  productId   String?
+  endpointUrl String?
+
+  /// Human-facing placement, e.g. "Counter 1", "Stock Room".
+  location String?
+
+  /// Media + quality defaults for this device. Job-level options override.
+  dpi             Int     @default(203)
+  defaultWidthMm  Decimal @default(50) @db.Decimal(6, 2)
+  defaultHeightMm Decimal @default(25) @db.Decimal(6, 2)
+  darkness        Int     @default(8)
+  printSpeed      Int     @default(4)
+  /// Exactly one printer may be the system default — enforced in the service
+  /// layer (a partial unique index is not expressible in the Prisma schema).
+  isDefault       Boolean @default(false)
+  isActive        Boolean @default(true)
+
+  /// Result of the last reachability probe. Cheap status without a live poll.
+  lastSeenAt    DateTime?
+  lastErrorAt   DateTime?
+  lastErrorText String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  printJobs PrintJob[]
+  settings  PrinterSetting[]
+
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([status])
+  @@map("printers")
+}
+
+/// A unit of print work. NOTHING prints immediately — every request becomes a
+/// job, so an offline printer can never lose a request.
+model PrintJob {
+  id String @id @default(cuid())
+
+  /// Short human-readable handle shown in the UI ("PJ-000241").
+  jobNumber String @unique
+
+  printerId     String?
+  templateId    String
+  requestedById String
+
+  status PrintJobStatus    @default(QUEUED)
+  source PrintSourceModule @default(MANUAL)
+  output PrintOutputMode   @default(THERMAL)
+
+  /// Free-text business justification ("Damaged labels replaced", "Reprint").
+  reason String?
+
+  /// Totals denormalised so history tables never fan out to items.
+  totalLabels Int @default(0)
+  totalCopies Int @default(0)
+
+  /// Effective print options for THIS job, resolved from PrinterSetting plus
+  /// per-request overrides at enqueue time. Frozen so a later settings change
+  /// never rewrites what a past job actually did.
+  options Json @default("{}")
+
+  /// Retry bookkeeping — the queue worker owns these.
+  attempts    Int @default(0)
+  maxAttempts Int @default(3)
+
+  /// Set when a worker claims the job; lets a restarted process reclaim jobs
+  /// abandoned mid-flight.
+  claimedAt DateTime?
+  claimedBy String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  /// Wall-clock milliseconds from start to terminal state (history Duration).
+  durationMs  Int?
+
+  failureReason String?
+
+  /// If this job is a reprint, the job it was cloned from.
+  reprintOfId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  printer     Printer?       @relation(fields: [printerId], references: [id], onDelete: SetNull)
+  template    LabelTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  requestedBy Employee       @relation("PrintJobRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reprintOf   PrintJob?      @relation("PrintJobReprint", fields: [reprintOfId], references: [id], onDelete: SetNull)
+  reprints    PrintJob[]     @relation("PrintJobReprint")
+  items       PrintJobItem[]
+
+  /// The queue worker hot path: oldest claimable job.
+  @@index([status, createdAt])
+  @@index([printerId, status])
+  @@index([requestedById])
+  @@index([source])
+  @@index([createdAt])
+  @@map("print_jobs")
+}
+
+/// One product variant within a job. Copies are stored as a count rather than
+/// duplicated rows — a 40-label receipt is one row, not forty.
+model PrintJobItem {
+  id        String @id @default(cuid())
+  jobId     String
+  variantId String
+
+  copies Int @default(1)
+
+  /// Per-item template override (null = inherit the job template).
+  templateId String?
+
+  /// The barcode VALUE captured at enqueue time. The image is never stored;
+  /// it is regenerated by the Barcode Engine at render time.
+  barcodeValue     String?
+  barcodeSymbology BarcodeSymbology @default(EAN13)
+
+  status        PrintJobItemStatus @default(PENDING)
+  failureReason String?
+
+  /// Ordering within the job so reprints reproduce the original sequence.
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  job      PrintJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  template LabelTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@index([variantId])
+  @@index([status])
+  @@map("print_job_items")
+}
+
+/// Label/printing configuration. Singleton by default (id="singleton"), but the
+/// optional scope columns let a future multi-store or per-terminal deployment
+/// add rows without a redesign.
+model PrinterSetting {
+  id String @id @default("singleton")
+
+  /// Reserved for future per-store / per-terminal scoping. NULL = global.
+  storeCode  String?
+  terminalId String?
+
+  defaultPrinterId  String?
+  defaultTemplateId String?
+
+  defaultCopies   Int     @default(1)
+  defaultWidthMm  Decimal @default(50) @db.Decimal(6, 2)
+  defaultHeightMm Decimal @default(25) @db.Decimal(6, 2)
+  marginTopMm     Decimal @default(1) @db.Decimal(5, 2)
+  marginRightMm   Decimal @default(1) @db.Decimal(5, 2)
+  marginBottomMm  Decimal @default(1) @db.Decimal(5, 2)
+  marginLeftMm    Decimal @default(1) @db.Decimal(5, 2)
+
+  /// "portrait" | "landscape" — validated in the application layer.
+  orientation String @default("portrait")
+  darkness    Int    @default(8)
+  printSpeed  Int    @default(4)
+
+  barcodeSymbology BarcodeSymbology @default(EAN13)
+
+  /// Workflow toggles.
+  showPreviewBeforePrint  Boolean @default(true)
+  printAfterProductCreate Boolean @default(false)
+  printAfterPurchase      Boolean @default(true)
+
+  /// PREVIEW | PDF | THERMAL. The output mode the PrinterService resolves to
+  /// when a request does not specify one. This is the ONLY place the
+  /// development/testing/production distinction lives.
+  outputMode PrintOutputMode @default(PDF)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  defaultPrinter  Printer?       @relation(fields: [defaultPrinterId], references: [id], onDelete: SetNull)
+  defaultTemplate LabelTemplate? @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
+
+  @@unique([storeCode, terminalId])
+  @@map("printer_settings")
 }

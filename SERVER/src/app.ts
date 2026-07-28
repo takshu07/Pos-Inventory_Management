@@ -53,6 +53,8 @@ import configurationRoutes from "./routes/configuration.routes";
 import notificationRoutes from "./routes/notification.routes";
 import financeRoutes from "./routes/finance.routes";
 import assetRoutes from "./routes/asset.routes";
+import labelRoutes from "./routes/label.routes";
+import ownerLabelRoutes from "./routes/owner.labels.routes";
 import healthRoutes from "./routes/health.routes";
 import crypto from "crypto";
 
@@ -216,6 +218,11 @@ app.use("/api/v1/configuration", configurationRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/finance", financeRoutes);
 app.use("/api/v1/assets", assetRoutes);
+// Label Management & Printing Engine. /labels is the operational surface every
+// role uses (preview, print, queue); /owner/labels is administration
+// (templates, printers, settings, history) and is OWNER-only.
+app.use("/api/v1/labels", labelRoutes);
+app.use("/api/v1/owner/labels", ownerLabelRoutes);
 
 // =============================================================================
 // 404 HANDLER

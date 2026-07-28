@@ -17,7 +17,9 @@ import { prisma } from "./config/prisma";
 import { logger } from "./config/logger";
 import app from "./app";
 import { ConfigurationEngine } from "./engines/configuration.engine";
+import { printQueue } from "./engines/label/queue/printQueue";
 import { registerNotificationSubscribers } from "./events/subscribers/notification.subscriber";
+import { ensureSystemTemplates } from "./services/labelTemplate.service";
 
 // Validate required environment variables before binding to any port.
 // This throws immediately if JWT_SECRET or DATABASE_URL is missing.
@@ -34,7 +36,22 @@ async function startServer() {
   // 2. Register Event Subscribers (Event Bus)
   registerNotificationSubscribers();
 
-  // 3. Start HTTP Server
+  // 3. Label Engine bootstrap.
+  //    Seeding is awaited so the first print request always finds its default
+  //    templates. Both steps are non-fatal: a POS that cannot print labels must
+  //    still take payments, so a failure here degrades the Label Engine rather
+  //    than preventing the server from starting.
+  try {
+    await ensureSystemTemplates();
+    await printQueue.start();
+  } catch (err) {
+    logger.error(
+      { err },
+      "⚠️  Label Engine failed to start. Printing is unavailable; the rest of the API is unaffected."
+    );
+  }
+
+  // 4. Start HTTP Server
   server = app.listen(PORT, () => {
     logger.info(`🚀 Server running on port ${PORT}`);
     logger.info(`🌍 Environment: ${process.env["NODE_ENV"] ?? "development"}`);
@@ -61,6 +78,12 @@ async function gracefulShutdown(signal: string): Promise<void> {
 
   server.close(async () => {
     logger.info("✅ HTTP server closed.");
+
+    // Stop the print worker BEFORE closing the DB pool: it finishes the label
+    // it is on, then stops claiming new ones. Disconnecting first would fail
+    // the in-flight job's status write and leave it stuck in PRINTING.
+    await printQueue.stop();
+    logger.info("✅ Print queue stopped.");
 
     await prisma.$disconnect();
     logger.info("✅ Database connection closed.");

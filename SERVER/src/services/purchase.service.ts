@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { Prisma, PurchaseStatus, MovementType } from "../../generated/prisma";
+import type { EmployeeRole } from "../../generated/prisma";
 import { prisma } from "../config/prisma";
 import { HTTP_STATUS } from "../constants/httpStatus";
 import { AppError } from "../errors/AppError";
@@ -20,6 +21,7 @@ import type {
 } from "../validation/purchase.validation";
 import { executeMovement } from "./inventoryMovement.service";
 import { recomputeVariants } from "./effectivePrice.service";
+import { labelIntegrationService } from "./labelIntegration.service";
 import crypto from "crypto";
 
 // -----------------------------------------------------------------------------
@@ -194,7 +196,16 @@ export async function updatePurchase(id: string, data: UpdatePurchaseInput, exec
   return updated;
 }
 
-export async function receivePurchase(id: string, data: ReceivePurchaseInput, executorId: string) {
+export async function receivePurchase(
+  id: string,
+  data: ReceivePurchaseInput,
+  executorId: string,
+  // Optional so existing callers are unaffected. Used only to attribute the
+  // automatic label print that follows a receipt. Defaults to MANAGER because
+  // the receive route is already gated at MANAGER or above, and the Label
+  // Engine re-checks permissions itself regardless.
+  executorRole: EmployeeRole = "MANAGER"
+) {
   const existing = await purchaseRepository.findById(id);
 
   if (!existing) {
@@ -278,6 +289,19 @@ export async function receivePurchase(id: string, data: ReceivePurchaseInput, ex
   });
 
   logger.info({ executorId, purchaseId: id }, "Purchase received and inventory updated");
+
+  // ── Label Engine integration ───────────────────────────────────────────────
+  // "After Purchase Receive → print quantity based on received stock."
+  //
+  // Deliberately AFTER the transaction commits and deliberately not awaited:
+  // the receipt is already durable, so a printer problem must not roll back
+  // received stock. The integration honours the printAfterPurchase setting and
+  // swallows its own errors — the Label Engine never fails a purchase.
+  void labelIntegrationService
+    .maybePrintAfterPurchaseReceive(id, { id: executorId, role: executorRole })
+    .catch(() => {
+      /* already logged inside the integration */
+    });
 
   return receivedPurchase;
 }

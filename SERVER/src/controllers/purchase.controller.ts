@@ -54,7 +54,14 @@ export const update = asyncHandler(async (req: Request, res: Response) => {
 
 export const receive = asyncHandler(async (req: Request, res: Response) => {
   const data = purchaseValidation.receive.parse(req.body);
-  const result = await purchaseService.receivePurchase(req.params["id"] as string, data, req.user.id);
+  const result = await purchaseService.receivePurchase(
+    req.params["id"] as string,
+    data,
+    req.user.id,
+    // Role is forwarded so the automatic post-receipt label print is attributed
+    // to the actual user rather than an assumed role.
+    req.user.role
+  );
 
   return res.status(HTTP_STATUS.OK).json({
     success: true,
