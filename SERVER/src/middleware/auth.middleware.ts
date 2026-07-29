@@ -24,6 +24,7 @@ import {
   getAuthContext,
   setAuthContext,
 } from "../utils/authContextCache";
+import { heartbeat } from "../utils/presenceHeartbeat";
 
 export async function authenticate(
   req: Request,
@@ -107,6 +108,11 @@ export async function authenticate(
     role: payload.role,
     tokenVersion: payload.tokenVersion,
   };
+
+  // Presence heartbeat for the Workforce module. Throttled in-process to at
+  // most one write per employee per interval, and fire-and-forget — it never
+  // awaits, never throws, and cannot fail the request.
+  heartbeat(payload.id);
 
   next();
 }

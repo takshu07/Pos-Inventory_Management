@@ -28,6 +28,20 @@ import type {
 import { comparePassword, hashPassword } from "../utils/hash";
 import { generateToken } from "../utils/jwt";
 import { invalidateAuthContext } from "../utils/authContextCache";
+import * as workforceService from "./workforce.service";
+
+/**
+ * Request context captured at the HTTP boundary and threaded through so the
+ * Workforce module can record a real session row (device, browser, IP).
+ *
+ * Optional on purpose: auth must keep working — and keep being testable —
+ * whether or not a caller supplies it. Session tracking is observability, and
+ * observability must never be able to fail a login.
+ */
+export interface RequestContext {
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
 
 // =============================================================================
 // HELPER: EMPLOYEE CODE GENERATION
@@ -95,7 +109,7 @@ export async function setup(data: SetupInput) {
  * Security: The same error message is returned for "not found" and
  * "wrong password" to prevent user enumeration attacks.
  */
-export async function login(data: LoginInput) {
+export async function login(data: LoginInput, context: RequestContext = {}) {
   // Find the employee by whichever credential was provided.
   // The Zod schema guarantees at least one of email/phone is present.
   const employee = data.email
@@ -109,10 +123,14 @@ export async function login(data: LoginInput) {
   );
 
   if (!employee) {
+    // No employeeId to attribute the attempt to, so nothing is recorded here.
+    // A failed attempt against a non-existent account is a rate-limiter
+    // concern (authLimiter already covers it), not a workforce one.
     throw invalidCredentialsError;
   }
 
   if (!employee.isActive) {
+    recordLoginAttempt(employee.id, context, false, "INACTIVE_ACCOUNT");
     throw new AppError(
       HTTP_STATUS.FORBIDDEN,
       "Your account has been deactivated. Please contact your store manager."
@@ -125,6 +143,9 @@ export async function login(data: LoginInput) {
   );
 
   if (!isPasswordValid) {
+    // A wrong password against a REAL account is exactly what the security
+    // view needs to surface, so this attempt is recorded.
+    recordLoginAttempt(employee.id, context, false, "INVALID_CREDENTIALS");
     throw invalidCredentialsError;
   }
 
@@ -148,6 +169,23 @@ export async function login(data: LoginInput) {
     recordId: employee.id,
   });
 
+  // Open a session row. Any previously-open session is closed first: a stale
+  // open row would keep the employee reading as "online" forever, since
+  // presence is derived from open sessions.
+  workforceService
+    .recordLogout(employee.id, "EXPIRED")
+    .then(() =>
+      workforceService.recordLogin({
+        employeeId: employee.id,
+        ipAddress: context.ipAddress ?? null,
+        userAgent: context.userAgent ?? null,
+        isSuccessful: true,
+      })
+    )
+    .catch((err: unknown) => {
+      logger.error({ err }, "[AuthService] Failed to record login session");
+    });
+
   // Strip sensitive fields before returning the employee profile.
   const { password: _password, refreshTokenVersion: _version, ...profile } =
     employee;
@@ -156,6 +194,52 @@ export async function login(data: LoginInput) {
     token,
     employee: profile,
   };
+}
+
+/** Fire-and-forget failed-attempt recorder. Never blocks or fails the response. */
+function recordLoginAttempt(
+  employeeId: string,
+  context: RequestContext,
+  isSuccessful: boolean,
+  failureReason?: string
+) {
+  workforceService
+    .recordLogin({
+      employeeId,
+      ipAddress: context.ipAddress ?? null,
+      userAgent: context.userAgent ?? null,
+      isSuccessful,
+      failureReason: failureReason ?? null,
+    })
+    .catch((err: unknown) => {
+      logger.error({ err }, "[AuthService] Failed to record login attempt");
+    });
+}
+
+// =============================================================================
+// LOGOUT
+// =============================================================================
+
+/**
+ * Ends the employee's session.
+ *
+ * The JWT itself is stateless and cannot be revoked without bumping
+ * refreshTokenVersion — which we deliberately do NOT do here, because a normal
+ * logout should not sign the user out of their other devices. What this does is
+ * close the session row, which is what presence and the Login History tab read.
+ * Forced sign-out of every device is a separate operation (password reset /
+ * deactivation), and that one does bump the version.
+ */
+export async function logout(employeeId: string) {
+  await workforceService.recordLogout(employeeId, "MANUAL");
+
+  auditRepository.create({
+    performedBy: employeeId,
+    action: "LOGOUT",
+    module: "AUTH",
+    tableName: "employees",
+    recordId: employeeId,
+  });
 }
 
 // =============================================================================
@@ -244,4 +328,19 @@ export async function changePassword(
   // Drop the cached auth context so the middleware immediately sees the new
   // version and rejects stale tokens on the very next request.
   invalidateAuthContext(employeeId);
+
+  // Every device was just signed out, so the open session rows are no longer
+  // real. Closing them keeps presence honest — otherwise the employee would
+  // still read as "online" on a session that can no longer make a request.
+  workforceService.recordLogout(employeeId, "FORCED").catch((err: unknown) => {
+    logger.error({ err }, "[AuthService] Failed to close sessions after password change");
+  });
+
+  auditRepository.create({
+    performedBy: employeeId,
+    action: "PASSWORD_RESET",
+    module: "AUTH",
+    tableName: "employees",
+    recordId: employeeId,
+  });
 }

@@ -188,6 +188,21 @@ enum ActionType {
   PRINTER_CHANGED
   LABEL_TEMPLATE_CHANGED
   PRINTER_SETTINGS_CHANGED
+  // ── Workforce Management audit actions ─────────────────────────────────────
+  // The Workforce module reuses AuditLog/EmployeeAction rather than keeping its
+  // own activity table; these values are what make that reuse expressive enough
+  // to render a timeline and a security trail.
+  PASSWORD_RESET
+  ROLE_CHANGED
+  PERMISSION_CHANGED
+  EMPLOYEE_DEACTIVATED
+  EMPLOYEE_REACTIVATED
+  CLOCK_IN
+  CLOCK_OUT
+  ATTENDANCE_ADJUSTED
+  SHIFT_ASSIGNED
+  LEAVE_REQUESTED
+  LEAVE_REVIEWED
 }
 
 /// Identifies the entity type that an EmployeeAction record refers to.
@@ -212,6 +227,12 @@ enum ReferenceType {
   LABEL_TEMPLATE
   PRINTER
   PRINT_JOB
+  // Workforce entities — lets an EmployeeAction point at the exact attendance
+  // row, shift or leave request it concerns.
+  EMPLOYEE
+  ATTENDANCE
+  SHIFT
+  LEAVE_REQUEST
 }
 
 enum CashTransactionType {
@@ -348,6 +369,18 @@ model Brand {
 // EMPLOYEE
 // =============================================================================
 
+/// Employment lifecycle, distinct from `isActive` (which is a login switch).
+/// A SUSPENDED employee still exists in the roster and keeps their history;
+/// TERMINATED is the retired state. Kept separate from `isActive` so HR status
+/// and system access can diverge (e.g. on notice period but still logging in).
+enum EmploymentStatus {
+  ACTIVE
+  PROBATION
+  ON_LEAVE
+  SUSPENDED
+  TERMINATED
+}
+
 model Employee {
   id                  String       @id @default(cuid())
   employeeCode        String       @unique
@@ -371,6 +404,33 @@ model Employee {
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 
+  // ── Workforce Management extensions ────────────────────────────────────────
+  // Added by the Workforce module. Every field is nullable/defaulted so existing
+  // rows and every existing query keep working untouched.
+
+  /// Profile photo. Stored as an Asset id or URL — the Asset engine owns bytes.
+  photoUrl String?
+
+  /// HR-facing employment lifecycle. See EmploymentStatus.
+  employmentStatus EmploymentStatus @default(ACTIVE)
+
+  /// Emergency contact (drawer Overview tab).
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+
+  /// Assigned working shift. Nullable = no shift assigned; attendance then
+  /// records hours without late/early evaluation.
+  shiftId String?
+
+  /// Multi-store readiness. NULL = the single default store. Every workforce
+  /// query already filters on this column so adding stores later is data, not
+  /// a migration + rewrite.
+  storeCode String?
+
+  /// Denormalised termination date, for tenure reporting after TERMINATED.
+  exitDate DateTime?
+
   purchases          Purchase[]
   sales              Sale[]
   inventoryMovements InventoryMovement[]
@@ -388,10 +448,209 @@ model Employee {
   labelTemplates     LabelTemplate[]     @relation("LabelTemplateCreatedBy")
   printJobs          PrintJob[]          @relation("PrintJobRequestedBy")
 
+  shift            Shift?             @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  attendance       Attendance[]
+  attendanceMarked Attendance[]       @relation("AttendanceMarkedBy")
+  leaveRequests    LeaveRequest[]     @relation("LeaveRequestedBy")
+  leavesReviewed   LeaveRequest[]     @relation("LeaveReviewedBy")
+
   @@index([email])
   @@index([phone])
   @@index([role])
+  // Workforce roster hot path: active staff of a given role within a store.
+  @@index([role, isActive], map: "employees_role_isactive_idx")
+  @@index([employmentStatus])
+  @@index([storeCode])
+  @@index([shiftId])
   @@map("employees")
+}
+
+// =============================================================================
+// WORKFORCE — SHIFTS, ATTENDANCE, LEAVE
+//
+// These three models are the only NEW workforce tables. Everything else the
+// Workforce module shows (activity, login history, sales performance) is read
+// from EmployeeAction, LoginHistory, AuditLog and Sale — no duplication.
+//
+// Design rules encoded here:
+//   1. Attendance is one row per employee per calendar day. The unique
+//      constraint makes clock-in idempotent and makes "did X work today?" a
+//      single indexed lookup rather than a scan over punch events.
+//   2. Late/early/overtime are DERIVED at write time from the Shift snapshot
+//      and stored, because the shift definition can change later and history
+//      must not silently rewrite itself.
+//   3. Shift is a first-class table so shift SCHEDULING (rosters, rotations)
+//      can be added later as rows referencing it, with no redesign.
+// =============================================================================
+
+/// A named working window, e.g. "Morning 09:00–18:00".
+/// Times are stored as minutes-from-midnight integers in the store timezone
+/// rather than DateTime, because a shift is a recurring wall-clock rule, not an
+/// instant. This sidesteps every DST/date-arithmetic bug in comparisons.
+model Shift {
+  id   String @id @default(cuid())
+  name String @unique
+  code String @unique
+
+  /// Minutes from midnight. 540 = 09:00. An overnight shift is expressed as
+  /// endMinute <= startMinute (e.g. 22:00→06:00) and handled by the engine.
+  startMinute Int
+  endMinute   Int
+
+  /// Unpaid break minutes deducted from worked hours.
+  breakMinutes Int @default(0)
+
+  /// Minutes after startMinute before an arrival counts as LATE.
+  graceMinutes Int @default(10)
+
+  /// Expected paid hours — drives the attendance percentage denominator.
+  /// Derived from start/end/break at creation, stored so history is stable.
+  expectedMinutes Int @default(480)
+
+  /// Days of week this shift runs. 0=Sunday … 6=Saturday.
+  workingDays Int[] @default([1, 2, 3, 4, 5, 6])
+
+  colorHex String?
+  isActive Boolean @default(true)
+
+  /// Multi-store readiness — NULL = applies to the default store.
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees  Employee[]
+  attendance Attendance[]
+
+  @@index([isActive])
+  @@index([storeCode])
+  @@map("shifts")
+}
+
+/// Why an attendance day is marked the way it is. Derived by the engine on
+/// clock-out (or by the absence sweeper), never typed by hand.
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  HALF_DAY
+  ABSENT
+  ON_LEAVE
+  HOLIDAY
+  WEEK_OFF
+}
+
+/// How the attendance record was produced. BIOMETRIC and GEO_FENCE are declared
+/// now so a future biometric/geofenced clock-in is a new source value plus a
+/// driver — not a schema migration.
+enum AttendanceSource {
+  SYSTEM
+  MANUAL
+  LOGIN_DERIVED
+  BIOMETRIC
+  GEO_FENCE
+}
+
+/// One row per employee per working day.
+model Attendance {
+  id         String @id @default(cuid())
+  employeeId String
+
+  /// The calendar day this record belongs to, normalised to UTC midnight of the
+  /// store-local date. Together with employeeId it is UNIQUE — that constraint
+  /// is what makes clock-in idempotent and the daily rollups cheap.
+  date DateTime @db.Date
+
+  clockInAt  DateTime?
+  clockOutAt DateTime?
+
+  /// Snapshot of the shift that applied on this day. Kept even if the employee
+  /// is later moved to another shift, so history stays truthful.
+  shiftId          String?
+  shiftStartMinute Int?
+  shiftEndMinute   Int?
+
+  status AttendanceStatus @default(PRESENT)
+  source AttendanceSource @default(SYSTEM)
+
+  /// DERIVED at clock-out and stored. Recomputing these from the shift table
+  /// later would rewrite history when a shift definition changes.
+  workedMinutes    Int @default(0)
+  lateMinutes      Int @default(0)
+  earlyExitMinutes Int @default(0)
+  overtimeMinutes  Int @default(0)
+
+  notes String?
+
+  /// Set when an OWNER manually created or corrected the record.
+  markedById String?
+
+  /// Multi-store readiness.
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift    Shift?    @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  markedBy Employee? @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+
+  /// One attendance row per employee per day — the module's core invariant.
+  @@unique([employeeId, date])
+  /// The two hot reads: one employee's history newest-first, and "everyone on
+  /// date D" for the daily attendance board.
+  @@index([employeeId, date(sort: Desc)], map: "attendance_employeeid_date_idx")
+  @@index([date, status], map: "attendance_date_status_idx")
+  @@index([status])
+  @@index([storeCode])
+  @@map("attendance")
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  PAID
+  UNPAID
+  COMP_OFF
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// Leave requests. Present now so the Attendance module can mark ON_LEAVE days
+/// from an authoritative source; the request/approval UI is a later phase that
+/// needs no schema change.
+model LeaveRequest {
+  id         String @id @default(cuid())
+  employeeId String
+
+  type      LeaveType
+  status    LeaveStatus @default(PENDING)
+  startDate DateTime    @db.Date
+  endDate   DateTime    @db.Date
+  /// Whole days requested, precomputed so reports never re-walk the range.
+  totalDays Int         @default(1)
+
+  reason         String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewerNotes  String?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee   Employee  @relation("LeaveRequestedBy", fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewedBy Employee? @relation("LeaveReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, startDate(sort: Desc)], map: "leave_requests_employeeid_startdate_idx")
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("leave_requests")
 }
 
 // =============================================================================
@@ -740,6 +999,15 @@ model Sale {
   // Reason the Owner provided for the manual discount — stored for the audit trail.
   manualDiscountReason String?
   taxAmount            Decimal    @default(0) @db.Decimal(10, 2)
+  // Round-off applied to reach a whole-rupee payable total (Indian retail
+  // convention). SIGNED: negative when the total was rounded DOWN (customer
+  // pays less), positive when rounded UP. Stored so the invoice reconciles —
+  // subtotal − discount + tax + roundOffAmount == grandTotal exactly — and so
+  // finance can audit the adjustment rather than find a total that does not
+  // add up. Always in the range (−0.50, +0.50].
+  roundOffAmount       Decimal    @default(0) @db.Decimal(10, 2)
+  // The final PAYABLE amount, already rounded. This is what the customer pays
+  // and what payments are validated against.
   grandTotal           Decimal    @db.Decimal(10, 2)
   paidAmount           Decimal    @default(0) @db.Decimal(10, 2)
   dueAmount            Decimal    @default(0) @db.Decimal(10, 2)
@@ -1330,6 +1598,11 @@ model EmployeeAction {
 }
 
 /// Records every login attempt and session for security monitoring.
+///
+/// This table is ALSO the presence source of truth for the Workforce module:
+/// a row with logoutAt = null and a recent lastSeenAt means "online". Presence
+/// is therefore derived from real sessions rather than stored as a mutable
+/// boolean on Employee that can desync when a process dies.
 model LoginHistory {
   id           String    @id @default(cuid())
   employeeId   String
@@ -1340,11 +1613,39 @@ model LoginHistory {
   ipAddress    String?
   isSuccessful Boolean   @default(true)
 
+  // ── Workforce session tracking ─────────────────────────────────────────────
+
+  /// Raw UA string, kept so device/browser parsing can be improved later
+  /// without losing the original evidence.
+  userAgent String?
+
+  /// Heartbeat of the last authenticated request on this session. Presence is
+  /// (logoutAt IS NULL AND lastSeenAt > now() - threshold).
+  lastSeenAt DateTime?
+
+  /// Wall-clock session length, written at logout. Stored rather than computed
+  /// so the history table never has to subtract across millions of rows.
+  durationMinutes Int?
+
+  /// How the session ended: MANUAL (user logged out), EXPIRED (token/idle),
+  /// FORCED (password reset / deactivation). NULL while still active.
+  endReason String?
+
+  /// Reason a login attempt failed (isSuccessful = false), e.g.
+  /// "INVALID_CREDENTIALS", "INACTIVE_ACCOUNT". Powers the security view.
+  failureReason String?
+
+  storeCode String?
+
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
 
   @@index([employeeId])
   @@index([loginAt])
   @@index([isSuccessful])
+  /// One employee's session history, newest first — the Login History tab.
+  @@index([employeeId, loginAt(sort: Desc)], map: "login_history_employeeid_loginat_idx")
+  /// The presence query: currently-open sessions.
+  @@index([logoutAt, lastSeenAt], map: "login_history_presence_idx")
   @@map("login_history")
 }
 

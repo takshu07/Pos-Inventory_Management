@@ -413,6 +413,9 @@ export class SaleService {
       manualDiscountAmount: pricing.manualDiscountAmount,
       manualDiscountReason: payload.manualDiscountReason || null,
       taxAmount: pricing.taxAmount,
+      // Signed round-off to a whole-rupee payable total. Stored so the invoice
+      // reconciles: subtotal − discount + tax + roundOff == grandTotal.
+      roundOffAmount: pricing.roundOffAmount,
       grandTotal: pricing.grandTotal,
       paidAmount: payments.totalPaid,
       dueAmount: payments.dueAmount,

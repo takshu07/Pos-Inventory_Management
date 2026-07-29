@@ -55,6 +55,8 @@ import financeRoutes from "./routes/finance.routes";
 import assetRoutes from "./routes/asset.routes";
 import labelRoutes from "./routes/label.routes";
 import ownerLabelRoutes from "./routes/owner.labels.routes";
+import ownerWorkforceRoutes from "./routes/owner.workforce.routes";
+import managerWorkforceRoutes from "./routes/manager.workforce.routes";
 import healthRoutes from "./routes/health.routes";
 import crypto from "crypto";
 
@@ -223,6 +225,13 @@ app.use("/api/v1/assets", assetRoutes);
 // (templates, printers, settings, history) and is OWNER-only.
 app.use("/api/v1/labels", labelRoutes);
 app.use("/api/v1/owner/labels", ownerLabelRoutes);
+// Workforce Management ("Employee Activity"). Same role-scoped split as the
+// product and category modules: /owner/workforce is the full surface including
+// every mutation (OWNER only); /manager/workforce is read-only monitoring plus
+// the manager's own clock in/out. The manager tree registers no mutation
+// routes at all, so the read-only guarantee is structural, not just guarded.
+app.use("/api/v1/owner/workforce", ownerWorkforceRoutes);
+app.use("/api/v1/manager/workforce", managerWorkforceRoutes);
 
 // =============================================================================
 // 404 HANDLER

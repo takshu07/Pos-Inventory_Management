@@ -44,12 +44,37 @@ export const setup = asyncHandler(async (req: Request, res: Response) => {
 
 export const login = asyncHandler(async (req: Request, res: Response) => {
   const data = authValidation.login.parse(req.body);
-  const result = await authService.login(data);
+
+  // Capture the request context here, at the HTTP boundary — the service layer
+  // must never reach into Express objects. `req.ip` is already the real client
+  // IP because app.ts sets `trust proxy`.
+  const result = await authService.login(data, {
+    ipAddress: req.ip ?? null,
+    userAgent: req.headers["user-agent"] ?? null,
+  });
 
   return res.status(HTTP_STATUS.OK).json({
     success: true,
     message: "Login successful.",
     data: result,
+  });
+});
+
+// =============================================================================
+// POST /auth/logout
+// Ends the current session. Requires: authenticate middleware.
+//
+// This closes the session record (which drives presence and login history); it
+// does NOT invalidate the employee's other devices. Signing out everywhere is a
+// separate, deliberate operation.
+// =============================================================================
+
+export const logout = asyncHandler(async (req: Request, res: Response) => {
+  await authService.logout(req.user.id);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Logged out successfully.",
   });
 });
 

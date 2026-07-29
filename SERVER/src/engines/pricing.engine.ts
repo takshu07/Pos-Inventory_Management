@@ -48,6 +48,8 @@ export interface PricingContext {
   subtotal: Prisma.Decimal;
   totalDiscountAmount: Prisma.Decimal;
   totalTaxAmount: Prisma.Decimal;
+  /** Signed adjustment applied to reach a whole-rupee total. See RoundingRule. */
+  roundOffAmount: Prisma.Decimal;
   grandTotal: Prisma.Decimal;
 }
 
@@ -56,7 +58,16 @@ export interface PricingResult {
   discountAmount: Prisma.Decimal;
   manualDiscountAmount: Prisma.Decimal;
   taxAmount: Prisma.Decimal;
+  /**
+   * Signed round-off applied to the invoice, in the range (−0.50, +0.50].
+   * Negative = rounded down (customer pays less). Present so the invoice can
+   * show a "Round Off" line and still reconcile exactly.
+   */
+  roundOffAmount: Prisma.Decimal;
+  /** The final PAYABLE total — already rounded to a whole rupee. */
   grandTotal: Prisma.Decimal;
+  /** The pre-rounding total, kept for reporting and reconciliation. */
+  grossTotal: Prisma.Decimal;
   calculatedItems: CalculatedItem[];
 }
 
@@ -197,16 +208,52 @@ class TaxRule implements PricingRule {
   }
 }
 
+/**
+ * Final rule in the pipeline. Two distinct jobs, in order:
+ *
+ *   1. Normalise every LINE to 2 decimal places (paise), so stored line totals
+ *      are exact currency values rather than long binary fractions.
+ *
+ *   2. Round the INVOICE TOTAL to the nearest whole rupee, and record the
+ *      signed difference as roundOffAmount.
+ *
+ * Why whole rupees: a percentage discount routinely produces a total like
+ * ₹1000.02, which is not payable — India withdrew sub-rupee coins from
+ * practical circulation, so a cashier cannot collect 2 paise and a customer
+ * cannot pay it. Rounding here (rather than in the UI) is essential because the
+ * server validates payments against grandTotal: if the client rounded on its
+ * own, it would submit ₹1000 against a server total of ₹1000.02 and every sale
+ * would be rejected as underpaid.
+ *
+ * Why the adjustment is STORED rather than absorbed: keeping roundOffAmount
+ * means the invoice reconciles exactly —
+ *   subtotal − discount + tax + roundOff == grandTotal
+ * — so the printed document adds up and finance can audit the adjustment.
+ * Silently absorbing it produces invoices whose lines do not sum to the total.
+ *
+ * HALF_UP at the .50 boundary follows the standard retail convention
+ * (₹1000.50 → ₹1001), which favours neither party systematically.
+ */
 class RoundingRule implements PricingRule {
   execute(ctx: PricingContext): void {
+    // ── 1. Line-level: normalise to paise ────────────────────────────────────
     ctx.calculatedItems.forEach((calcItem) => {
       calcItem.totalPrice = calcItem.totalPrice.toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
     });
 
-    ctx.grandTotal = ctx.calculatedItems.reduce(
-      (sum, item) => sum.plus(item.totalPrice),
-      new Prisma.Decimal(0)
-    ).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    // The exact, unrounded invoice total.
+    const grossTotal = ctx.calculatedItems
+      .reduce((sum, item) => sum.plus(item.totalPrice), new Prisma.Decimal(0))
+      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+
+    // ── 2. Invoice-level: round to the nearest whole rupee ───────────────────
+    const payableTotal = grossTotal.toDecimalPlaces(0, Prisma.Decimal.ROUND_HALF_UP);
+
+    // Signed: negative when rounded DOWN (customer pays less than gross).
+    // Computed as payable − gross so that gross + roundOff == payable holds by
+    // construction, which is what makes the invoice reconcile.
+    ctx.roundOffAmount = payableTotal.minus(grossTotal).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    ctx.grandTotal = payableTotal;
   }
 }
 
@@ -236,6 +283,7 @@ export class PricingEngine {
       subtotal: new Prisma.Decimal(0),
       totalDiscountAmount: new Prisma.Decimal(0),
       totalTaxAmount: new Prisma.Decimal(0),
+      roundOffAmount: new Prisma.Decimal(0),
       grandTotal: new Prisma.Decimal(0),
     };
 
@@ -256,7 +304,12 @@ export class PricingEngine {
       discountAmount: ctx.totalDiscountAmount,
       manualDiscountAmount: ctx.manualDiscountAmountInput,
       taxAmount: ctx.totalTaxAmount,
+      roundOffAmount: ctx.roundOffAmount,
       grandTotal: ctx.grandTotal,
+      // grandTotal is the rounded PAYABLE figure; grossTotal is what it was
+      // before rounding. Derived rather than stored separately so the two can
+      // never drift apart.
+      grossTotal: ctx.grandTotal.minus(ctx.roundOffAmount),
       calculatedItems: ctx.calculatedItems,
     };
   }
