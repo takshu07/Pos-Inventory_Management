@@ -7,9 +7,14 @@ import { useSupplierOptions } from "../../hooks/useOwnerProducts";
 import type { WizardVariant } from "../types";
 
 /**
- * BulkEditBar — apply a value to every selected variant at once. Supports the
- * spec's bulk fields: price, cost, stock, supplier, SKU prefix, barcode prefix.
- * SKU/barcode prefix rewrites the code for each selected row (prefix-<oldtail>).
+ * BulkEditBar — apply a value to every selected variant at once: stock, reorder
+ * level, supplier, SKU prefix, barcode prefix. SKU/barcode prefix rewrites the
+ * code for each selected row (prefix-<oldtail>).
+ *
+ * Deliberately offers NO price fields. Pricing comes from the product-level
+ * Pricing step and is inherited; a deliberate single-variant deviation goes
+ * through the Override Pricing dialog, so bulk price editing would reintroduce
+ * exactly the duplication this wizard removes.
  */
 export function BulkEditBar({
   selectedCount,
@@ -21,25 +26,26 @@ export function BulkEditBar({
   onClear: () => void;
 }) {
   const { data: suppliers = [] } = useSupplierOptions();
-  const [field, setField] = useState("sellingPrice");
+  const [field, setField] = useState("openingStock");
   const [value, setValue] = useState("");
 
   const apply = () => {
     if (field === "skuPrefix") return onApply({}, { sku: value });
     if (field === "barcodePrefix") return onApply({}, { barcode: value });
     if (field === "supplierId") return onApply({ supplierId: value }, {});
+    if (field === "status")
+      return onApply({ status: value as WizardVariant["status"] }, {});
 
     const num = value === "" ? 0 : Number(value);
     const patch: Partial<WizardVariant> = {};
-    if (field === "sellingPrice") patch.sellingPrice = num;
-    if (field === "costPrice") patch.costPrice = num;
-    if (field === "mrp") patch.mrp = num;
     if (field === "openingStock") patch.openingStock = num;
     if (field === "reorderLevel") patch.reorderLevel = num;
+    if (field === "maximumStock") patch.maximumStock = num;
     onApply(patch, {});
   };
 
   const isSupplier = field === "supplierId";
+  const isStatus = field === "status";
 
   return (
     <div className="flex flex-wrap items-end gap-2 rounded-lg border border-primary/30 bg-primary/5 p-3">
@@ -53,11 +59,10 @@ export function BulkEditBar({
             setValue("");
           }}
           options={[
-            { value: "sellingPrice", label: "Selling price" },
-            { value: "costPrice", label: "Cost price" },
-            { value: "mrp", label: "MRP" },
             { value: "openingStock", label: "Opening stock" },
             { value: "reorderLevel", label: "Reorder level" },
+            { value: "maximumStock", label: "Maximum stock" },
+            { value: "status", label: "Status" },
             { value: "supplierId", label: "Supplier" },
             { value: "skuPrefix", label: "SKU prefix" },
             { value: "barcodePrefix", label: "Barcode prefix" },
@@ -74,6 +79,18 @@ export function BulkEditBar({
             options={[
               { value: "", label: "— none —" },
               ...suppliers.map((s) => ({ value: s.id, label: s.businessName })),
+            ]}
+          />
+        </div>
+      ) : isStatus ? (
+        <div className="w-40">
+          <Select
+            label="Value"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            options={[
+              { value: "ACTIVE", label: "Active" },
+              { value: "INACTIVE", label: "Inactive" },
             ]}
           />
         </div>

@@ -1,4 +1,5 @@
 import { NavLink } from "react-router";
+import { prefetchHandlers } from "@/app/router/prefetch";
 import { cn } from "@/utils/cn";
 import { useAuthStore } from "@/store/auth.store";
 import { useUIStore } from "@/store/ui.store";
@@ -74,13 +75,17 @@ export function MobileSidebar() {
                     to={item.path}
                     end={item.path === "/"}
                     onClick={() => setSidebarOpen(false)}
-                    className={({ isActive }) =>
+                    // On touch, `onTouchStart` fires ~100ms before the click —
+                    // enough of a head start to matter on mobile networks.
+                    {...prefetchHandlers(item.path)}
+                    className={({ isActive, isPending }) =>
                       cn(
                         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium mb-0.5",
                         "transition-all duration-150",
                         isActive
                           ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                        isPending && !isActive && "bg-accent text-accent-foreground"
                       )
                     }
                   >

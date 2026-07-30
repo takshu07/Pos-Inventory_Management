@@ -12,7 +12,7 @@ import { calcTotals } from "../helpers";
  */
 export function InventoryStep() {
   const { state, dispatch, patchDefaults } = useWizard();
-  const totals = calcTotals(state.variants);
+  const totals = calcTotals(state.variants, state.pricing);
   const d = state.defaults;
 
   const applyToAll = () => {
@@ -46,7 +46,7 @@ export function InventoryStep() {
       <FieldGroup title="Location" columns={1}>
         <Input label="Warehouse / Store" value={d.warehouse}
           onChange={(e) => patchDefaults({ warehouse: e.target.value })}
-          hint="Per-variant rack/shelf/bin can be set in the Variant Details step." />
+          hint="Per-variant shelf location can be set in the Variant Details step." />
       </FieldGroup>
 
       <div>

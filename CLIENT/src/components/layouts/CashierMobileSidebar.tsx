@@ -1,5 +1,6 @@
 import { NavLink } from "react-router";
 import { cn } from "@/utils/cn";
+import { prefetchHandlers } from "@/app/router/prefetch";
 import { useAuthStore } from "@/store/auth.store";
 import { useUIStore } from "@/store/ui.store";
 import { CASHIER_NAV } from "@/config/cashierNavigation";
@@ -60,13 +61,15 @@ export function CashierMobileSidebar() {
                   key={item.path}
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
-                  className={({ isActive }) =>
+                  {...prefetchHandlers(item.path)}
+                  className={({ isActive, isPending }) =>
                     cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium mb-0.5",
                       "transition-all duration-150",
                       isActive
                         ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      isPending && !isActive && "bg-accent text-accent-foreground"
                     )
                   }
                 >

@@ -51,3 +51,4 @@ export { EmptyState, ErrorState, OfflineState } from "./StateViews";
 
 export { LoadingSpinner, FullScreenLoader } from "./LoadingSpinner";
 export { ErrorBoundary } from "./ErrorBoundary";
+export { RouteProgress } from "./RouteProgress";

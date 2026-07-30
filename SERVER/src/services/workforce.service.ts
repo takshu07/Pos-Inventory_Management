@@ -29,6 +29,7 @@ import { ConfigurationEngine } from "../engines/configuration.engine";
 import { NotificationEngine } from "../engines/notification.engine";
 import { auditRepository } from "../repositories/audit.repository";
 import { workforceRepository } from "../repositories/workforce.repository";
+import * as workforceAlerts from "./workforceAlerts.service";
 import { employeeRepository } from "../repositories/employee.repository";
 import { invalidateAuthContext } from "../utils/authContextCache";
 import { resetHeartbeat } from "../utils/presenceHeartbeat";
@@ -36,11 +37,18 @@ import { hashPassword } from "../utils/hash";
 import {
   PRESENCE_THRESHOLD_MINUTES,
   attendancePercentage,
+  activitySeverity,
+  closeBreak,
   computeAttendance,
   derivePresence,
   describeActivity,
   activityCategory,
+  openBreakMinutes,
+  parseOperatingSystem,
+  performanceScore,
   permissionsForRole,
+  prorateMonthlyTarget,
+  targetAchievement,
   toStoreDate,
   toStoreMinutes,
   type ShiftWindow,
@@ -49,16 +57,28 @@ import type { AuthenticatedUser } from "../types/employee.types";
 import type { PaginatedResponse } from "../types/common.types";
 import type {
   ActivityQuery,
+  AssignShiftInput,
   AttendanceQuery,
   ClockInput,
+  CompareQuery,
+  CreateNoteInput,
   LoginHistoryQuery,
   ManualAttendanceInput,
   PerformanceQuery,
   ResetPasswordInput,
   RosterQuery,
+  SecurityQuery,
+  ShiftInput,
+  UpdateNoteInput,
+  UpdateShiftInput,
   UpdateWorkforceEmployeeInput,
 } from "../validation/workforce.validation";
-import type { AttendanceStatus, EmployeeRole } from "../../generated/prisma";
+import type {
+  ActionModule,
+  ActionType,
+  AttendanceStatus,
+  EmployeeRole,
+} from "../../generated/prisma";
 
 // =============================================================================
 // SCOPING — the authorization primitive of this module
@@ -193,6 +213,19 @@ function toNumber(value: unknown): number {
   return typeof maybe.toNumber === "function" ? maybe.toNumber() : Number(value) || 0;
 }
 
+/**
+ * Like toNumber, but PRESERVES null.
+ *
+ * Used for monthlyTarget, where null means "no target configured" and 0 would
+ * mean "a target of zero". Collapsing the two would make an unconfigured
+ * employee render as 0% achieved — a data gap disguised as a performance
+ * finding, which is exactly what the null-safe score exists to prevent.
+ */
+function toNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  return toNumber(value);
+}
+
 function paginate<T>(data: T[], total: number, page: number, limit: number): PaginatedResponse<T> {
   const totalPages = Math.max(1, Math.ceil(total / limit));
   return {
@@ -306,20 +339,35 @@ async function attachRosterAggregates(
   const windowDays = query.attendanceWindowDays ?? 30;
   const windowFrom = daysAgo(windowDays - 1);
 
-  const [sessions, attendanceToday, salesToday, lastActivity, attendanceWindow] =
-    await Promise.all([
-      workforceRepository.findOpenSessions(ids),
-      workforceRepository.findAttendanceForDate(ids, today),
-      workforceRepository.groupSalesByEmployee(ids, dayFrom, dayTo),
-      workforceRepository.findLastActivity(ids),
-      workforceRepository.groupAttendanceByEmployeeAndStatus(ids, windowFrom, dayTo),
-    ]);
+  // The roster tables show month-to-date money alongside today's, so the
+  // aggregate set spans both windows. Still a FIXED query count — nine batched
+  // queries for the page, not nine per row.
+  const monthFrom = daysAgo(29);
+
+  const [
+    sessions, attendanceToday, salesToday, lastActivity, attendanceWindow,
+    salesMonth, unitsMonth, returnsMonth, lastSale,
+  ] = await Promise.all([
+    workforceRepository.findOpenSessions(ids),
+    workforceRepository.findAttendanceForDate(ids, today),
+    workforceRepository.groupSalesByEmployee(ids, dayFrom, dayTo),
+    workforceRepository.findLastActivity(ids),
+    workforceRepository.groupAttendanceByEmployeeAndStatus(ids, windowFrom, dayTo),
+    workforceRepository.groupSalesByEmployee(ids, monthFrom, dayTo),
+    workforceRepository.sumUnitsByEmployee(ids, monthFrom, dayTo),
+    workforceRepository.groupReturnsByEmployee(ids, monthFrom, dayTo),
+    workforceRepository.lastSaleByEmployee(ids),
+  ]);
 
   // Index every aggregate by employeeId so the join below is O(1) per row.
   const sessionBy = new Map(sessions.map((s) => [s.employeeId, s]));
   const attendanceBy = new Map(attendanceToday.map((a) => [a.employeeId, a]));
   const salesBy = new Map(salesToday.map((s) => [s.employeeId, s]));
   const activityBy = new Map(lastActivity.map((a) => [a.employeeId, a]));
+  const monthBy = new Map(salesMonth.map((s) => [s.employeeId, s]));
+  const unitsBy = new Map(unitsMonth.map((u) => [u.employeeId, Number(u.units)]));
+  const returnsBy = new Map(returnsMonth.map((r) => [r.employeeId, r]));
+  const lastSaleBy = new Map(lastSale.map((s) => [s.employeeId, s._max.saleDate]));
 
   const attendanceCounts = new Map<string, Partial<Record<AttendanceStatus, number>>>();
   const workedMinutesBy = new Map<string, number>();
@@ -340,6 +388,30 @@ async function attachRosterAggregates(
     const attendance = attendanceBy.get(row.id);
     const sales = salesBy.get(row.id);
     const activity = activityBy.get(row.id);
+
+    // ── Month-to-date figures + the composite rating ──────────────────────
+    const month = monthBy.get(row.id);
+    const monthlyRevenue = toNumber(month?._sum.grandTotal);
+    const monthlyTransactions = month?._count._all ?? 0;
+    const monthlyReturns = returnsBy.get(row.id)?._count._all ?? 0;
+    const monthlyDiscount =
+      toNumber(month?._sum.discountAmount) + toNumber(month?._sum.manualDiscountAmount);
+
+    const attendancePct = attendancePercentage(attendanceCounts.get(row.id) ?? {});
+
+    // The rating uses the SAME engine call as the Performance page, over the
+    // same 30-day window, so a roster row and the leaderboard can never
+    // disagree about someone's score.
+    const rating = performanceScore({
+      revenue: monthlyRevenue,
+      target: prorateMonthlyTarget(toNumberOrNull(row.monthlyTarget), monthFrom, dayTo),
+      attendancePercentage: attendancePct,
+      returnRate: monthlyTransactions > 0 ? monthlyReturns / monthlyTransactions : 0,
+      discountRate:
+        monthlyRevenue + monthlyDiscount > 0
+          ? monthlyDiscount / (monthlyRevenue + monthlyDiscount)
+          : 0,
+    });
 
     return {
       id: row.id,
@@ -382,8 +454,22 @@ async function attachRosterAggregates(
         : null,
       currentActivityAt: activity?.createdAt ?? null,
 
-      attendancePercentage: attendancePercentage(attendanceCounts.get(row.id) ?? {}),
+      attendancePercentage: attendancePct,
       workedMinutes: workedMinutesBy.get(row.id) ?? 0,
+
+      // ── Enterprise roster columns ──────────────────────────────────────
+      assignedRegister: row.assignedRegister,
+      monthlyTarget: toNumberOrNull(row.monthlyTarget),
+
+      monthlyRevenue,
+      monthlyTransactions,
+      // Guarded: an employee with no sales reads ₹0, never NaN.
+      averageBill: monthlyTransactions > 0 ? monthlyRevenue / monthlyTransactions : 0,
+      unitsSold: unitsBy.get(row.id) ?? 0,
+      lastSaleAt: lastSaleBy.get(row.id) ?? null,
+
+      // Null when no target is set — the roster renders "Not set", not 0.
+      performanceScore: rating.score,
     };
   });
 }
@@ -400,12 +486,45 @@ export async function getWorkforceSummary(actor: AuthenticatedUser) {
   const scope = scopeFor(actor);
   const today = todayDate();
 
-  const [byRole, byStatus, attendanceToday, onlineCount] = await Promise.all([
-    workforceRepository.countByRole({ role: { in: scope.visibleRoles }, isActive: true }),
-    workforceRepository.countByEmploymentStatus({ role: { in: scope.visibleRoles } }),
-    workforceRepository.groupAttendanceByStatus(today),
-    workforceRepository.countOnline(PRESENCE_THRESHOLD_MINUTES),
+  const { from: dayFrom, to: dayTo } = dayBounds(today);
+
+  const [byRole, byStatus, attendanceToday, onlineCount, roster, actionCounts] =
+    await Promise.all([
+      workforceRepository.countByRole({ role: { in: scope.visibleRoles }, isActive: true }),
+      workforceRepository.countByEmploymentStatus({ role: { in: scope.visibleRoles } }),
+      workforceRepository.groupAttendanceByStatus(today),
+      workforceRepository.countOnline(PRESENCE_THRESHOLD_MINUTES),
+      workforceRepository.findRosterIds({
+        page: 1, limit: 1000, roles: scope.visibleRoles,
+        sortBy: "firstName", sortOrder: "asc",
+      }),
+      // Today's operational counters come from the EXISTING audit records —
+      // labels printed, customers added and inventory edits are already written
+      // by those modules, so this module counts them rather than re-tracking.
+      workforceRepository.groupActivityByTypeAndModule({ dateFrom: dayFrom, dateTo: dayTo }),
+    ]);
+
+  const visibleIds = roster.map((r) => r.id);
+
+  const [salesTodayRows, refundsTodayRows] = await Promise.all([
+    workforceRepository.groupSalesByEmployee(visibleIds, dayFrom, dayTo),
+    workforceRepository.groupReturnsByEmployee(visibleIds, dayFrom, dayTo),
   ]);
+
+  /**
+   * Sums grouped action counts.
+   *
+   * Both parameters are the Prisma enum types, NOT strings — a typo like
+   * "CREATE_CUSTOMER" (which does not exist; creating a customer is CREATE on
+   * the CUSTOMER module) is then a compile error rather than a card that
+   * silently reads zero forever.
+   */
+  const actionCount = (types: ActionType[], modules?: ActionModule[]) =>
+    actionCounts
+      .filter(
+        (a) => types.includes(a.actionType) && (!modules || modules.includes(a.module))
+      )
+      .reduce((sum, a) => sum + a._count._all, 0);
 
   const roleCount = (role: EmployeeRole) =>
     byRole.find((r) => r.role === role)?._count._all ?? 0;
@@ -436,6 +555,21 @@ export async function getWorkforceSummary(actor: AuthenticatedUser) {
     employmentStatus: Object.fromEntries(
       byStatus.map((s) => [s.employmentStatus, s._count._all])
     ),
+
+    // ── Today's operational counters (live dashboard strip) ────────────────
+    salesToday: salesTodayRows.reduce((sum, s) => sum + toNumber(s._sum.grandTotal), 0),
+    transactionsToday: salesTodayRows.reduce((sum, s) => sum + s._count._all, 0),
+    refundsToday: refundsTodayRows.reduce((sum, r) => sum + r._count._all, 0),
+    refundValueToday: refundsTodayRows.reduce(
+      (sum, r) => sum + toNumber(r._sum.grandTotal),
+      0
+    ),
+
+    labelsPrinted: actionCount(["LABEL_PRINT_COMPLETED", "LABEL_REPRINTED"]),
+    // Creating a customer is a generic CREATE — only the module distinguishes
+    // it from creating a product, hence the second argument.
+    customersAdded: actionCount(["CREATE"], ["CUSTOMER"]),
+    inventoryUpdates: actionCount(["INVENTORY_ADJUST"], ["INVENTORY"]),
   };
 }
 
@@ -568,17 +702,25 @@ export async function getEmployeeSales(
   const monthFrom = daysAgo(29);
   const custom = resolvePeriod(query.period, query.dateFrom, query.dateTo);
 
-  const [todaySales, weekSales, monthSales, periodSales, units, exchanges, returns, trend] =
-    await Promise.all([
-      workforceRepository.groupSalesByEmployee([id], dayWindow.from, dayWindow.to),
-      workforceRepository.groupSalesByEmployee([id], weekFrom, dayWindow.to),
-      workforceRepository.groupSalesByEmployee([id], monthFrom, dayWindow.to),
-      workforceRepository.groupSalesByEmployee([id], custom.from, custom.to),
-      workforceRepository.sumUnitsByEmployee([id], custom.from, custom.to),
-      workforceRepository.groupExchangesByEmployee([id], custom.from, custom.to),
-      workforceRepository.groupReturnsByEmployee([id], custom.from, custom.to),
-      workforceRepository.salesTrendByEmployee([id], custom.from, custom.to),
-    ]);
+  const [
+    todaySales, weekSales, monthSales, periodSales, units, exchanges, returns, trend,
+    topCategory, customers, attendanceRows,
+  ] = await Promise.all([
+    workforceRepository.groupSalesByEmployee([id], dayWindow.from, dayWindow.to),
+    workforceRepository.groupSalesByEmployee([id], weekFrom, dayWindow.to),
+    workforceRepository.groupSalesByEmployee([id], monthFrom, dayWindow.to),
+    workforceRepository.groupSalesByEmployee([id], custom.from, custom.to),
+    workforceRepository.sumUnitsByEmployee([id], custom.from, custom.to),
+    workforceRepository.groupExchangesByEmployee([id], custom.from, custom.to),
+    workforceRepository.groupReturnsByEmployee([id], custom.from, custom.to),
+    workforceRepository.salesTrendByEmployee([id], custom.from, custom.to),
+    workforceRepository.topCategoryByEmployee([id], custom.from, custom.to),
+    workforceRepository.countCustomersByEmployee([id], custom.from, custom.to),
+    // Worked minutes are the denominator of sales-per-hour. Read from the
+    // attendance the employee actually recorded, not from their shift's nominal
+    // hours — the metric is productivity per hour WORKED.
+    workforceRepository.groupAttendanceByEmployeeAndStatus([id], custom.from, custom.to),
+  ]);
 
   const revenueOf = (rows: typeof todaySales) => toNumber(rows[0]?._sum.grandTotal);
   const countOf = (rows: typeof todaySales) => rows[0]?._count._all ?? 0;
@@ -589,6 +731,11 @@ export async function getEmployeeSales(
   const discountGiven =
     toNumber(periodSales[0]?._sum.discountAmount) +
     toNumber(periodSales[0]?._sum.manualDiscountAmount);
+
+  const workedMinutes = attendanceRows.reduce(
+    (sum, row) => sum + (row._sum.workedMinutes ?? 0),
+    0
+  );
 
   return {
     todayRevenue: revenueOf(todaySales),
@@ -611,6 +758,16 @@ export async function getEmployeeSales(
 
     discountGiven,
     discountPercentage: periodRevenue > 0 ? (discountGiven / (periodRevenue + discountGiven)) * 100 : 0,
+
+    topCategory: topCategory[0]?.categoryName ?? null,
+    topCategoryUnits: Number(topCategory[0]?.units ?? 0),
+    customerCount: Number(customers[0]?.customers ?? 0),
+
+    // Null rather than 0 when no hours were recorded: dividing revenue by zero
+    // hours is undefined, and rendering "₹0/hr" would claim the employee sold
+    // nothing when in fact they never clocked in.
+    workedMinutes,
+    salesPerHour: workedMinutes > 0 ? periodRevenue / (workedMinutes / 60) : null,
 
     trend: trend.map((t) => ({
       date: t.day,
@@ -666,6 +823,29 @@ export async function getPerformance(query: PerformanceQuery, actor: Authenticat
     const discount =
       toNumber(s?._sum.discountAmount) + toNumber(s?._sum.manualDiscountAmount);
 
+    const returns = returnBy.get(emp.id)?._count._all ?? 0;
+    const attendancePct = attendancePercentage(attendanceCounts.get(emp.id) ?? {});
+
+    // Rates as fractions for the score; the percentages below are for display.
+    const returnRate = transactions > 0 ? returns / transactions : 0;
+    const discountRate = revenue + discount > 0 ? discount / (revenue + discount) : 0;
+
+    // The monthly target is pro-rated onto THIS window, so "82% of target"
+    // means the same thing whether the user picked a week or a quarter.
+    const proratedTarget = prorateMonthlyTarget(
+      toNumberOrNull(emp.monthlyTarget),
+      window.from,
+      window.to
+    );
+
+    const score = performanceScore({
+      revenue,
+      target: proratedTarget,
+      attendancePercentage: attendancePct,
+      returnRate,
+      discountRate,
+    });
+
     return {
       id: emp.id,
       employeeCode: emp.employeeCode,
@@ -676,12 +856,22 @@ export async function getPerformance(query: PerformanceQuery, actor: Authenticat
       transactions,
       averageBill: transactions > 0 ? revenue / transactions : 0,
       unitsSold: unitsBy.get(emp.id) ?? 0,
-      returns: returnBy.get(emp.id)?._count._all ?? 0,
+      returns,
       refundValue: toNumber(returnBy.get(emp.id)?._sum.grandTotal),
+      returnPercentage: returnRate * 100,
       exchanges: exchangeBy.get(emp.id)?._count._all ?? 0,
       discountGiven: discount,
-      discountPercentage: revenue + discount > 0 ? (discount / (revenue + discount)) * 100 : 0,
-      attendancePercentage: attendancePercentage(attendanceCounts.get(emp.id) ?? {}),
+      discountPercentage: discountRate * 100,
+      attendancePercentage: attendancePct,
+
+      // Null-safe by construction: both are null when no target is configured,
+      // and the UI renders "Not set" rather than a misleading 0%.
+      monthlyTarget: toNumberOrNull(emp.monthlyTarget),
+      proratedTarget,
+      targetAchievement: targetAchievement(revenue, proratedTarget),
+      performanceScore: score.score,
+      performanceBreakdown: score.breakdown,
+
       rank: 0,
     };
   });
@@ -742,6 +932,10 @@ export async function getActivity(query: ActivityQuery, actor: AuthenticatedUser
     actionType: row.actionType,
     module: row.module,
     category: activityCategory(row.actionType, row.module),
+    // Severity is derived from the action, never stored — so re-classifying
+    // (say, promoting inventory edits to Critical) is one engine change and
+    // applies retroactively to the whole history.
+    severity: activitySeverity(row.actionType, row.module),
     description: describeActivity({
       action: row.actionType,
       module: row.module,
@@ -812,10 +1006,14 @@ export async function getLoginHistory(query: LoginHistoryQuery, actor: Authentic
         : Math.round((now.getTime() - row.loginAt.getTime()) / 60000)),
     device: row.device,
     browser: row.browser,
+    operatingSystem: row.operatingSystem,
     ipAddress: row.ipAddress,
     isSuccessful: row.isSuccessful,
     failureReason: row.failureReason,
     endReason: row.endReason,
+    // Distinguishes an owner-forced logout from a self-service one in the UI.
+    wasTerminated: row.endReason === "TERMINATED",
+    terminatedById: row.terminatedById,
     sessionStatus: row.logoutAt
       ? ("ENDED" as const)
       : derivePresence({ loginAt: row.loginAt, logoutAt: row.logoutAt, lastSeenAt: row.lastSeenAt }, now) === "ONLINE"
@@ -882,6 +1080,10 @@ export async function getAttendance(query: AttendanceQuery, actor: Authenticated
     lateMinutes: row.lateMinutes,
     earlyExitMinutes: row.earlyExitMinutes,
     overtimeMinutes: row.overtimeMinutes,
+    // Accumulated break plus any break still running, so the column reads
+    // correctly mid-break instead of jumping when the break ends.
+    breakMinutes: row.breakMinutes + openBreakMinutes(row.breakStartedAt),
+    isOnBreak: row.breakStartedAt !== null,
     notes: row.notes,
     shift: row.shift,
   }));
@@ -1051,17 +1253,14 @@ export async function clockIn(input: ClockInput, actor: AuthenticatedUser) {
   });
 
   // A late arrival is exactly the kind of exception a manager should be told
-  // about rather than have to go looking for.
+  // about rather than have to go looking for. Wording and delivery live in
+  // workforceAlerts so every workforce alert reads consistently.
   if (computed.lateMinutes > 0) {
-    NotificationEngine.dispatch({
-      type: "ATTENDANCE_LATE",
-      title: "Late arrival",
-      message: `${employee.firstName} ${employee.lastName} clocked in ${computed.lateMinutes} minutes late.`,
-      referenceId: record.id,
-      referenceType: "ATTENDANCE",
-      targetRole: "OWNER",
-    }).catch((err: unknown) => {
-      logger.error({ err }, "[WorkforceService] Late-arrival notification failed");
+    workforceAlerts.employeeLate({
+      employeeId: targetId,
+      employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+      lateMinutes: computed.lateMinutes,
+      attendanceId: record.id,
     });
   }
 
@@ -1275,6 +1474,8 @@ export async function updateWorkforceProfile(
     ...(input.emergencyContactName !== undefined ? { emergencyContactName: input.emergencyContactName } : {}),
     ...(input.emergencyContactPhone !== undefined ? { emergencyContactPhone: input.emergencyContactPhone } : {}),
     ...(input.emergencyContactRelation !== undefined ? { emergencyContactRelation: input.emergencyContactRelation } : {}),
+    ...(input.assignedRegister !== undefined ? { assignedRegister: input.assignedRegister } : {}),
+    ...(input.monthlyTarget !== undefined ? { monthlyTarget: input.monthlyTarget } : {}),
   });
 
   // Deactivation must take effect on the NEXT request, not when a cached auth
@@ -1400,11 +1601,254 @@ export async function changeRole(
 }
 
 // =============================================================================
-// SHIFTS & PERMISSIONS (read-only surfaces)
+// EMPLOYEE COMPARISON (OWNER-only)
+// =============================================================================
+
+/**
+ * Side-by-side comparison of two employees over one window.
+ *
+ * Built by calling getEmployeeSales twice rather than by writing a third
+ * aggregation path: the comparison MUST agree with what each employee's own
+ * drawer shows, and the only way to guarantee that is to read the same
+ * function. A bespoke query here would drift the moment either changed.
+ */
+export async function compareEmployees(query: CompareQuery, actor: AuthenticatedUser) {
+  if (actor.role !== "OWNER") {
+    throw new AppError(HTTP_STATUS.FORBIDDEN, "Only the owner can compare employees.");
+  }
+
+  if (query.employeeA === query.employeeB) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, "Choose two different employees.");
+  }
+
+  const window = resolvePeriod(query.period, query.dateFrom, query.dateTo);
+
+  const perQuery: PerformanceQuery = {
+    period: query.period,
+    ...(query.dateFrom ? { dateFrom: query.dateFrom } : {}),
+    ...(query.dateTo ? { dateTo: query.dateTo } : {}),
+  } as PerformanceQuery;
+
+  const attendanceQuery = (id: string) =>
+    ({
+      period: query.period,
+      employeeId: id,
+      page: 1,
+      limit: 1,
+      ...(query.dateFrom ? { dateFrom: query.dateFrom } : {}),
+      ...(query.dateTo ? { dateTo: query.dateTo } : {}),
+    }) as AttendanceQuery;
+
+  const [profileA, profileB, salesA, salesB, attA, attB] = await Promise.all([
+    workforceRepository.findEmployeeProfile(query.employeeA),
+    workforceRepository.findEmployeeProfile(query.employeeB),
+    getEmployeeSales(query.employeeA, perQuery, actor),
+    getEmployeeSales(query.employeeB, perQuery, actor),
+    getAttendanceSummary(attendanceQuery(query.employeeA), actor),
+    getAttendanceSummary(attendanceQuery(query.employeeB), actor),
+  ]);
+
+  if (!profileA || !profileB) {
+    throw new AppError(HTTP_STATUS.NOT_FOUND, "Employee not found.");
+  }
+
+  const side = (
+    profile: NonNullable<typeof profileA>,
+    sales: Awaited<ReturnType<typeof getEmployeeSales>>,
+    attendance: Awaited<ReturnType<typeof getAttendanceSummary>>
+  ) => {
+    const returnRate =
+      sales.periodTransactions > 0 ? sales.returns / sales.periodTransactions : 0;
+    const discountRate =
+      sales.periodRevenue + sales.discountGiven > 0
+        ? sales.discountGiven / (sales.periodRevenue + sales.discountGiven)
+        : 0;
+
+    const proratedTarget = prorateMonthlyTarget(
+      toNumberOrNull(profile.monthlyTarget),
+      window.from,
+      window.to
+    );
+
+    const score = performanceScore({
+      revenue: sales.periodRevenue,
+      target: proratedTarget,
+      attendancePercentage: attendance.attendancePercentage,
+      returnRate,
+      discountRate,
+    });
+
+    return {
+      id: profile.id,
+      employeeCode: profile.employeeCode,
+      fullName: `${profile.firstName} ${profile.lastName}`.trim(),
+      role: profile.role,
+      photoUrl: profile.photoUrl,
+
+      revenue: sales.periodRevenue,
+      transactions: sales.periodTransactions,
+      averageBill: sales.averageBillValue,
+      unitsSold: sales.unitsSold,
+      returns: sales.returns,
+      refundValue: sales.returnsValue,
+      exchanges: sales.exchanges,
+      discountGiven: sales.discountGiven,
+      discountPercentage: sales.discountPercentage,
+
+      attendancePercentage: attendance.attendancePercentage,
+      workedMinutes: attendance.workedMinutes,
+      overtimeMinutes: attendance.overtimeMinutes,
+      lateMinutes: attendance.lateMinutes,
+
+      targetAchievement: targetAchievement(sales.periodRevenue, proratedTarget),
+      performanceScore: score.score,
+    };
+  };
+
+  return {
+    period: window,
+    a: side(profileA, salesA, attA),
+    b: side(profileB, salesB, attB),
+  };
+}
+
+// =============================================================================
+// SHIFTS & PERMISSIONS
 // =============================================================================
 
 export async function listShifts() {
   return workforceRepository.findShifts(false);
+}
+
+/**
+ * Shift expectedMinutes is DERIVED, never accepted from the client.
+ *
+ * It is the denominator of every attendance percentage, so letting a caller
+ * post an arbitrary value would let them make attendance look however they
+ * like. Computing it from start/end/break is the single source of truth.
+ */
+function deriveExpectedMinutes(input: {
+  startMinute: number;
+  endMinute: number;
+  breakMinutes: number;
+}): number {
+  const end =
+    input.endMinute <= input.startMinute ? input.endMinute + 1440 : input.endMinute;
+  return Math.max(0, end - input.startMinute - input.breakMinutes);
+}
+
+export async function createShift(input: ShiftInput, actor: AuthenticatedUser) {
+  if (actor.role !== "OWNER") {
+    throw new AppError(HTTP_STATUS.FORBIDDEN, "Only the owner can manage shifts.");
+  }
+
+  const shift = await workforceRepository.createShift({
+    name: input.name,
+    code: input.code,
+    startMinute: input.startMinute,
+    endMinute: input.endMinute,
+    breakMinutes: input.breakMinutes,
+    graceMinutes: input.graceMinutes,
+    workingDays: input.workingDays,
+    isActive: input.isActive,
+    colorHex: input.colorHex ?? null,
+    storeCode: input.storeCode ?? null,
+    expectedMinutes: deriveExpectedMinutes(input),
+  });
+
+  auditRepository.create({
+    performedBy: actor.id,
+    action: "CREATE",
+    module: "EMPLOYEE",
+    tableName: "shifts",
+    recordId: shift.id,
+    newData: shift as unknown as Record<string, unknown>,
+  });
+
+  return shift;
+}
+
+export async function updateShift(
+  id: string,
+  input: UpdateShiftInput,
+  actor: AuthenticatedUser
+) {
+  if (actor.role !== "OWNER") {
+    throw new AppError(HTTP_STATUS.FORBIDDEN, "Only the owner can manage shifts.");
+  }
+
+  const before = await workforceRepository.findShiftById(id);
+  if (!before) throw new AppError(HTTP_STATUS.NOT_FOUND, "Shift not found.");
+
+  // Recompute expectedMinutes whenever any of its inputs move, using the new
+  // value where supplied and the stored one otherwise.
+  const touchesWindow =
+    input.startMinute !== undefined ||
+    input.endMinute !== undefined ||
+    input.breakMinutes !== undefined;
+
+  const expectedMinutes = touchesWindow
+    ? deriveExpectedMinutes({
+        startMinute: input.startMinute ?? before.startMinute,
+        endMinute: input.endMinute ?? before.endMinute,
+        breakMinutes: input.breakMinutes ?? before.breakMinutes,
+      })
+    : undefined;
+
+  // Key-by-key for the same exactOptionalPropertyTypes reason as updateNote.
+  const updated = await workforceRepository.updateShift(id, {
+    ...(input.name !== undefined ? { name: input.name } : {}),
+    ...(input.code !== undefined ? { code: input.code } : {}),
+    ...(input.startMinute !== undefined ? { startMinute: input.startMinute } : {}),
+    ...(input.endMinute !== undefined ? { endMinute: input.endMinute } : {}),
+    ...(input.breakMinutes !== undefined ? { breakMinutes: input.breakMinutes } : {}),
+    ...(input.graceMinutes !== undefined ? { graceMinutes: input.graceMinutes } : {}),
+    ...(input.workingDays !== undefined ? { workingDays: input.workingDays } : {}),
+    ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
+    ...(input.colorHex !== undefined ? { colorHex: input.colorHex } : {}),
+    ...(input.storeCode !== undefined ? { storeCode: input.storeCode } : {}),
+    ...(expectedMinutes !== undefined ? { expectedMinutes } : {}),
+  });
+
+  auditRepository.create({
+    performedBy: actor.id,
+    action: "UPDATE",
+    module: "EMPLOYEE",
+    tableName: "shifts",
+    recordId: id,
+    oldData: before as unknown as Record<string, unknown>,
+    newData: updated as unknown as Record<string, unknown>,
+  });
+
+  return updated;
+}
+
+/** Bulk-assigns (or clears, with a null shiftId) a shift across employees. */
+export async function assignShift(input: AssignShiftInput, actor: AuthenticatedUser) {
+  if (actor.role !== "OWNER") {
+    throw new AppError(HTTP_STATUS.FORBIDDEN, "Only the owner can assign shifts.");
+  }
+
+  if (input.shiftId) {
+    const shift = await workforceRepository.findShiftById(input.shiftId);
+    if (!shift) throw new AppError(HTTP_STATUS.BAD_REQUEST, "Shift not found.");
+  }
+
+  const count = await workforceRepository.assignShiftToEmployees(
+    input.employeeIds,
+    input.shiftId
+  );
+
+  auditRepository.create({
+    performedBy: actor.id,
+    action: "SHIFT_ASSIGNED",
+    module: "EMPLOYEE",
+    tableName: "employees",
+    recordId: input.shiftId ?? "unassigned",
+    newData: { shiftId: input.shiftId, employeeIds: input.employeeIds },
+  });
+
+  return { assigned: count, shiftId: input.shiftId };
 }
 
 /** The read-only Permissions tab. Served from the engine's matrix, not the DB. */
@@ -1426,6 +1870,324 @@ export async function getPermissions(id: string, actor: AuthenticatedUser) {
 }
 
 // =============================================================================
+// EMPLOYEE NOTES — OWNER-ONLY AT EVERY ENTRY POINT
+//
+// The privacy requirement here is absolute: "Private notes must never be
+// visible to Managers." That is enforced by a single guard used by all five
+// functions rather than by five separate role checks, because five checks is
+// five chances to forget one. There is deliberately no per-note visibility
+// flag — the whole table is owner-only, so there is no flag to get wrong.
+// =============================================================================
+
+/** The one gate. Every note operation calls this first. */
+function assertNotesAccess(actor: AuthenticatedUser): void {
+  if (actor.role !== "OWNER") {
+    throw new AppError(
+      HTTP_STATUS.FORBIDDEN,
+      "Employee notes are visible to the owner only."
+    );
+  }
+}
+
+export async function listNotes(employeeId: string, actor: AuthenticatedUser) {
+  assertNotesAccess(actor);
+
+  const employee = await workforceRepository.findEmployeeProfile(employeeId);
+  if (!employee) throw new AppError(HTTP_STATUS.NOT_FOUND, "Employee not found.");
+
+  const notes = await workforceRepository.findNotes(employeeId);
+
+  return notes.map((note) => ({
+    ...note,
+    author: note.author
+      ? {
+          id: note.author.id,
+          fullName: `${note.author.firstName} ${note.author.lastName}`.trim(),
+          employeeCode: note.author.employeeCode,
+        }
+      : null,
+  }));
+}
+
+export async function createNote(
+  employeeId: string,
+  input: CreateNoteInput,
+  actor: AuthenticatedUser
+) {
+  assertNotesAccess(actor);
+
+  const employee = await workforceRepository.findEmployeeProfile(employeeId);
+  if (!employee) throw new AppError(HTTP_STATUS.NOT_FOUND, "Employee not found.");
+
+  const note = await workforceRepository.createNote({
+    employeeId,
+    authorId: actor.id,
+    category: input.category,
+    body: input.body,
+    isPinned: input.isPinned,
+    storeCode: employee.storeCode,
+  });
+
+  // Audited like any other owner action. The BODY is deliberately not written
+  // to the audit log — it would leak the private note into a table managers can
+  // read, defeating the whole point of the guard above.
+  auditRepository.create({
+    performedBy: actor.id,
+    action: "CREATE",
+    module: "EMPLOYEE",
+    tableName: "employee_notes",
+    recordId: note.id,
+    newData: { employeeId, category: input.category, isPinned: input.isPinned },
+  });
+
+  return note;
+}
+
+export async function updateNote(
+  noteId: string,
+  input: UpdateNoteInput,
+  actor: AuthenticatedUser
+) {
+  assertNotesAccess(actor);
+
+  const existing = await workforceRepository.findNoteById(noteId);
+  if (!existing) throw new AppError(HTTP_STATUS.NOT_FOUND, "Note not found.");
+
+  // Built key-by-key rather than spread: `exactOptionalPropertyTypes` makes an
+  // explicitly-undefined key different from an absent one, and Prisma treats
+  // the former as "write undefined" rather than "leave alone".
+  const updated = await workforceRepository.updateNote(noteId, {
+    ...(input.category !== undefined ? { category: input.category } : {}),
+    ...(input.body !== undefined ? { body: input.body } : {}),
+    ...(input.isPinned !== undefined ? { isPinned: input.isPinned } : {}),
+  });
+
+  auditRepository.create({
+    performedBy: actor.id,
+    action: "UPDATE",
+    module: "EMPLOYEE",
+    tableName: "employee_notes",
+    recordId: noteId,
+    newData: { category: updated.category, isPinned: updated.isPinned },
+  });
+
+  return updated;
+}
+
+export async function deleteNote(noteId: string, actor: AuthenticatedUser) {
+  assertNotesAccess(actor);
+
+  const existing = await workforceRepository.findNoteById(noteId);
+  if (!existing) throw new AppError(HTTP_STATUS.NOT_FOUND, "Note not found.");
+
+  await workforceRepository.deleteNote(noteId);
+
+  auditRepository.create({
+    performedBy: actor.id,
+    action: "DELETE",
+    module: "EMPLOYEE",
+    tableName: "employee_notes",
+    recordId: noteId,
+    oldData: { employeeId: existing.employeeId, category: existing.category },
+  });
+}
+
+// =============================================================================
+// BREAK TRACKING
+// =============================================================================
+
+/**
+ * Starts or ends a break on today's attendance row.
+ *
+ * `breakStartedAt` being non-null IS the open-break state — there is no
+ * separate boolean to desync. Toggling is expressed as two explicit endpoints
+ * rather than one toggle so a retried request cannot accidentally invert the
+ * state the caller intended.
+ */
+export async function startBreak(input: ClockInput, actor: AuthenticatedUser) {
+  const targetId = input.employeeId ?? actor.id;
+  if (targetId !== actor.id && actor.role !== "OWNER") {
+    throw new AppError(
+      HTTP_STATUS.FORBIDDEN,
+      "Only the owner can record breaks on behalf of another employee."
+    );
+  }
+
+  const date = todayDate();
+  const existing = await workforceRepository.findAttendanceByEmployeeAndDate(targetId, date);
+
+  if (!existing?.clockInAt) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, "Clock in before starting a break.");
+  }
+  if (existing.clockOutAt) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, "The day is already closed.");
+  }
+  if (existing.breakStartedAt) {
+    throw new AppError(HTTP_STATUS.CONFLICT, "A break is already in progress.");
+  }
+
+  return workforceRepository.updateAttendanceBreak(existing.id, {
+    breakStartedAt: input.at ?? new Date(),
+  });
+}
+
+export async function endBreak(input: ClockInput, actor: AuthenticatedUser) {
+  const targetId = input.employeeId ?? actor.id;
+  if (targetId !== actor.id && actor.role !== "OWNER") {
+    throw new AppError(
+      HTTP_STATUS.FORBIDDEN,
+      "Only the owner can record breaks on behalf of another employee."
+    );
+  }
+
+  const date = todayDate();
+  const existing = await workforceRepository.findAttendanceByEmployeeAndDate(targetId, date);
+
+  if (!existing?.breakStartedAt) {
+    throw new AppError(HTTP_STATUS.BAD_REQUEST, "No break is in progress.");
+  }
+
+  // Accumulate rather than overwrite — several breaks a day is normal.
+  const total = closeBreak({
+    accumulatedMinutes: existing.breakMinutes,
+    breakStartedAt: existing.breakStartedAt,
+    at: input.at ?? new Date(),
+  });
+
+  return workforceRepository.updateAttendanceBreak(existing.id, {
+    breakMinutes: total,
+    breakStartedAt: null,
+  });
+}
+
+// =============================================================================
+// SECURITY DASHBOARD (Login History page)
+// =============================================================================
+
+/**
+ * Counters + failed-attempt groups for the security view.
+ *
+ * Scoped the same way the login history list is: a manager sees only their
+ * operational team's sessions, never the owner's.
+ */
+export async function getSecurityOverview(
+  query: SecurityQuery,
+  actor: AuthenticatedUser
+) {
+  const scope = scopeFor(actor);
+  const window = resolvePeriod(query.period, query.dateFrom, query.dateTo);
+
+  let employeeIds: string[] | undefined;
+  if (actor.role !== "OWNER") {
+    const visible = await workforceRepository.findRosterIds({
+      page: 1, limit: 1000, roles: scope.visibleRoles,
+      sortBy: "firstName", sortOrder: "asc",
+    });
+    employeeIds = visible.map((v) => v.id);
+  }
+
+  const [stats, failures] = await Promise.all([
+    workforceRepository.loginSecurityStats({
+      employeeIds,
+      since: window.from,
+      presenceThresholdMinutes: PRESENCE_THRESHOLD_MINUTES,
+    }),
+    workforceRepository.failedLoginAttempts({
+      employeeIds,
+      since: window.from,
+      limit: query.limit,
+    }),
+  ]);
+
+  return {
+    period: window,
+    ...stats,
+    failedAttempts: failures.map((f) => ({
+      employeeId: f.employeeId,
+      fullName: f.fullName,
+      employeeCode: f.employeeCode,
+      ipAddress: f.ipAddress,
+      reason: f.failureReason,
+      attempts: Number(f.attempts),
+      lastAttemptAt: f.lastAttemptAt,
+      // Repeated failures from one source is the pattern worth surfacing; the
+      // threshold matches what a lockout policy would use.
+      isSuspicious: Number(f.attempts) >= 5,
+    })),
+  };
+}
+
+/**
+ * OWNER-only force-termination of a single session.
+ *
+ * Deliberately narrower than closeOpenSessions (which ends EVERY session for an
+ * employee and is what password-reset uses): the security dashboard revokes one
+ * suspicious device without signing the person out of the till they are working.
+ */
+export async function terminateSession(sessionId: string, actor: AuthenticatedUser) {
+  if (actor.role !== "OWNER") {
+    throw new AppError(HTTP_STATUS.FORBIDDEN, "Only the owner can terminate sessions.");
+  }
+
+  const session = await workforceRepository.findSessionById(sessionId);
+  if (!session) throw new AppError(HTTP_STATUS.NOT_FOUND, "Session not found.");
+
+  if (session.logoutAt) {
+    throw new AppError(HTTP_STATUS.CONFLICT, "That session has already ended.");
+  }
+
+  const terminated = await workforceRepository.terminateSession(sessionId, actor.id);
+  if (!terminated) {
+    throw new AppError(HTTP_STATUS.CONFLICT, "That session has already ended.");
+  }
+
+  // The token must stop working on the NEXT request, not whenever a cached auth
+  // context happens to expire — otherwise "terminate" is advisory.
+  invalidateAuthContext(session.employeeId);
+
+  auditRepository.create({
+    performedBy: actor.id,
+    action: "LOGOUT",
+    module: "AUTH",
+    tableName: "login_history",
+    recordId: sessionId,
+    newData: { employeeId: session.employeeId, endReason: "TERMINATED" },
+  });
+
+  logger.info(
+    { terminatedBy: actor.id, employeeId: session.employeeId, sessionId },
+    "Session force-terminated by owner"
+  );
+
+  return { sessionId, employeeId: session.employeeId };
+}
+
+/** OWNER-only: end every session for one employee ("force logout"). */
+export async function forceLogout(employeeId: string, actor: AuthenticatedUser) {
+  if (actor.role !== "OWNER") {
+    throw new AppError(HTTP_STATUS.FORBIDDEN, "Only the owner can force a logout.");
+  }
+
+  const employee = await workforceRepository.findEmployeeProfile(employeeId);
+  if (!employee) throw new AppError(HTTP_STATUS.NOT_FOUND, "Employee not found.");
+
+  await workforceRepository.closeOpenSessions(employeeId, "TERMINATED");
+  invalidateAuthContext(employeeId);
+  resetHeartbeat(employeeId);
+
+  auditRepository.create({
+    performedBy: actor.id,
+    action: "LOGOUT",
+    module: "AUTH",
+    tableName: "employees",
+    recordId: employeeId,
+    newData: { endReason: "TERMINATED", scope: "ALL_SESSIONS" },
+  });
+
+  return { employeeId };
+}
+
+// =============================================================================
 // SESSION TRACKING — called by the auth module
 // =============================================================================
 
@@ -1442,16 +2204,68 @@ export async function recordLogin(params: {
 }) {
   const parsed = parseUserAgent(params.userAgent);
 
+  // A burst of failures from one source is the security signal worth waking
+  // someone for. Checked only on FAILURE so a normal login pays nothing, and
+  // fire-and-forget so a slow count can never delay the auth response.
+  if (!params.isSuccessful) {
+    void raiseFailedLoginAlert(params.employeeId, params.ipAddress);
+  }
+
   return workforceRepository.createLoginSession({
     employeeId: params.employeeId,
     device: parsed.device,
     browser: parsed.browser,
+    // Parsed once at write time so the security table can filter and group by
+    // OS in SQL rather than re-parsing a UA string per row on every read.
+    operatingSystem: parseOperatingSystem(params.userAgent),
     ipAddress: params.ipAddress,
     userAgent: params.userAgent,
     isSuccessful: params.isSuccessful,
     failureReason: params.failureReason ?? null,
   });
 }
+
+/**
+ * Alerts when failed attempts for one employee cross the threshold.
+ *
+ * Fires only ON the threshold, not above it: alerting at 5, 6, 7… would turn a
+ * single brute-force attempt into a notification flood that hides the signal it
+ * exists to raise.
+ */
+async function raiseFailedLoginAlert(
+  employeeId: string,
+  ipAddress: string | null
+): Promise<void> {
+  try {
+    const since = new Date(Date.now() - 60 * 60_000);
+    const attempts = await workforceRepository.failedLoginAttempts({
+      employeeIds: [employeeId],
+      since,
+      limit: 5,
+    });
+
+    // The row for THIS source; +1 because the current attempt is not written yet.
+    const forThisIp = attempts.find((a) => a.ipAddress === ipAddress);
+    const count = Number(forThisIp?.attempts ?? 0) + 1;
+
+    if (count !== ALERT_THRESHOLD_FAILED_LOGINS) return;
+
+    const employee = await workforceRepository.findEmployeeProfile(employeeId);
+    if (!employee) return;
+
+    workforceAlerts.multipleFailedLogins({
+      employeeId,
+      employeeName: `${employee.firstName} ${employee.lastName}`.trim(),
+      attempts: count,
+      ipAddress,
+    });
+  } catch (err) {
+    // Never let alerting break a login path — including a failing one.
+    logger.error({ err, employeeId }, "[WorkforceService] Failed-login alert check failed");
+  }
+}
+
+const ALERT_THRESHOLD_FAILED_LOGINS = workforceAlerts.ALERT_THRESHOLDS.failedLogins;
 
 export async function recordLogout(employeeId: string, reason = "MANUAL") {
   await workforceRepository.closeOpenSessions(employeeId, reason);

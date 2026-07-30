@@ -431,6 +431,18 @@ model Employee {
   /// Denormalised termination date, for tenure reporting after TERMINATED.
   exitDate DateTime?
 
+  /// The till this employee normally works. A free-text code rather than a FK
+  /// to CashRegister: a CashRegister row is one OPENING SESSION of a till, not
+  /// the till itself, so a FK would bind an employee to a single shift's drawer
+  /// rather than to the physical counter.
+  assignedRegister String?
+
+  /// Monthly revenue target — the denominator of Target Achievement and the
+  /// revenue term of the performance score. NULL means "no target set" and MUST
+  /// render as such: showing 0% would read as total failure rather than as an
+  /// unconfigured value.
+  monthlyTarget Decimal? @db.Decimal(12, 2)
+
   purchases          Purchase[]
   sales              Sale[]
   inventoryMovements InventoryMovement[]
@@ -453,6 +465,18 @@ model Employee {
   attendanceMarked Attendance[]       @relation("AttendanceMarkedBy")
   leaveRequests    LeaveRequest[]     @relation("LeaveRequestedBy")
   leavesReviewed   LeaveRequest[]     @relation("LeaveReviewedBy")
+  notes            EmployeeNote[]     @relation("NoteSubject")
+  notesAuthored    EmployeeNote[]     @relation("NoteAuthor")
+
+  // ── Inventory module ───────────────────────────────────────────────────────
+  reservationsCreated  InventoryReservation[] @relation("ReservationCreatedBy")
+  reservationsReleased InventoryReservation[] @relation("ReservationReleasedBy")
+  adjustmentsRequested StockAdjustment[]      @relation("AdjustmentRequestedBy")
+  adjustmentsReviewed  StockAdjustment[]      @relation("AdjustmentReviewedBy")
+  cycleCountsStarted   CycleCount[]           @relation("CycleCountStartedBy")
+  cycleCountsCompleted CycleCount[]           @relation("CycleCountCompletedBy")
+  cycleCountItems      CycleCountItem[]       @relation("CycleCountItemCountedBy")
+  damageReports        DamagedStock[]         @relation("DamageReportedBy")
 
   @@index([email])
   @@index([phone])
@@ -579,6 +603,15 @@ model Attendance {
   earlyExitMinutes Int @default(0)
   overtimeMinutes  Int @default(0)
 
+  /// ── Break tracking ────────────────────────────────────────────────────────
+  /// Actual break taken, as opposed to the shift's nominal `breakMinutes`
+  /// allowance. `breakStartedAt` is non-null only while a break is OPEN, which
+  /// is what makes "on break" a derived state rather than a stored flag that
+  /// can desync. On break-end the elapsed minutes are added to breakMinutes and
+  /// breakStartedAt is cleared.
+  breakMinutes   Int       @default(0)
+  breakStartedAt DateTime?
+
   notes String?
 
   /// Set when an OWNER manually created or corrected the record.
@@ -651,6 +684,49 @@ model LeaveRequest {
   @@index([status])
   @@index([startDate, endDate])
   @@map("leave_requests")
+}
+
+/// Internal HR notes about an employee ("Excellent performer", "Written
+/// warning"). OWNER-ONLY at every layer: the service refuses to read or write
+/// these for any other role, so a manager cannot see notes written about them
+/// or about their peers. There is deliberately no "visibility" column — a
+/// per-note flag would invite a bug that leaks one; the whole table is private.
+enum EmployeeNoteCategory {
+  GENERAL
+  PRAISE
+  TRAINING
+  PROMOTION
+  WARNING
+}
+
+model EmployeeNote {
+  id String @id @default(cuid())
+
+  /// Who the note is ABOUT.
+  employeeId String
+  /// Who WROTE it. Always an OWNER at write time; kept as a FK so a later
+  /// ownership transfer still shows who authored the note.
+  authorId String
+
+  category EmployeeNoteCategory @default(GENERAL)
+  body     String
+
+  /// Pins a note to the top of the drawer tab — used for the one thing about
+  /// this employee a reader must not miss.
+  isPinned Boolean @default(false)
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation("NoteSubject", fields: [employeeId], references: [id], onDelete: Cascade)
+  author   Employee @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  /// The drawer's Notes tab: one employee's notes, pinned first then newest.
+  @@index([employeeId, isPinned, createdAt(sort: Desc)], map: "employee_notes_employeeid_pinned_createdat_idx")
+  @@index([category])
+  @@map("employee_notes")
 }
 
 // =============================================================================
@@ -818,6 +894,11 @@ model ProductVariant {
   exchangeReturnItems ExchangeReturnItem[]
   exchangeIssuedItems ExchangeIssuedItem[]
   printJobItems       PrintJobItem[]
+  reservations        InventoryReservation[]
+  stockAdjustments    StockAdjustment[]
+  cycleCountItems     CycleCountItem[]
+  damagedStock        DamagedStock[]
+  inventorySnapshots  InventorySnapshot[]
 
   @@unique([productId, sizeId, colorId])
   // sku and barcode have @unique above — PostgreSQL automatically creates
@@ -858,6 +939,11 @@ model InventoryMovement {
   relatedSale     Sale?          @relation(fields: [relatedSaleId], references: [id], onDelete: Restrict)
   relatedExchange Exchange?      @relation(fields: [relatedExchangeId], references: [id], onDelete: Restrict)
 
+  /// Back-links from the records that CAUSED this movement. Both optional:
+  /// most movements (a sale, a purchase receipt) have neither.
+  stockAdjustment StockAdjustment?
+  damagedStock    DamagedStock?
+
   @@index([variantId])
   @@index([type])
   @@index([createdAt])
@@ -865,6 +951,320 @@ model InventoryMovement {
   @@index([relatedSaleId])
   @@index([relatedExchangeId])
   @@map("inventory_movements")
+}
+
+// =============================================================================
+// INVENTORY — RESERVATIONS, ADJUSTMENTS, COUNTS, DAMAGE, SNAPSHOTS
+//
+// Additive to the existing ledger. The invariant that already holds — that
+// ProductVariant.currentStock is written ONLY by executeMovement() — is
+// preserved: nothing below writes stock directly. Reservations sit BESIDE
+// stock rather than inside it, so `currentStock` continues to mean "physically
+// present", which is what a cycle counter walking the floor actually counts.
+// =============================================================================
+
+/// Why a quantity is being held back from sale.
+enum ReservationType {
+  /// Held for an in-progress exchange (goods promised to a customer).
+  EXCHANGE
+  /// Held for a named customer (a hold / layaway).
+  CUSTOMER_HOLD
+  /// Held for a future or online order awaiting fulfilment.
+  ORDER
+  /// Held by staff for any other reason; requires a note.
+  OTHER
+}
+
+enum ReservationStatus {
+  ACTIVE
+  /// The goods were handed over — the reservation converted into a sale.
+  FULFILLED
+  /// Released back to available stock, manually or by expiry.
+  RELEASED
+  EXPIRED
+}
+
+/// A quantity of a variant held back from sale without leaving the shelf.
+///
+/// Availability is DERIVED: available = currentStock − Σ(ACTIVE reservations).
+/// It is never stored, because a stored copy is a second source of truth that
+/// drifts the moment a reservation expires without anything recalculating it.
+model InventoryReservation {
+  id        String @id @default(cuid())
+  variantId String
+
+  quantity Int
+  type     ReservationType
+  status   ReservationStatus @default(ACTIVE)
+
+  /// Who or what the stock is held for. Free-text so a hold can name a walk-in
+  /// customer who has no Customer record yet.
+  heldFor   String?
+  /// Set when the hold is for a known customer.
+  customerId String?
+  /// Set when the hold belongs to an exchange in progress.
+  exchangeId String?
+
+  reason String?
+
+  /// ACTIVE reservations past this instant are treated as expired by the
+  /// availability query, so a forgotten hold cannot sterilise stock forever.
+  expiresAt DateTime?
+
+  createdById String
+  releasedById String?
+  releasedAt   DateTime?
+
+  /// Multi-store readiness — NULL = the single default store.
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  createdBy  Employee       @relation("ReservationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  releasedBy Employee?      @relation("ReservationReleasedBy", fields: [releasedById], references: [id], onDelete: SetNull)
+  customer   Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  /// THE availability query: active holds for a set of variants. Partial index
+  /// because released and fulfilled rows are history and never sum into
+  /// availability, yet will eventually outnumber active ones many times over.
+  @@index([variantId, status], map: "inventory_reservations_variant_status_idx")
+  @@index([status, expiresAt], map: "inventory_reservations_expiry_idx")
+  @@index([customerId])
+  @@index([exchangeId])
+  @@map("inventory_reservations")
+}
+
+/// Why stock was manually corrected. Stored as an enum rather than free text so
+/// the Adjustment Report can group by reason without parsing prose.
+enum AdjustmentReason {
+  DAMAGE
+  LOST
+  THEFT
+  MISCOUNT
+  SUPPLIER_ERROR
+  SYSTEM_CORRECTION
+  EXPIRED
+  OTHER
+}
+
+enum AdjustmentStatus {
+  /// A manager raised it; it changes no stock until an owner approves.
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A manual stock correction, with approval.
+///
+/// The APPROVAL is the point of this table. A manager may request a correction
+/// but not perform one, so the request must exist as a durable record before it
+/// touches stock. Only on approval is executeMovement() called — which is why
+/// `movementId` is nullable: a pending or rejected adjustment never moved
+/// anything, and pretending otherwise would corrupt the ledger.
+model StockAdjustment {
+  id        String @id @default(cuid())
+  variantId String
+
+  /// Signed delta. Negative removes stock.
+  quantityChange Int
+  /// Snapshot at request time, so a stale request is detectable on approval.
+  stockAtRequest Int
+
+  reason AdjustmentReason
+  /// Required by validation when reason is OTHER.
+  notes  String?
+
+  status AdjustmentStatus @default(PENDING)
+
+  requestedById String
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewNotes   String?
+
+  /// The ledger entry this adjustment produced. NULL until approved — the
+  /// ledger is only written when stock actually moves.
+  movementId String? @unique
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variant     ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  requestedBy Employee           @relation("AdjustmentRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy  Employee?          @relation("AdjustmentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  movement    InventoryMovement? @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  /// The approval queue: pending first, newest first.
+  @@index([status, createdAt(sort: Desc)], map: "stock_adjustments_status_createdat_idx")
+  @@index([variantId])
+  @@index([requestedById])
+  @@map("stock_adjustments")
+}
+
+enum CycleCountStatus {
+  IN_PROGRESS
+  /// Counted and posted — variances became adjustments.
+  COMPLETED
+  CANCELLED
+}
+
+/// A stock-take session.
+///
+/// Scoped by category/brand/supplier rather than counting everything, because a
+/// full count of a retail catalogue is a day's work nobody does; partial counts
+/// that actually happen are worth more than a complete one that does not.
+model CycleCount {
+  id          String @id @default(cuid())
+  /// Human reference, e.g. "CC-2026-0007".
+  reference   String @unique
+  name        String?
+
+  status CycleCountStatus @default(IN_PROGRESS)
+
+  /// Scope filters captured at start, so the session is reproducible.
+  categoryId String?
+  brandId    String?
+  supplierId String?
+
+  startedById  String
+  completedById String?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  /// Rollups written at completion so the list does not aggregate items on read.
+  totalItems     Int @default(0)
+  countedItems   Int @default(0)
+  varianceItems  Int @default(0)
+  /// Net units of variance, signed. Separate from the absolute count above
+  /// because +5 and −5 cancelling to 0 hides two real errors.
+  netVariance    Int @default(0)
+
+  notes String?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  startedBy   Employee         @relation("CycleCountStartedBy", fields: [startedById], references: [id], onDelete: Restrict)
+  completedBy Employee?        @relation("CycleCountCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  items       CycleCountItem[]
+
+  @@index([status, startedAt(sort: Desc)], map: "cycle_counts_status_startedat_idx")
+  @@map("cycle_counts")
+}
+
+/// One variant within a count session.
+model CycleCountItem {
+  id           String @id @default(cuid())
+  cycleCountId String
+  variantId    String
+
+  /// System stock at the moment the line was added — NOT read at completion.
+  /// Freezing it is what makes the variance attributable to the count rather
+  /// than to sales that happened while counting.
+  expectedQuantity Int
+  /// NULL until physically counted, which is what distinguishes "not yet
+  /// counted" from "counted as zero" — two very different findings.
+  countedQuantity  Int?
+
+  /// counted − expected, stored at count time.
+  variance Int?
+
+  notes String?
+
+  countedById String?
+  countedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cycleCount CycleCount     @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  countedBy  Employee?      @relation("CycleCountItemCountedBy", fields: [countedById], references: [id], onDelete: SetNull)
+
+  /// One line per variant per session — makes scanning the same barcode twice
+  /// an update rather than a duplicate line.
+  @@unique([cycleCountId, variantId])
+  @@index([variantId])
+  @@map("cycle_count_items")
+}
+
+/// Damaged goods, recorded separately from the stock deduction.
+///
+/// Per the agreed model, damage DEDUCTS from currentStock (it is not sellable)
+/// via a DAMAGED movement, and ALSO writes a row here carrying the reason and
+/// reporter. Without this table, "damaged stock" could only be reconstructed by
+/// parsing movement reason strings.
+model DamagedStock {
+  id        String @id @default(cuid())
+  variantId String
+
+  quantity Int
+  reason   String
+
+  /// The DAMAGED ledger entry that removed the goods from sellable stock.
+  movementId String? @unique
+
+  /// Whether the loss has been written off / disposed of, for reconciliation.
+  isWrittenOff Boolean   @default(false)
+  writtenOffAt DateTime?
+
+  reportedById String
+  reportedAt   DateTime @default(now())
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variant    ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  reportedBy Employee           @relation("DamageReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+  movement   InventoryMovement? @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  @@index([variantId])
+  @@index([reportedAt(sort: Desc)], map: "damaged_stock_reportedat_idx")
+  @@map("damaged_stock")
+}
+
+/// A point-in-time record of inventory value, for trend charts and audit.
+///
+/// Valuation is otherwise only knowable for RIGHT NOW: cost prices are a
+/// moving average that gets overwritten on each purchase, so yesterday's
+/// inventory value is NOT recoverable by replaying the ledger. Snapshotting is
+/// the only honest way to draw a value-over-time chart.
+model InventorySnapshot {
+  id String @id @default(cuid())
+
+  /// UTC midnight of the store-local day. With variantId this is UNIQUE, which
+  /// makes the daily job idempotent.
+  snapshotDate DateTime @db.Date
+
+  /// NULL = a whole-inventory rollup row for that day. Non-null = per-variant.
+  /// Both live here so the trend chart reads one table.
+  variantId String?
+
+  quantity      Int
+  /// quantity × costPrice at snapshot time.
+  stockValue    Decimal @db.Decimal(14, 2)
+  /// quantity × sellingPrice at snapshot time.
+  retailValue   Decimal @db.Decimal(14, 2)
+  /// Moving-average cost used, kept so the row is self-explaining later.
+  averageCost   Decimal? @db.Decimal(10, 2)
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  /// Idempotency for the daily job, and the primary read path for trends.
+  @@unique([snapshotDate, variantId])
+  @@index([snapshotDate(sort: Desc)], map: "inventory_snapshots_date_idx")
+  @@map("inventory_snapshots")
 }
 
 // =============================================================================
@@ -946,6 +1346,8 @@ model Customer {
   addresses CustomerAddress[]
   sales     Sale[]
   exchanges Exchange[]
+  /// Stock held for this customer (holds / layaway).
+  reservations InventoryReservation[]
 
   @@index([phone])
   @@index([name])
@@ -1618,6 +2020,16 @@ model LoginHistory {
   /// Raw UA string, kept so device/browser parsing can be improved later
   /// without losing the original evidence.
   userAgent String?
+
+  /// Parsed OS name ("Windows", "macOS", "Android"). Derived from userAgent by
+  /// the same parser that fills device/browser — stored rather than parsed on
+  /// read so the security table can filter and group by it in SQL.
+  operatingSystem String?
+
+  /// Who force-terminated this session, when an OWNER ended it from the
+  /// security dashboard. NULL for self-service logouts and expiries; together
+  /// with endReason = "TERMINATED" it is the audit trail for the action.
+  terminatedById String?
 
   /// Heartbeat of the last authenticated request on this session. Presence is
   /// (logoutAt IS NULL AND lastSeenAt > now() - threshold).

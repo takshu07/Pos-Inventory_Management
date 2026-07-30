@@ -85,17 +85,9 @@ export function BasicInfoStep() {
         <Select label="Occasion" options={opts(OCCASIONS)} value={state.occasion} onChange={(e) => patch({ occasion: e.target.value })} />
       </FieldGroup>
 
-      <FieldGroup title="Tax & discovery" columns={3}>
+      {/* GST lives in the Pricing step — the wizard's single pricing surface. */}
+      <FieldGroup title="Tax & discovery" columns={2}>
         <Input label="HSN Code" value={state.hsnCode} onChange={(e) => patch({ hsnCode: e.target.value })} placeholder="Optional" />
-        <Input
-          label="GST %"
-          type="number"
-          min={0}
-          max={100}
-          value={state.gstRate}
-          onChange={(e) => patch({ gstRate: e.target.value === "" ? "" : Number(e.target.value) })}
-          placeholder="Optional"
-        />
         <Select
           label="Status"
           options={STATUSES}

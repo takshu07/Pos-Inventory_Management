@@ -15,6 +15,7 @@ import type { Request, Response } from "express";
 
 import { HTTP_STATUS } from "../constants/httpStatus";
 import * as workforceService from "../services/workforce.service";
+import * as workforceExportService from "../services/workforceExport.service";
 import { asyncHandler } from "../utils/asyncHandler";
 import { workforceValidation } from "../validation/workforce.validation";
 import type { EmployeeRole } from "../../generated/prisma";
@@ -316,4 +317,206 @@ export const changeRole = asyncHandler(async (req: Request, res: Response) => {
     message: "Role updated. The employee must sign in again.",
     data,
   });
+});
+
+// =============================================================================
+// EMPLOYEE NOTES — OWNER-only (enforced in the service, not here)
+// =============================================================================
+
+/** GET /owner/workforce/employees/:id/notes */
+export const listNotes = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params["id"] as string;
+  const data = await workforceService.listNotes(id, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({ success: true, data });
+});
+
+/** POST /owner/workforce/employees/:id/notes */
+export const createNote = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params["id"] as string;
+  const input = workforceValidation.createNote.parse(req.body);
+  const data = await workforceService.createNote(id, input, req.user);
+
+  return res.status(HTTP_STATUS.CREATED).json({
+    success: true,
+    message: "Note added.",
+    data,
+  });
+});
+
+/** PATCH /owner/workforce/notes/:id */
+export const updateNote = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params["id"] as string;
+  const input = workforceValidation.updateNote.parse(req.body);
+  const data = await workforceService.updateNote(id, input, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Note updated.",
+    data,
+  });
+});
+
+/** DELETE /owner/workforce/notes/:id */
+export const deleteNote = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params["id"] as string;
+  await workforceService.deleteNote(id, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({ success: true, message: "Note deleted." });
+});
+
+// =============================================================================
+// BREAKS
+// =============================================================================
+
+/** POST /workforce/attendance/break/start */
+export const startBreak = asyncHandler(async (req: Request, res: Response) => {
+  const input = workforceValidation.clock.parse(req.body ?? {});
+  const data = await workforceService.startBreak(input, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Break started.",
+    data,
+  });
+});
+
+/** POST /workforce/attendance/break/end */
+export const endBreak = asyncHandler(async (req: Request, res: Response) => {
+  const input = workforceValidation.clock.parse(req.body ?? {});
+  const data = await workforceService.endBreak(input, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Break ended.",
+    data,
+  });
+});
+
+// =============================================================================
+// SECURITY (Login History dashboard)
+// =============================================================================
+
+/** GET /workforce/security/overview */
+export const securityOverview = asyncHandler(async (req: Request, res: Response) => {
+  const query = workforceValidation.securityQuery.parse(req.query);
+  const data = await workforceService.getSecurityOverview(query, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({ success: true, data });
+});
+
+/** POST /owner/workforce/sessions/:id/terminate */
+export const terminateSession = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params["id"] as string;
+  const data = await workforceService.terminateSession(id, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Session terminated.",
+    data,
+  });
+});
+
+/** POST /owner/workforce/employees/:id/force-logout */
+export const forceLogout = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params["id"] as string;
+  const data = await workforceService.forceLogout(id, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "The employee has been signed out of all devices.",
+    data,
+  });
+});
+
+// =============================================================================
+// COMPARISON (OWNER-only)
+// =============================================================================
+
+/** GET /owner/workforce/compare */
+export const compare = asyncHandler(async (req: Request, res: Response) => {
+  const query = workforceValidation.compareQuery.parse(req.query);
+  const data = await workforceService.compareEmployees(query, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({ success: true, data });
+});
+
+// =============================================================================
+// SHIFT MANAGEMENT (OWNER-only)
+// =============================================================================
+
+/** POST /owner/workforce/shifts */
+export const createShift = asyncHandler(async (req: Request, res: Response) => {
+  const input = workforceValidation.shift.parse(req.body);
+  const data = await workforceService.createShift(input, req.user);
+
+  return res.status(HTTP_STATUS.CREATED).json({
+    success: true,
+    message: "Shift created.",
+    data,
+  });
+});
+
+/** PATCH /owner/workforce/shifts/:id */
+export const updateShift = asyncHandler(async (req: Request, res: Response) => {
+  const id = req.params["id"] as string;
+  const input = workforceValidation.updateShift.parse(req.body);
+  const data = await workforceService.updateShift(id, input, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Shift updated.",
+    data,
+  });
+});
+
+/** POST /owner/workforce/shifts/assign */
+export const assignShift = asyncHandler(async (req: Request, res: Response) => {
+  const input = workforceValidation.assignShift.parse(req.body);
+  const data = await workforceService.assignShift(input, req.user);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: `Shift assigned to ${data.assigned} employee(s).`,
+    data,
+  });
+});
+
+// =============================================================================
+// EXPORTS
+// =============================================================================
+
+/**
+ * GET /workforce/export/:report?format=csv|excel|pdf
+ *
+ * The remaining query string is passed through as the report's filters, so an
+ * export reflects exactly the screen the user was looking at. Scoping is the
+ * service's job — a manager's export contains what a manager's screen does.
+ */
+export const exportReport = asyncHandler(async (req: Request, res: Response) => {
+  const { report, format } = workforceValidation.exportQuery.parse({
+    report: req.params["report"],
+    format: req.query["format"],
+  });
+
+  // `format` is consumed above; everything else is the report's own filters.
+  const { format: _format, ...filters } = req.query;
+
+  const file = await workforceExportService.exportWorkforceReport(
+    report,
+    format,
+    filters as Record<string, unknown>,
+    req.user
+  );
+
+  // Quotes and newlines stripped so a value inside the filename can never break
+  // out of the header (response splitting).
+  const safeName = file.filename.replace(/["\r\n]/g, "");
+
+  res.setHeader("Content-Type", file.contentType);
+  res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+  // The payload reflects live data — never let a proxy serve a stale export.
+  res.setHeader("Cache-Control", "no-store");
+
+  return res.status(HTTP_STATUS.OK).send(file.body);
 });

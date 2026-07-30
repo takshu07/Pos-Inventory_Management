@@ -7,6 +7,7 @@ import {
   ProductFilters,
   ProductTable,
   ProductDetailsDrawer,
+  EffectivePricePanel,
   ProductTableSkeleton,
   ProductEmptyState,
   MANAGER_COLUMNS,
@@ -111,6 +112,9 @@ export default function ManagerProductsPage() {
         loading={detailLoading}
         showFinancials={false}
         readOnlyBanner
+        // Managers may see WHY a price is what it is; the server strips cost,
+        // margin and profit from the response, so no financials leak here.
+        renderPricingDetail={(productId) => <EffectivePricePanel productId={productId} />}
       />
     </div>
   );

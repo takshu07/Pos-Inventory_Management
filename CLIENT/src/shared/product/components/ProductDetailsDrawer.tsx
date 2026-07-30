@@ -3,6 +3,7 @@ import { Lock, Copy, Check } from "lucide-react";
 import { Drawer } from "@/components/ui/Drawer";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { LabelToolbar } from "@/features/labels";
 import { cn } from "@/utils/cn";
 import type { ProductDetail } from "../types";
 import { ProductImageGallery } from "./ProductImageGallery";
@@ -33,6 +34,7 @@ export function ProductDetailsDrawer({
   showFinancials = false,
   readOnlyBanner = false,
   headerActions,
+  renderPricingDetail,
 }: {
   open: boolean;
   onClose: () => void;
@@ -41,6 +43,13 @@ export function ProductDetailsDrawer({
   showFinancials?: boolean;
   readOnlyBanner?: boolean;
   headerActions?: React.ReactNode;
+  /**
+   * Optional per-variant effective-price breakdown, rendered under the price
+   * aggregates. Passed in as a slot so this shared component stays decoupled
+   * from the discounts feature — it never imports it, and a module that doesn't
+   * want the breakdown simply omits the prop.
+   */
+  renderPricingDetail?: (productId: string) => React.ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("overview");
 
@@ -58,7 +67,34 @@ export function ProductDetailsDrawer({
         <div className="flex flex-col gap-4">
           {readOnlyBanner && <ReadOnlyBanner />}
 
-          {headerActions && <div className="flex flex-wrap gap-2">{headerActions}</div>}
+          <div className="flex flex-wrap items-center gap-2">
+            {headerActions}
+            {/* Product-level label printing: every active variant at once.
+                Lives in the shared drawer so both the Owner and Manager modules
+                get identical behaviour without either importing print logic.
+                The toolbar enforces its own RBAC — a cashier viewing a
+                multi-variant product sees no batch action. */}
+            {product.variants.length > 0 && (
+              <LabelToolbar
+                source="PRODUCT"
+                hidePreview={product.variants.length > 1}
+                variants={product.variants
+                  .filter((variant) => variant.isActive)
+                  .map((variant) => ({
+                    variantId: variant.id,
+                    label: [
+                      product.name,
+                      [variant.size?.name, variant.color?.name]
+                        .filter(Boolean)
+                        .join(" / "),
+                    ]
+                      .filter(Boolean)
+                      .join(" — "),
+                    sku: variant.sku,
+                  }))}
+              />
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <ProductStatusBadge isActive={product.isActive} />
@@ -73,17 +109,28 @@ export function ProductDetailsDrawer({
 
           {tab === "overview" && <Overview product={product} />}
           {tab === "variants" && (
-            <ProductVariantTable variants={product.variants} showFinancials={showFinancials} />
+            // Label actions are enabled here for every role: the toolbar applies
+            // its own RBAC (cashiers print one at a time, managers may batch),
+            // so a manager can print a shelf label straight from the catalog.
+            <ProductVariantTable
+              variants={product.variants}
+              showFinancials={showFinancials}
+              showLabelActions
+              productName={product.name}
+            />
           )}
           {tab === "pricing" && (
-            <ProductPriceCard
-              minSelling={product.rollup.minSellingPrice}
-              maxSelling={product.rollup.maxSellingPrice}
-              minMrp={null}
-              maxMrp={null}
-              avgMargin={product.rollup.avgMargin ?? null}
-              showFinancials={showFinancials}
-            />
+            <div className="flex flex-col gap-4">
+              <ProductPriceCard
+                minSelling={product.rollup.minSellingPrice}
+                maxSelling={product.rollup.maxSellingPrice}
+                minMrp={null}
+                maxMrp={null}
+                avgMargin={product.rollup.avgMargin ?? null}
+                showFinancials={showFinancials}
+              />
+              {renderPricingDetail?.(product.id)}
+            </div>
           )}
         </div>
       )}

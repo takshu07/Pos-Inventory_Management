@@ -1,5 +1,6 @@
 import { NavLink } from "react-router";
 import { cn } from "@/utils/cn";
+import { prefetchHandlers } from "@/app/router/prefetch";
 import { useAuthStore } from "@/store/auth.store";
 import { useUIStore } from "@/store/ui.store";
 import { EMPLOYEE_NAV, ADMIN_NAV } from "@/config/navigation";
@@ -38,13 +39,21 @@ function NavSectionGroup({ section, collapsed, role }: { section: NavSection; co
             <NavLink
               to={item.path}
               end={item.path === "/"}
-              className={({ isActive }) =>
+              // Warm this screen's chunk on hover/focus/touch, so the click that
+              // follows usually has nothing left to download. See app/router/prefetch.
+              {...prefetchHandlers(item.path)}
+              // `isPending` is true from the click until the lazy chunk resolves.
+              // Highlighting the clicked item makes the app answer instantly even
+              // though the screen hasn't swapped yet — the difference between
+              // "it's working on it" and "did my click register?".
+              className={({ isActive, isPending }) =>
                 cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
                   "hover:bg-accent hover:text-accent-foreground",
                   isActive
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground",
+                  isPending && !isActive && "bg-accent text-accent-foreground",
                   collapsed && "justify-center px-2"
                 )
               }

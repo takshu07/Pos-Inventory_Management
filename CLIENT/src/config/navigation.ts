@@ -19,6 +19,20 @@ import {
   Settings,
   Shield,
   Activity,
+  Printer,
+  UserCog,
+  CalendarCheck,
+  TrendingUp,
+  KeyRound,
+  PackageSearch,
+  ScrollText,
+  ClipboardCheck,
+  AlertTriangle,
+  PackageX,
+  Snowflake,
+  Flame,
+  TrendingDown,
+  Wrench,
 } from "lucide-react";
 
 /**
@@ -70,18 +84,35 @@ export const EMPLOYEE_NAV: NavSection[] = [
   {
     title: "Catalog",
     items: [
-      // Read-only operational catalog — MANAGER only. Owners don't see this;
-      // they use the full-CRUD "Product Management" screen (Catalog Admin below)
-      // instead, so there is a single product entry point per role.
-      { label: "Product Catalog", path: "/products", icon: Package, allowedRoles: ["MANAGER"] },
+      // Read-only operational catalog — MANAGER only. Owners don't see these;
+      // they use the full-CRUD "Product Management" / "Categories" screens
+      // (Catalog Admin below) instead, so there is a single entry point per role.
+      { label: "Product Catalog", path: "/products",   icon: Package, allowedRoles: ["MANAGER"] },
+      { label: "Categories",      path: "/categories", icon: Tag,     allowedRoles: ["MANAGER"] },
+    ],
+  },
+  {
+    title: "Printing",
+    items: [
+      // Operational label printing: queue + history + batch print. No
+      // allowedRoles → MANAGER and OWNER both see it. Printer/template
+      // CONFIGURATION is a separate OWNER-only entry under System below.
+      { label: "Label Printing", path: "/labels", icon: Printer },
     ],
   },
   {
     title: "Team",
     items: [
-      // Read-only monitoring — renamed from "Employees" since managers only
-      // observe activity here; hiring/edits are owner-only under Business below.
-      { label: "Employee Activity", path: "/admin/employees", icon: Activity },
+      // Read-only monitoring — managers observe here; hiring/edits and role
+      // changes are owner-only writes on the owner workforce tree.
+      // Activity is the module's landing screen (who is on, what they're doing),
+      // so it stays first and keeps the /admin/employees path managers already know.
+      { label: "Employee Activity", path: "/admin/employees",      icon: Activity },
+      { label: "Managers",          path: "/admin/managers",       icon: UserCog },
+      { label: "Employees",         path: "/admin/staff",          icon: Users },
+      { label: "Attendance",        path: "/admin/attendance",     icon: CalendarCheck },
+      { label: "Performance",       path: "/admin/performance",    icon: TrendingUp },
+      { label: "Login History",     path: "/admin/login-history",  icon: KeyRound },
     ],
   },
   {
@@ -113,7 +144,36 @@ export const ADMIN_NAV: NavSection[] = [
     items: [
       { label: "Suppliers",   path: "/admin/suppliers",   icon: Truck,         allowedRoles: ["OWNER"] },
       { label: "Purchases",   path: "/admin/purchases",   icon: ClipboardList, allowedRoles: ["OWNER"] },
-      { label: "Inventory",   path: "/admin/inventory",   icon: Boxes,         allowedRoles: ["OWNER"] },
+    ],
+  },
+  {
+    title: "Inventory",
+    items: [
+      // Ordered by how often each is opened: the dashboard answers "what needs
+      // attention", then the daily surfaces, then the periodic analyses.
+      { label: "Overview",     path: "/admin/inventory",             icon: Boxes,         allowedRoles: ["OWNER"] },
+      { label: "Stock",        path: "/admin/inventory/stock",       icon: PackageSearch, allowedRoles: ["OWNER"] },
+      { label: "Movements",    path: "/admin/inventory/movements",   icon: ScrollText,    allowedRoles: ["OWNER"] },
+      { label: "Adjustments",  path: "/admin/inventory/adjustments", icon: ClipboardList, allowedRoles: ["OWNER"] },
+      { label: "Cycle Counts", path: "/admin/inventory/cycle-counts",icon: ClipboardCheck,allowedRoles: ["OWNER"] },
+    ],
+  },
+  {
+    title: "Replenishment",
+    items: [
+      { label: "Low Stock",    path: "/admin/inventory/low-stock",    icon: AlertTriangle, allowedRoles: ["OWNER"] },
+      { label: "Out of Stock", path: "/admin/inventory/out-of-stock", icon: PackageX,      allowedRoles: ["OWNER"] },
+      { label: "Reorder",      path: "/admin/inventory/reorder",      icon: ShoppingCart,  allowedRoles: ["OWNER"] },
+    ],
+  },
+  {
+    title: "Stock Analysis",
+    items: [
+      { label: "Valuation",   path: "/admin/inventory/valuation",   icon: DollarSign, allowedRoles: ["OWNER"] },
+      { label: "Dead Stock",  path: "/admin/inventory/dead-stock",  icon: Snowflake,  allowedRoles: ["OWNER"] },
+      { label: "Fast Moving", path: "/admin/inventory/fast-moving", icon: Flame,      allowedRoles: ["OWNER"] },
+      { label: "Slow Moving", path: "/admin/inventory/slow-moving", icon: TrendingDown, allowedRoles: ["OWNER"] },
+      { label: "Damaged",     path: "/admin/inventory/damaged",     icon: Wrench,     allowedRoles: ["OWNER"] },
     ],
   },
   {
@@ -128,8 +188,10 @@ export const ADMIN_NAV: NavSection[] = [
   {
     title: "System",
     items: [
-      { label: "Settings",    path: "/admin/settings",    icon: Settings,      allowedRoles: ["OWNER"] },
-      { label: "Audit Logs",  path: "/admin/audit-logs",  icon: Shield,        allowedRoles: ["OWNER"] },
+      { label: "Settings",       path: "/admin/settings",   icon: Settings, allowedRoles: ["OWNER"] },
+      // Printers, label templates and print defaults. OWNER-only by design.
+      { label: "Labels & Printers", path: "/admin/labels",  icon: Printer,  allowedRoles: ["OWNER"] },
+      { label: "Audit Logs",     path: "/admin/audit-logs", icon: Shield,   allowedRoles: ["OWNER"] },
     ],
   },
 ];

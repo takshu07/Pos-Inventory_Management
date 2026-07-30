@@ -22,14 +22,21 @@ import {
   AuthBootstrapper,
   SessionExpiredModal,
 } from "@/features/auth";
+import { RouteProgress } from "@/components/ui";
 
-/** 
- * RootLayout runs inside the Router context, providing global auth utilities 
+/**
+ * RootLayout runs inside the Router context, providing global auth utilities
  * that require access to React Router hooks (like useNavigate).
+ *
+ * RouteProgress lives here rather than in MainLayout/CashierLayout so that a
+ * SINGLE bar covers every navigation in the app — including login → portal and
+ * the cross-portal redirects the role guards perform. Every route below is
+ * lazy(), so without it a click has no visible effect until its chunk lands.
  */
 function RootLayout() {
   return (
     <>
+      <RouteProgress />
       <AuthBootstrapper />
       <SessionExpiredModal />
       <Outlet />
@@ -168,10 +175,81 @@ export const router = createBrowserRouter([
           return { Component: ManagerProductsPage };
         },
       },
+      // The Manager Category Browser (/categories) is the READ-ONLY companion to
+      // the product catalog: browse how the catalog is organised, then jump into
+      // a category's products. Like /products it sits OUTSIDE OwnerRoute and hits
+      // the manager-scoped (GET-only) backend. Owners administer categories at
+      // /admin/categories instead, so there is one category entry point per role.
+      {
+        path: "categories",
+        async lazy() {
+          const { ManagerCategoriesPage } = await import("@/features/manager/categories");
+          return { Component: ManagerCategoriesPage };
+        },
+      },
+      // ── Workforce Management — read-only monitoring (MANAGER + OWNER) ─────
+      // Deliberately OUTSIDE OwnerRoute: watching who is on shift, what the
+      // team is doing and how attendance is tracking is operational work a
+      // manager must be able to do. Every page here reads from the
+      // manager-scoped (GET-only) workforce tree, and the backend narrows the
+      // payload by actor — salary, for instance, is stripped for managers.
+      // The OWNER-only writes (edit employee, change role, reset password)
+      // live on the owner tree and 403 independently of any nav hiding.
       {
         path: "admin/employees",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="Employee Activity" /> };
+          const { WorkforceActivityPage } = await import("@/features/workforce");
+          return { Component: WorkforceActivityPage };
+        },
+      },
+      {
+        path: "admin/managers",
+        async lazy() {
+          const { ManagersPage } = await import("@/features/workforce");
+          return { Component: ManagersPage };
+        },
+      },
+      {
+        path: "admin/staff",
+        async lazy() {
+          const { EmployeesPage } = await import("@/features/workforce");
+          return { Component: EmployeesPage };
+        },
+      },
+      {
+        path: "admin/attendance",
+        async lazy() {
+          const { AttendancePage } = await import("@/features/workforce");
+          return { Component: AttendancePage };
+        },
+      },
+      {
+        path: "admin/performance",
+        async lazy() {
+          const { PerformancePage } = await import("@/features/workforce");
+          return { Component: PerformancePage };
+        },
+      },
+      {
+        path: "admin/login-history",
+        async lazy() {
+          const { LoginHistoryPage } = await import("@/features/workforce");
+          return { Component: LoginHistoryPage };
+        },
+      },
+
+      // ── Label printing — operational (MANAGER + OWNER) ─────────────────────
+      // Deliberately OUTSIDE OwnerRoute: printing labels and watching the queue
+      // is shop-floor work a manager must be able to do. Printer/template
+      // CONFIGURATION lives at /admin/labels inside OwnerRoute instead, and the
+      // backend enforces that split independently.
+      {
+        path: "labels",
+        async lazy() {
+          const { default: LabelPrintingPage } = await import(
+            "@/features/labels/pages/LabelPrintingPage"
+          );
+          return { Component: LabelPrintingPage };
         },
       },
 
@@ -200,10 +278,22 @@ export const router = createBrowserRouter([
               return { Component: () => <PlaceholderPage title="Cash Register" /> };
             },
           },
+          // ── Owner Category Management — full CRUD + analytics (OWNER only) ──
+          // Create/edit/archive/safe-delete, bulk actions, images, discounts and
+          // the activity timeline. Analytics is a separate route because that
+          // query is expensive and shouldn't run just to rename a category.
           {
             path: "admin/categories",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Category Management" /> };
+              const { OwnerCategoriesPage } = await import("@/features/owner/categories");
+              return { Component: OwnerCategoriesPage };
+            },
+          },
+          {
+            path: "admin/categories/analytics",
+            async lazy() {
+              const { OwnerCategoryAnalyticsPage } = await import("@/features/owner/categories");
+              return { Component: OwnerCategoryAnalyticsPage };
             },
           },
           {
@@ -224,10 +314,118 @@ export const router = createBrowserRouter([
               return { Component: () => <PlaceholderPage title="Purchase Management" /> };
             },
           },
+          // ── Inventory — the stock ledger (OWNER full surface) ─────────────
+          // Managers reach a narrowed version of these same screens through
+          // the manager API tree; the service strips cost figures for them and
+          // the mutating endpoints are absent from their routes entirely.
           {
             path: "admin/inventory",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Inventory" /> };
+              const { InventoryDashboardPage } = await import("@/features/inventory");
+              return { Component: InventoryDashboardPage };
+            },
+          },
+          {
+            path: "admin/inventory/stock",
+            async lazy() {
+              const { StockOverviewPage } = await import("@/features/inventory");
+              return { Component: StockOverviewPage };
+            },
+          },
+          {
+            path: "admin/inventory/movements",
+            async lazy() {
+              const { MovementsPage } = await import("@/features/inventory");
+              return { Component: MovementsPage };
+            },
+          },
+          {
+            path: "admin/inventory/adjustments",
+            async lazy() {
+              const { AdjustmentsPage } = await import("@/features/inventory");
+              return { Component: AdjustmentsPage };
+            },
+          },
+          {
+            path: "admin/inventory/cycle-counts",
+            async lazy() {
+              const { CycleCountsPage } = await import("@/features/inventory");
+              return { Component: CycleCountsPage };
+            },
+          },
+          {
+            path: "admin/inventory/cycle-counts/:countId",
+            async lazy() {
+              const { CycleCountSessionPage } = await import("@/features/inventory");
+              return { Component: CycleCountSessionPage };
+            },
+          },
+          {
+            path: "admin/inventory/valuation",
+            async lazy() {
+              const { ValuationPage } = await import("@/features/inventory");
+              return { Component: ValuationPage };
+            },
+          },
+          {
+            path: "admin/inventory/damaged",
+            async lazy() {
+              const { DamagedStockPage } = await import("@/features/inventory");
+              return { Component: DamagedStockPage };
+            },
+          },
+          {
+            path: "admin/inventory/low-stock",
+            async lazy() {
+              const { LowStockPage } = await import("@/features/inventory");
+              return { Component: LowStockPage };
+            },
+          },
+          {
+            path: "admin/inventory/out-of-stock",
+            async lazy() {
+              const { OutOfStockPage } = await import("@/features/inventory");
+              return { Component: OutOfStockPage };
+            },
+          },
+          {
+            path: "admin/inventory/reorder",
+            async lazy() {
+              const { ReorderPage } = await import("@/features/inventory");
+              return { Component: ReorderPage };
+            },
+          },
+          {
+            path: "admin/inventory/dead-stock",
+            async lazy() {
+              const { DeadStockPage } = await import("@/features/inventory");
+              return { Component: DeadStockPage };
+            },
+          },
+          {
+            path: "admin/inventory/fast-moving",
+            async lazy() {
+              const { FastMovingPage } = await import("@/features/inventory");
+              return { Component: FastMovingPage };
+            },
+          },
+          {
+            path: "admin/inventory/slow-moving",
+            async lazy() {
+              const { SlowMovingPage } = await import("@/features/inventory");
+              return { Component: SlowMovingPage };
+            },
+          },
+          // Label Engine administration: printers, templates and defaults.
+          // OWNER-only — "never expose printer management to Managers or
+          // Cashiers" is enforced here AND by requireRole("OWNER") server-side.
+          {
+            path: "admin/labels",
+            async lazy() {
+              const { default: LabelSettingsPage } = await import(
+                "@/features/labels/pages/LabelSettingsPage"
+              );
+              return { Component: LabelSettingsPage };
             },
           },
           {
@@ -242,10 +440,14 @@ export const router = createBrowserRouter([
               return { Component: () => <PlaceholderPage title="Finance" /> };
             },
           },
+          // ── Catalog Discounts — the shelf-price rule layer (OWNER only) ──────
+          // Rules here feed ProductVariant.sellingPrice through the pricing
+          // engine. Cart-level promotions applied at checkout are separate.
           {
             path: "admin/discounts",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Discounts" /> };
+              const { DiscountsPage } = await import("@/features/owner/discounts");
+              return { Component: DiscountsPage };
             },
           },
           {

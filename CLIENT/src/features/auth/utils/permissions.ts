@@ -135,6 +135,47 @@ export function canManageProducts(role: Role | null): boolean {
   return hasAtLeastRole(role, "OWNER");
 }
 
+// ─── Labels & Printing ────────────────────────────────────────────────────────
+//
+// Mirrors the Label Engine's RBAC matrix exactly. The backend enforces the same
+// rules (routes + labelService); these helpers only decide what to RENDER.
+//
+//   OWNER   → everything: templates, printers, settings, history, all printing
+//   MANAGER → print, preview, batch print, reprint (no configuration)
+//   CASHIER → print, preview, reprint. Nothing else.
+
+/** Can preview a label. Every role — a cashier must check before using media. */
+export function canPreviewLabels(role: Role | null): boolean {
+  return role !== null;
+}
+
+/** Can print and reprint labels. Every role. */
+export function canPrintLabels(role: Role | null): boolean {
+  return role !== null;
+}
+
+/**
+ * Can print BATCHES (multi-product selections, category/brand runs).
+ * MANAGER + OWNER — a cashier prints one product at a time.
+ */
+export function canBatchPrintLabels(role: Role | null): boolean {
+  return hasAtLeastRole(role, "MANAGER");
+}
+
+/**
+ * Can manage printers, label templates and print settings, and view the full
+ * cross-user print history. OWNER only — the spec is explicit that printer
+ * management is never exposed to Managers or Cashiers.
+ */
+export function canManageLabelSettings(role: Role | null): boolean {
+  return hasAtLeastRole(role, "OWNER");
+}
+
+/** Can view the full print history across all users. OWNER only. */
+export function canViewPrintHistory(role: Role | null): boolean {
+  return hasAtLeastRole(role, "OWNER");
+}
+
 // ─── Employees (monitor vs. manage) ───────────────────────────────────────────
 // Managers get read-only "Employee Activity" monitoring; only OWNER may create,
 // edit, deactivate, or change roles.

@@ -1,5 +1,6 @@
 import { NavLink } from "react-router";
 import { cn } from "@/utils/cn";
+import { prefetchHandlers } from "@/app/router/prefetch";
 import { useAuthStore } from "@/store/auth.store";
 import { useUIStore } from "@/store/ui.store";
 import { CASHIER_NAV } from "@/config/cashierNavigation";
@@ -32,13 +33,15 @@ function NavSectionGroup({ section, collapsed }: { section: NavSection; collapse
           <li key={item.path}>
             <NavLink
               to={item.path}
-              className={({ isActive }) =>
+              {...prefetchHandlers(item.path)}
+              className={({ isActive, isPending }) =>
                 cn(
                   "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
                   "hover:bg-accent hover:text-accent-foreground",
                   isActive
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground",
+                  isPending && !isActive && "bg-accent text-accent-foreground",
                   collapsed && "justify-center px-2"
                 )
               }

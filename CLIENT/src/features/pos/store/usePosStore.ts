@@ -2,7 +2,14 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { useShallow } from "zustand/react/shallow";
 import { CartItem, PosVariant, PosDiscount } from "../types/pos.types";
-import { calculateSubtotal, calculateDiscountAmount, calculateGrandTotal } from "../utils/pos.utils";
+import {
+  calculateSubtotal,
+  calculateDiscountAmount,
+  calculateGrandTotal,
+  calculateGrossTotal,
+  calculateRoundOff,
+  roundToPayable,
+} from "../utils/pos.utils";
 
 import { CustomerModel } from "@/features/customers/types";
 
@@ -236,10 +243,32 @@ export const usePosTotals = () => {
           )
         : 0;
 
+    // In EXCHANGE mode the returned value is deducted AFTER the sale side is
+    // rounded, so the net payable is rounded once more — a returned item priced
+    // in paise must not reintroduce a fractional amount to collect.
     const grandTotal =
-      posMode === "EXCHANGE" ? Math.max(0, saleTotal - returnTotal) : saleTotal;
+      posMode === "EXCHANGE"
+        ? roundToPayable(Math.max(0, saleTotal - returnTotal))
+        : saleTotal;
 
-    return { subtotal, discountAmount, tax, saleTotal, returnTotal, grandTotal };
+    // Exact pre-rounding figure, and the signed adjustment between them. Shown
+    // as a "Round Off" line so the displayed lines reconcile with the total.
+    const grossTotal = calculateGrossTotal(subtotal, discountAmount, tax);
+    const roundOffAmount =
+      posMode === "EXCHANGE"
+        ? Number((grandTotal - Math.max(0, grossTotal - returnTotal)).toFixed(2))
+        : calculateRoundOff(grossTotal);
+
+    return {
+      subtotal,
+      discountAmount,
+      tax,
+      grossTotal,
+      roundOffAmount,
+      saleTotal,
+      returnTotal,
+      grandTotal,
+    };
   }, [cart, discount, tax, posMode, exchangeReturns]);
 };
 

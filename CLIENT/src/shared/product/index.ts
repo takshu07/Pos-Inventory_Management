@@ -49,6 +49,11 @@ export { ProductVariantTable } from "./components/ProductVariantTable";
 export { ProductStatusBadge } from "./components/ProductStatusBadge";
 export { ProductStockIndicator } from "./components/ProductStockIndicator";
 export { ProductPriceCard } from "./components/ProductPriceCard";
+export { EffectivePricePanel } from "./components/EffectivePricePanel";
+
+// Effective pricing — shared read surface (/api/v1/pricing), used by both portals.
+export { useProductPricing, fetchProductPricing, pricingKeys } from "./pricingApi";
+export type { EffectivePrice, ProductPricing } from "./pricingApi";
 export {
   ProductTableSkeleton,
   ProductCardSkeleton,

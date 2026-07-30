@@ -21,6 +21,19 @@ export interface AttributeValues {
   colors: { name: string; hex?: string }[]; // e.g. [{name:"Black",hex:"#000"}]
 }
 
+/**
+ * Per-variant price override. Pricing is a PRODUCT-level concern (state.pricing);
+ * a variant only carries this object when the owner has explicitly overridden it
+ * (e.g. Black/XXL costs more than Black/XL). `null` — the normal case — means the
+ * variant inherits the product pricing, so identical values are never duplicated
+ * across rows. Always read prices through effectivePricing() in ./helpers.
+ */
+export interface VariantPriceOverride {
+  costPrice: number;
+  sellingPrice: number;
+  mrp: number;
+}
+
 /** One generated (or manually added) variant row. */
 export interface WizardVariant {
   id: string; // client id
@@ -31,9 +44,11 @@ export interface WizardVariant {
   sku: string;
   barcode: string;
 
-  costPrice: number;
-  sellingPrice: number;
-  mrp: number;
+  /** null → inherits product pricing. Set only by the Override Pricing dialog. */
+  priceOverride: VariantPriceOverride | null;
+
+  /** Per-variant sellability, independent of the parent product's status. */
+  status: "ACTIVE" | "INACTIVE";
 
   openingStock: number;
   reorderLevel: number;
@@ -49,9 +64,6 @@ export interface WizardVariant {
   shelf: string;
   bin: string;
   shelfLocation: string;
-
-  discountAllowed: boolean;
-  maxDiscountPct: number | "";
 
   supplierId: string;
   supplierSku: string;
@@ -80,7 +92,6 @@ export interface WizardState {
   pattern: string;
   occasion: string;
   hsnCode: string;
-  gstRate: number | "";
   searchKeywords: string;
 
   // Step 2
@@ -92,32 +103,62 @@ export interface WizardState {
   // Steps 4-8
   variants: WizardVariant[];
 
-  // Defaults applied to newly generated variants (from pricing/inventory/supplier
-  // steps, so the owner sets values once and they flow into all variants).
-  defaults: {
+  /**
+   * THE single source of truth for pricing in the entire wizard. Collected once
+   * in the Pricing step; every variant inherits these values automatically. A
+   * variant deviates only via its own `priceOverride`. No other part of the
+   * wizard may collect or store cost/selling/MRP/GST.
+   *
+   * `sellingPrice` is DERIVED, not typed: the pricing engine defines it as
+   * (mrp − defaultDiscount), and the wizard mirrors that arithmetic so the
+   * preview matches what the server will store. The owner may instead type a
+   * price directly by flipping `isManualPricing`, in which case the discount is
+   * back-solved from it — the two never drift apart. Read it through
+   * `derivedSellingPrice()`, never straight off this object.
+   */
+  pricing: {
     costPrice: number | "";
     sellingPrice: number | "";
     mrp: number | "";
+    gstRate: number | "";
+    discountAllowed: boolean;
+    maxDiscountPct: number | "";
+
+    /** The product-level default discount off MRP — the engine's DEFAULT tier. */
+    defaultDiscountType: "PERCENTAGE" | "FLAT";
+    defaultDiscountValue: number | "";
+    /** true → owner types sellingPrice and the discount is back-solved. */
+    isManualPricing: boolean;
+  };
+
+  // Non-pricing defaults applied to newly generated variants (inventory/supplier
+  // steps, so the owner sets values once and they flow into all variants).
+  defaults: {
     openingStock: number | "";
     reorderLevel: number | "";
     maximumStock: number | "";
     supplierId: string;
-    gstRate: number | "";
     skuPrefix: string;
     barcodePrefix: string;
     warehouse: string;
   };
 }
 
+/**
+ * Step order is deliberate: variants are generated BEFORE pricing so the Pricing
+ * step can show real inventory/retail/profit projections across the generated
+ * set, and Variant Details comes after pricing so it is purely an inventory/SKU
+ * screen with no money inputs.
+ */
 export const WIZARD_STEPS = [
   { key: "basic", label: "Basic Info" },
   { key: "images", label: "Images" },
   { key: "attributes", label: "Attributes" },
   { key: "variants", label: "Variants" },
-  { key: "details", label: "Variant Details" },
+  { key: "pricing", label: "Pricing" },
   { key: "inventory", label: "Inventory" },
   { key: "supplier", label: "Supplier" },
-  { key: "pricing", label: "Pricing" },
+  { key: "details", label: "Variant Details" },
   { key: "review", label: "Review" },
 ] as const;
 
@@ -140,20 +181,26 @@ export function initialWizardState(): WizardState {
     pattern: "",
     occasion: "",
     hsnCode: "",
-    gstRate: "",
     searchKeywords: "",
     images: [],
     attributes: { sizes: [], colors: [] },
     variants: [],
-    defaults: {
+    pricing: {
       costPrice: "",
       sellingPrice: "",
       mrp: "",
+      gstRate: "",
+      discountAllowed: true,
+      maxDiscountPct: "",
+      defaultDiscountType: "PERCENTAGE",
+      defaultDiscountValue: "",
+      isManualPricing: false,
+    },
+    defaults: {
       openingStock: "",
       reorderLevel: "",
       maximumStock: "",
       supplierId: "",
-      gstRate: "",
       skuPrefix: "",
       barcodePrefix: "",
       warehouse: "",

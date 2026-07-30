@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Plus, LayoutGrid, List } from "lucide-react";
+import { Plus, LayoutGrid, List, Printer } from "lucide-react";
+import { BatchPrintDialog } from "@/features/labels";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { ErrorState } from "@/components/ui/StateViews";
@@ -9,6 +10,7 @@ import {
   ProductTable,
   ProductCard,
   ProductDetailsDrawer,
+  EffectivePricePanel,
   ProductTableSkeleton,
   ProductCardGridSkeleton,
   ProductEmptyState,
@@ -46,6 +48,7 @@ export default function OwnerProductsPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ProductDetail | null>(null);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [batchPrintOpen, setBatchPrintOpen] = useState(false);
 
   const { data, isLoading, isError, refetch, isFetching } = useOwnerProducts(serverParams);
   const { data: detail, isLoading: detailLoading } = useOwnerProduct(detailId ?? undefined);
@@ -79,9 +82,21 @@ export default function OwnerProductsPage() {
             Complete catalog administration — pricing, inventory, and everything else.
           </p>
         </div>
-        <Button onClick={openCreate} leftIcon={<Plus className="h-4 w-4" />}>
-          New Product
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Batch label printing by category / brand / supplier / search.
+              Filters are resolved server-side so the browser never has to
+              enumerate thousands of variant ids. */}
+          <Button
+            variant="outline"
+            onClick={() => setBatchPrintOpen(true)}
+            leftIcon={<Printer className="h-4 w-4" />}
+          >
+            Print Labels
+          </Button>
+          <Button onClick={openCreate} leftIcon={<Plus className="h-4 w-4" />}>
+            New Product
+          </Button>
+        </div>
       </div>
 
       <OwnerProductDashboard />
@@ -164,6 +179,7 @@ export default function OwnerProductsPage() {
         product={detail}
         loading={detailLoading}
         showFinancials
+        renderPricingDetail={(productId) => <EffectivePricePanel productId={productId} />}
         headerActions={
           <Button size="sm" variant="outline" onClick={editFromDetail} disabled={!detail}>
             Edit product
@@ -181,6 +197,19 @@ export default function OwnerProductsPage() {
           refetch();
           setDetailId(productId); // open the newly created product's details
         }}
+      />
+
+      {/* Reuses the category/brand options this page already loaded, so opening
+          the dialog costs no extra requests. */}
+      <BatchPrintDialog
+        open={batchPrintOpen}
+        onClose={() => setBatchPrintOpen(false)}
+        source="BATCH"
+        categories={categories.map((category) => ({
+          value: category.id,
+          label: category.name,
+        }))}
+        brands={brands.map((brand) => ({ value: brand.id, label: brand.name }))}
       />
     </div>
   );

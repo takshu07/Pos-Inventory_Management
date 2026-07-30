@@ -43,6 +43,22 @@ apiClient.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    // FILE UPLOADS: the instance default above sets Content-Type to
+    // application/json for every request. For a FormData body that is wrong and
+    // silently breaks the upload — the browser must set
+    // "multipart/form-data; boundary=…" itself, and it can only do that if no
+    // Content-Type is already present. Without the boundary the server's
+    // multipart parser finds no file part and rejects the request ("No file
+    // uploaded"), even though the bytes were sent.
+    //
+    // Deleting the header (rather than setting it) is deliberate: axios hands
+    // the FormData straight to fetch/XHR, which then generates the full header
+    // including a unique boundary.
+    if (config.data instanceof FormData && config.headers) {
+      delete config.headers["Content-Type"];
+    }
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -80,14 +96,28 @@ apiClient.interceptors.response.use(
 
     // ── Normalize Error Shape ─────────────────────────────────────────────────
     // Extract the most useful message available. Never expose raw Axios internals.
-    const serverMessage = (error.response?.data as { message?: string })?.message;
-    const message = serverMessage ?? error.message ?? "An unexpected error occurred.";
+    const body = error.response?.data as
+      | { message?: string; details?: Record<string, unknown> }
+      | undefined;
+    const message = body?.message ?? error.message ?? "An unexpected error occurred.";
 
     // Log in development only — never log auth errors in production (token leaks).
     if (ENV.VITE_ENVIRONMENT === "development") {
       console.error(`[API Error] ${status ?? "Network"}: ${message}`);
     }
 
-    return Promise.reject(new Error(message));
+    // Carry the status and the server's structured `details` onto the Error.
+    // Some errors are ACTIONABLE, not merely displayable — deleting a category
+    // that still holds products returns 409 with
+    // `{ reason: "CATEGORY_NOT_EMPTY", productCount }`, which the UI needs to
+    // open the "move products first" dialog. Flattening every failure to a bare
+    // message string would throw that away. Still a plain Error, so existing
+    // `instanceof Error` / `.message` handling is unaffected.
+    return Promise.reject(
+      Object.assign(new Error(message), {
+        status,
+        ...(body?.details !== undefined ? { details: body.details } : {}),
+      })
+    );
   }
 );

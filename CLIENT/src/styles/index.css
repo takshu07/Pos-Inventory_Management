@@ -109,7 +109,149 @@
   * {
     @apply border-border;
   }
+
+  /*
+   * Tell the browser which palettes we support so it themes native UI
+   * (scrollbars, form controls, the pre-paint canvas) to match. Without this the
+   * browser assumes light-only and flashes a white canvas before our CSS lands,
+   * even for a dark-theme user.
+   */
+  :root {
+    color-scheme: light dark;
+  }
+
+  html {
+    /* In-page anchor jumps glide instead of teleporting. Overridden below for
+       reduced-motion users. */
+    scroll-behavior: smooth;
+    /* Stops the iOS/Android grey flash on every tap — the single most "not a
+       real app" tell on a touch POS terminal. */
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
+    /* Belt-and-braces against a horizontal scrollbar appearing from one
+       overflowing table and shifting the whole shell sideways. */
+    overflow-x: hidden;
+  }
+
+  /*
+   * Keep long scrollable regions (tables, drawers, the main content area) from
+   * chaining their scroll to the page behind them once they hit an edge. Without
+   * this, scrolling to the bottom of a sales table starts dragging the shell.
+   */
+  main,
+  [data-scroll-region] {
+    overscroll-behavior: contain;
+  }
+
+  /*
+   * Reserve space for the scrollbar on the scroll container so that a list going
+   * from "fits" to "overflows" (which happens on every filter change) doesn't
+   * jog the layout by the scrollbar's width.
+   */
+  @supports (scrollbar-gutter: stable) {
+    main {
+      scrollbar-gutter: stable;
+    }
+  }
+
+  /* Slimmer, theme-aware scrollbars — the default chrome-grey bars look pasted
+     on against the dark theme. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 9999px;
+    /* Transparent border + background-clip = an inset thumb with breathing room. */
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /*
+   * Never show a focus ring for a mouse click, always show one for a keyboard
+   * user. `:focus-visible` is the browser's own heuristic for that distinction,
+   * so cashiers driving this with the keyboard can always see where they are.
+   */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+/*
+ * ── Skeleton shimmer ──────────────────────────────────────────────────────────
+ * A light sweep across loading placeholders. Reads as "content is arriving",
+ * where a static grey box reads as "this is broken" and a plain opacity pulse
+ * reads as "something is blinking".
+ *
+ * IMPLEMENTED WITH `transform`, DELIBERATELY: animating background-position (the
+ * usual shimmer recipe) repaints the element every frame on the main thread. On
+ * a table skeleton that's 40+ boxes repainting at 60fps — the loading state
+ * itself becomes the jank. A translated overlay is composited on the GPU, so
+ * the cost stays flat no matter how many skeletons are on screen.
+ */
+@keyframes skeleton-shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/*
+ * ── Reduced motion ────────────────────────────────────────────────────────────
+ * `prefers-reduced-motion` is a medical accessibility setting (vestibular
+ * disorders, migraine triggers), not a style preference — when it's on, motion
+ * must actually stop. This nulls out every transition and animation in one place
+ * rather than trusting ~200 components to each remember a motion-safe: variant.
+ *
+ * Durations go to 0.01ms rather than 0 so animationend/transitionend still fire
+ * for anything that listens for them. Nothing here depends on that today —
+ * Modal's exit is driven by a JS timer, so it unmounts correctly either way —
+ * but a 0 duration silently breaks event-driven components, and this costs
+ * nothing.
+ *
+ * `animation-iteration-count: 1` is what tames infinite loops (the animate-pulse
+ * skeletons); the element settles on its first frame.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /*
+   * EXCEPTION: busy indicators keep spinning. The spec's own carve-out is for
+   * motion essential to conveying information, and a spinner IS the information
+   * — a frozen one doesn't read as "reduced motion", it reads as "this app has
+   * hung", which is worse than the motion. Slowed down and kept smooth: it's a
+   * small, predictable, non-vestibular rotation.
+   */
+  .animate-spin {
+    animation-duration: 1.2s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  html {
+    scroll-behavior: auto;
   }
 }

@@ -56,6 +56,22 @@ export async function getCurrentUser(): Promise<ApiResponse<AuthUser>> {
 }
 
 /**
+ * POST /auth/logout
+ * Closes the server-side session record.
+ *
+ * The JWT itself remains stateless and is simply dropped client-side; what this
+ * call ends is the SESSION ROW that the Workforce module reads for presence and
+ * login history. Without it, an employee who closes the app would still show as
+ * "online" until their heartbeat went stale.
+ *
+ * Deliberately best-effort at the call site: a failed logout request must never
+ * trap the user in a signed-in UI.
+ */
+export async function logoutRequest(): Promise<ApiResponse<null>> {
+  return apiClient.post("/auth/logout");
+}
+
+/**
  * PATCH /auth/change-password
  * Updates the authenticated employee's password.
  * Backend invalidates all tokens on success — frontend must logout after.

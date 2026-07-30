@@ -6,6 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/Table";
+import { LabelToolbar } from "@/features/labels";
 import { formatCurrency } from "@/utils/formatters";
 import type { ProductVariantRow } from "../types";
 import { ProductStatusBadge } from "./ProductStatusBadge";
@@ -18,13 +19,24 @@ const num = (v: number | string | null | undefined): number =>
  * price/stock). `showFinancials` adds the Cost column for owners; managers pass
  * false and never see cost. The same component renders in both modules' detail
  * views.
+ *
+ * `showLabelActions` adds a per-variant Print/Preview column backed by the
+ * Label Engine. It is opt-in rather than always-on because this table also
+ * renders inside read-only contexts (and in the print job drawer itself, where
+ * a nested print button would be circular). The toolbar handles its own RBAC,
+ * so enabling it never leaks an action a role cannot perform.
  */
 export function ProductVariantTable({
   variants,
   showFinancials = false,
+  showLabelActions = false,
+  productName,
 }: {
   variants: ProductVariantRow[];
   showFinancials?: boolean;
+  showLabelActions?: boolean;
+  /** Used to label the variant in the print dialog summary. */
+  productName?: string;
 }) {
   if (variants.length === 0) {
     return (
@@ -46,6 +58,7 @@ export function ProductVariantTable({
           <TableHead className="text-right">Selling</TableHead>
           <TableHead className="text-right">Stock</TableHead>
           <TableHead>Status</TableHead>
+          {showLabelActions && <TableHead className="text-right">Label</TableHead>}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -84,6 +97,28 @@ export function ProductVariantTable({
             <TableCell>
               <ProductStatusBadge isActive={v.isActive} />
             </TableCell>
+            {showLabelActions && (
+              <TableCell>
+                <div className="flex justify-end">
+                  <LabelToolbar
+                    compact
+                    source="PRODUCT"
+                    variants={[
+                      {
+                        variantId: v.id,
+                        label: [
+                          productName,
+                          [v.size?.name, v.color?.name].filter(Boolean).join(" / "),
+                        ]
+                          .filter(Boolean)
+                          .join(" — "),
+                        sku: v.sku,
+                      },
+                    ]}
+                  />
+                </div>
+              </TableCell>
+            )}
           </TableRow>
         ))}
       </TableBody>

@@ -21,9 +21,14 @@ import { ReviewStep } from "./steps/ReviewStep";
 
 /**
  * ProductWizard — the enterprise product-creation flow. Full-screen guided
- * wizard: 9 steps, progress header, per-step validation gating, keyboard nav,
- * draft autosave, and a single transactional create at the end. Rendered only
- * for OWNER (mounted from OwnerProductsPage, which is behind OwnerRoute).
+ * wizard: progress header, per-step validation gating, keyboard nav, draft
+ * autosave, and a single transactional create at the end. Rendered only for
+ * OWNER (mounted from OwnerProductsPage, which is behind OwnerRoute).
+ *
+ * Step order comes from WIZARD_STEPS; this switch is keyed by step.key so the
+ * sequence can be reordered there without touching this file. Pricing is
+ * collected once (PricingStep) and inherited by every variant — VariantDetails
+ * is purely an inventory/SKU screen.
  */
 export function ProductWizard({
   open,

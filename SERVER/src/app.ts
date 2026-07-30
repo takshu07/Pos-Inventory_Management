@@ -37,6 +37,9 @@ import customerRoutes from "./routes/customer.routes";
 import employeeRoutes from "./routes/employee.routes";
 import exchangeRoutes from "./routes/exchange.routes";
 import inventoryMovementRoutes from "./routes/inventoryMovement.routes";
+import ownerInventoryRoutes from "./routes/owner.inventory.routes";
+import managerInventoryRoutes from "./routes/manager.inventory.routes";
+import cashierInventoryRoutes from "./routes/cashier.inventory.routes";
 import productRoutes from "./routes/product.routes";
 import ownerProductRoutes from "./routes/owner.products.routes";
 import managerProductRoutes from "./routes/manager.products.routes";
@@ -232,6 +235,19 @@ app.use("/api/v1/owner/labels", ownerLabelRoutes);
 // routes at all, so the read-only guarantee is structural, not just guarded.
 app.use("/api/v1/owner/workforce", ownerWorkforceRoutes);
 app.use("/api/v1/manager/workforce", managerWorkforceRoutes);
+
+// ── Inventory ───────────────────────────────────────────────────────────────
+// Three trees, one controller. /owner/inventory is the full surface including
+// every stock mutation; /manager/inventory is operational (count, request,
+// reserve) with cost stripped; /inventory is the baseline read a cashier uses
+// at the till. The mutating routes are ABSENT from the narrower trees rather
+// than merely guarded, and the service enforces the same split independently.
+//
+// Stock itself is written in exactly one place — executeMovement() — which is
+// what makes this module a ledger rather than a stock column with opinions.
+app.use("/api/v1/owner/inventory", ownerInventoryRoutes);
+app.use("/api/v1/manager/inventory", managerInventoryRoutes);
+app.use("/api/v1/inventory", cashierInventoryRoutes);
 
 // =============================================================================
 // 404 HANDLER

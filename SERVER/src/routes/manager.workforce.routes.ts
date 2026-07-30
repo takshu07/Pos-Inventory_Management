@@ -70,4 +70,24 @@ router.get("/employees/:id/permissions", validateParam("id"), workforce.employee
 router.post("/attendance/clock-in", workforce.clockIn);
 router.post("/attendance/clock-out", workforce.clockOut);
 
+// Self-service breaks, same rule: the service rejects an employeeId other than
+// the caller's own unless the actor is an OWNER.
+router.post("/attendance/break/start", workforce.startBreak);
+router.post("/attendance/break/end", workforce.endBreak);
+
+// ── Security overview — READ ONLY ───────────────────────────────────────────
+// A manager sees session/failed-login counters for their own operational team;
+// the service narrows the employee set by actor. Terminating a session and
+// forcing a logout are OWNER-only and deliberately absent from this tree.
+//
+// Employee NOTES are absent here too, and must stay absent: notes are private
+// to the owner, which is the whole point of that feature.
+router.get("/security/overview", workforce.securityOverview);
+
+// ── Reports — READ ONLY ─────────────────────────────────────────────────────
+// Exporting is reading. The export service calls the same scoped list functions
+// the screens use, so a manager's file contains exactly the rows a manager's
+// screen does — never the owner's record, never salary.
+router.get("/export/:report", workforce.exportReport);
+
 export default router;

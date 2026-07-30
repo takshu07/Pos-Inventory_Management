@@ -260,6 +260,167 @@ export function formatDuration(minutes: number): string {
 }
 
 // =============================================================================
+// BREAK TRACKING
+//
+// A break is a pair of instants, not a stored "on break" boolean. `openedAt`
+// being non-null IS the open state, which is what makes it self-correcting when
+// a process dies mid-break — exactly the same reasoning as presence below.
+// =============================================================================
+
+/**
+ * Elapsed minutes of an OPEN break, or 0 if no break is open.
+ * Used to show a live "on break for 12m" without writing to the row.
+ */
+export function openBreakMinutes(
+  breakStartedAt: Date | null | undefined,
+  now: Date = new Date()
+): number {
+  if (!breakStartedAt) return 0;
+  return Math.max(0, Math.round((now.getTime() - breakStartedAt.getTime()) / MS_PER_MINUTE));
+}
+
+/**
+ * Total break minutes to store when a break closes: whatever was already
+ * accumulated plus this break's elapsed time. Additive so an employee may take
+ * several breaks in a day without any of them being lost.
+ */
+export function closeBreak(params: {
+  accumulatedMinutes: number;
+  breakStartedAt: Date;
+  at?: Date;
+}): number {
+  const at = params.at ?? new Date();
+  return params.accumulatedMinutes + openBreakMinutes(params.breakStartedAt, at);
+}
+
+// =============================================================================
+// PERFORMANCE SCORE & TARGET ACHIEVEMENT
+//
+// The weighting below was chosen explicitly by the business owner (balanced
+// 40/30/15/15), not defaulted. It is stated once here and consumed by both the
+// leaderboard and the drawer, so the number can never differ between the two
+// screens that show it.
+// =============================================================================
+
+/** The agreed weights. Exported so the UI can explain the score it renders. */
+export const PERFORMANCE_WEIGHTS = {
+  revenue: 40,
+  attendance: 30,
+  returns: 15,
+  discount: 15,
+} as const;
+
+export interface PerformanceScoreInput {
+  /** Revenue earned in the period. */
+  revenue: number;
+  /**
+   * Target for the SAME period (already pro-rated by the caller). NULL means no
+   * target is configured — see below for why that is not treated as zero.
+   */
+  target: number | null;
+  /** 0–100, from attendancePercentage(). */
+  attendancePercentage: number;
+  /** Returns ÷ transactions, 0–1. */
+  returnRate: number;
+  /** Discount ÷ gross, 0–1. */
+  discountRate: number;
+}
+
+export interface PerformanceScore {
+  /** 0–100, or null when it cannot be computed honestly. */
+  score: number | null;
+  /** Per-term contribution, so the UI can show WHY a score is what it is. */
+  breakdown: {
+    revenue: number;
+    attendance: number;
+    returns: number;
+    discount: number;
+  } | null;
+  /** Set when score is null, explaining what is missing. */
+  unavailableReason?: "NO_TARGET";
+}
+
+/** Clamps to [0,1]. Guards every ratio below against dirty data. */
+function unitClamp(value: number): number {
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return value > 1 ? 1 : value;
+}
+
+/**
+ * The composite performance score: 40% revenue attainment, 30% attendance,
+ * 15% low-return-rate, 15% low-discount-rate.
+ *
+ * Returns null when the employee has NO TARGET SET rather than scoring the
+ * revenue term as zero. Scoring it zero would silently rank an unconfigured
+ * employee below a genuinely poor performer — a data-entry gap must never look
+ * like a performance finding.
+ */
+export function performanceScore(input: PerformanceScoreInput): PerformanceScore {
+  if (input.target === null || input.target <= 0) {
+    return { score: null, breakdown: null, unavailableReason: "NO_TARGET" };
+  }
+
+  // Attainment is capped at 1: beating target by 300% must not let one employee
+  // mathematically dominate every other term combined.
+  const attainment = unitClamp(input.revenue / input.target);
+
+  const breakdown = {
+    revenue: PERFORMANCE_WEIGHTS.revenue * attainment,
+    attendance: PERFORMANCE_WEIGHTS.attendance * unitClamp(input.attendancePercentage / 100),
+    returns: PERFORMANCE_WEIGHTS.returns * (1 - unitClamp(input.returnRate)),
+    discount: PERFORMANCE_WEIGHTS.discount * (1 - unitClamp(input.discountRate)),
+  };
+
+  const total =
+    breakdown.revenue + breakdown.attendance + breakdown.returns + breakdown.discount;
+
+  return {
+    score: Math.round(total * 10) / 10,
+    breakdown: {
+      revenue: Math.round(breakdown.revenue * 10) / 10,
+      attendance: Math.round(breakdown.attendance * 10) / 10,
+      returns: Math.round(breakdown.returns * 10) / 10,
+      discount: Math.round(breakdown.discount * 10) / 10,
+    },
+  };
+}
+
+/**
+ * Pro-rates a MONTHLY target onto an arbitrary reporting window.
+ *
+ * Comparing a week's revenue against a full month's target would make everyone
+ * look like they are failing; scaling by days is what makes "78% of target"
+ * mean the same thing on every period the UI offers.
+ */
+export function prorateMonthlyTarget(
+  monthlyTarget: number | null,
+  windowFrom: Date,
+  windowTo: Date,
+  daysPerMonth = 30
+): number | null {
+  if (monthlyTarget === null || monthlyTarget <= 0) return null;
+
+  const spanDays = Math.max(
+    1,
+    Math.ceil((windowTo.getTime() - windowFrom.getTime()) / (24 * 60 * MS_PER_MINUTE))
+  );
+
+  return (monthlyTarget / daysPerMonth) * spanDays;
+}
+
+/**
+ * Target achievement as a percentage. NULL (not 0) when no target is set —
+ * the UI must render "Not set", never "0%".
+ */
+export function targetAchievement(
+  revenue: number,
+  proratedTarget: number | null
+): number | null {
+  if (proratedTarget === null || proratedTarget <= 0) return null;
+  return Math.round((revenue / proratedTarget) * 1000) / 10;
+}
+
+// =============================================================================
 // PRESENCE
 //
 // Derived from LoginHistory rather than stored on Employee. A boolean column
@@ -289,6 +450,26 @@ export function derivePresence(
   const ageMinutes = (now.getTime() - lastActivity.getTime()) / MS_PER_MINUTE;
 
   return ageMinutes <= thresholdMinutes ? "ONLINE" : "OFFLINE";
+}
+
+/**
+ * Operating system from a UA string, for the security dashboard's OS column.
+ *
+ * Lives here beside the other pure derivations rather than in the service, so
+ * the same string always yields the same answer no matter who parses it. Order
+ * matters: Android UAs also contain "Linux", and iPadOS contains "Mac OS X".
+ */
+export function parseOperatingSystem(ua: string | null | undefined): string | null {
+  if (!ua) return null;
+
+  if (/Windows NT/i.test(ua)) return "Windows";
+  if (/Android/i.test(ua)) return "Android";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "iOS";
+  if (/Mac OS X|Macintosh/i.test(ua)) return "macOS";
+  if (/CrOS/i.test(ua)) return "ChromeOS";
+  if (/Linux/i.test(ua)) return "Linux";
+
+  return "Unknown";
 }
 
 /** Session length in whole minutes; null while the session is still open. */
@@ -478,6 +659,87 @@ export function activityCategory(
   module: ActionModule
 ): ActivityCategory {
   return ACTION_CATEGORY[action] ?? MODULE_CATEGORY[module] ?? "OTHER";
+}
+
+// =============================================================================
+// ACTIVITY SEVERITY
+//
+// Which actions a manager must not scroll past. The CRITICAL set below was
+// chosen explicitly by the business owner, not defaulted:
+//   • deletes and role/permission changes — irreversible or privilege-altering
+//   • failed logins and forced logouts    — the security signal
+//   • refunds and large discounts         — money leaving the till
+//   • inventory adjustments               — the classic shrinkage-fraud vector
+//
+// Everything else is NORMAL unless it moves money, which makes it WARNING.
+// =============================================================================
+
+export type ActivitySeverity = "NORMAL" | "WARNING" | "CRITICAL";
+
+/**
+ * Discount amount, as a fraction of the sale, at or above which a discount is
+ * itself CRITICAL rather than merely notable. A single deep discount is the
+ * event worth interrupting someone for.
+ */
+export const LARGE_DISCOUNT_THRESHOLD = 0.25;
+
+const CRITICAL_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>([
+  "DELETE",
+  "ROLE_CHANGED",
+  "PERMISSION_CHANGED",
+  "EMPLOYEE_DEACTIVATED",
+  "PASSWORD_RESET",
+  "INVENTORY_ADJUST",
+]);
+
+const WARNING_ACTIONS: ReadonlySet<ActionType> = new Set<ActionType>([
+  "EXCHANGE_COMPLETE",
+  "ATTENDANCE_ADJUSTED",
+  "EMPLOYEE_REACTIVATED",
+  "LABEL_PRINT_FAILED",
+]);
+
+/**
+ * Classifies one activity row.
+ *
+ * `context` carries the few facts that cannot be read off the action alone — a
+ * refund is a SALE row with a negative total, and a discount's severity depends
+ * on its size. Callers that lack the context still get a correct action-level
+ * answer; they simply cannot upgrade a discount to CRITICAL.
+ */
+export function activitySeverity(
+  action: ActionType,
+  module: ActionModule,
+  context?: {
+    /** True when the underlying sale was a refund/return rather than a sale. */
+    isRefund?: boolean;
+    /** Discount as a fraction of gross, 0–1. */
+    discountRate?: number;
+    /** True when this row is a failed login attempt. */
+    isFailedLogin?: boolean;
+    /** True when the session was force-terminated by an owner. */
+    isForcedLogout?: boolean;
+  }
+): ActivitySeverity {
+  // Context-driven cases first — they describe the specific row, whereas the
+  // action only describes its kind.
+  if (context?.isFailedLogin || context?.isForcedLogout) return "CRITICAL";
+  if (context?.isRefund) return "CRITICAL";
+  if (
+    context?.discountRate !== undefined &&
+    context.discountRate >= LARGE_DISCOUNT_THRESHOLD
+  ) {
+    return "CRITICAL";
+  }
+
+  if (CRITICAL_ACTIONS.has(action)) return "CRITICAL";
+  if (WARNING_ACTIONS.has(action)) return "WARNING";
+
+  // A discount below the threshold is still money off, so it stays notable.
+  if (module === "DISCOUNT" || module === "COUPON") return "WARNING";
+  if (context?.discountRate !== undefined && context.discountRate > 0) return "WARNING";
+
+  return "NORMAL";
 }
 
 const ACTION_LABELS: Partial<Record<ActionType, string>> = {

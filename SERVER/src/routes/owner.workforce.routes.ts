@@ -60,4 +60,40 @@ router.patch("/employees/:id", validateParam("id"), workforce.updateEmployee);
 router.patch("/employees/:id/role", validateParam("id"), workforce.changeRole);
 router.post("/employees/:id/reset-password", validateParam("id"), workforce.resetPassword);
 
+// ── Breaks ──────────────────────────────────────────────────────────────────
+// Two explicit endpoints rather than one toggle: a retried request must not be
+// able to invert the state the caller intended.
+router.post("/attendance/break/start", workforce.startBreak);
+router.post("/attendance/break/end", workforce.endBreak);
+
+// ── Employee notes — OWNER ONLY ─────────────────────────────────────────────
+// These are deliberately absent from the manager route tree. The service
+// refuses non-OWNER actors independently, so the omission here is the first of
+// two gates, not the only one.
+router.get("/employees/:id/notes", validateParam("id"), workforce.listNotes);
+router.post("/employees/:id/notes", validateParam("id"), workforce.createNote);
+router.patch("/notes/:id", validateParam("id"), workforce.updateNote);
+router.delete("/notes/:id", validateParam("id"), workforce.deleteNote);
+
+// ── Security dashboard ──────────────────────────────────────────────────────
+router.get("/security/overview", workforce.securityOverview);
+router.post("/sessions/:id/terminate", validateParam("id"), workforce.terminateSession);
+router.post("/employees/:id/force-logout", validateParam("id"), workforce.forceLogout);
+
+// ── Employee comparison ─────────────────────────────────────────────────────
+router.get("/compare", workforce.compare);
+
+// ── Shift management ────────────────────────────────────────────────────────
+// `/shifts/assign` is declared BEFORE `/shifts/:id` would match it; Express
+// resolves in declaration order, so a literal path must precede its parameterised
+// sibling or "assign" would be read as an id.
+router.post("/shifts", workforce.createShift);
+router.post("/shifts/assign", workforce.assignShift);
+router.patch("/shifts/:id", validateParam("id"), workforce.updateShift);
+
+// ── Reports ─────────────────────────────────────────────────────────────────
+// One endpoint, four reports, three formats. The remaining query string is the
+// report's own filters, so an export matches the screen it was launched from.
+router.get("/export/:report", workforce.exportReport);
+
 export default router;

@@ -1,21 +1,37 @@
-import { useState } from "react";
-import { ImagePlus, X, Star, GripVertical, ImageOff } from "lucide-react";
+import { useCallback, useRef, useState } from "react";
+import { ImagePlus, X, Star, GripVertical, Link2, Loader2, Upload } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { apiClient } from "@/lib/api/axios";
 import { cn } from "@/utils/cn";
+import {
+  MAX_BYTES,
+  isImageFile,
+  optimizeImage,
+  uploadFilename,
+} from "@/shared/images/optimizeImage";
 import { useWizard } from "../WizardContext";
 import { StepShell } from "../components/StepShell";
 import { clientId } from "../helpers";
 import type { WizardImage } from "../types";
 
 /**
- * Step 2 — Images. URL-based image management (the product model stores image
- * URLs). Supports: add by URL, drag-to-reorder, thumbnail (primary) selection,
- * per-image role tag (front/back/side/close-up/lifestyle), remove, duplicate
- * detection, and a hard cap of 10. The first image is the thumbnail.
+ * Step 2 — Images. Entirely OPTIONAL: a product can be created with none (the
+ * validator raises a warning, never an error).
  *
- * NOTE: direct file upload → CDN URL is a follow-up; the asset service stores
- * files privately without a public URL, so we take verified image URLs here.
+ * Two ways in, because owners have photos in both places:
+ *   • drag & drop / click-to-browse → uploaded to the asset module and stored as
+ *     `/api/v1/assets/<id>/download`
+ *   • paste a URL → stored verbatim, for images already on a CDN
+ *
+ * Uploads go to the shared asset module (`POST /assets/upload`) rather than a
+ * product-specific endpoint — storage, validation and access control already
+ * live there and must not be duplicated. This mirrors CategoryImageUpload; the
+ * shared intake rules live in @/shared/images/optimizeImage.
+ *
+ * Also supports drag-to-reorder, thumbnail (primary) selection, per-image role
+ * tag, remove, duplicate detection, and a hard cap of 10. The first image is the
+ * thumbnail.
  */
 
 const ROLES: WizardImage["role"][] = ["front", "back", "side", "close-up", "lifestyle"];
@@ -26,6 +42,10 @@ export function ImagesStep() {
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropActive, setDropActive] = useState(false);
+  const [uploading, setUploading] = useState(0); // count of in-flight uploads
+  const [showUrlInput, setShowUrlInput] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const images = state.images;
 
@@ -53,6 +73,95 @@ export function ImagesStep() {
     setUrl("");
   };
 
+  /**
+   * Upload one file and append it. Reads the CURRENT image list off the reducer
+   * via a functional patch rather than the captured `images`, so several files
+   * dropped at once cannot overwrite each other's appends.
+   */
+  const uploadOne = useCallback(
+    async (file: File) => {
+      if (!isImageFile(file)) {
+        setError(`"${file.name}" isn't an image file.`);
+        return;
+      }
+      if (file.size > MAX_BYTES) {
+        setError(`"${file.name}" is larger than 10 MB.`);
+        return;
+      }
+
+      setUploading((n) => n + 1);
+      try {
+        let optimized: Blob;
+        try {
+          optimized = await optimizeImage(file);
+        } catch {
+          // The browser could not decode this image, so we can neither convert
+          // nor display it. Say so plainly instead of uploading a file that
+          // would render as a broken image everywhere.
+          setError(
+            `This browser can't read "${file.name}". Try saving it as JPG, PNG or WebP.`
+          );
+          return;
+        }
+
+        const form = new FormData();
+        form.append("file", optimized, uploadFilename(file, optimized));
+        form.append("ownerModule", "PRODUCT");
+        // No ownerEntityId: the product does not exist yet at wizard time. The
+        // asset is linked by URL when the product is created.
+        //
+        // PUBLIC because this image is rendered by <img src=…> in the grid,
+        // tables and storefront. A browser image request carries no
+        // Authorization header, so a PRIVATE asset would 401 and show as a
+        // broken thumbnail. Catalog photos are non-sensitive; the assets that
+        // need protecting (invoices, documents) keep the PRIVATE default.
+        form.append("visibility", "PUBLIC");
+
+        // The response interceptor returns the server's { success, message, data }
+        // envelope, so the created asset is at `.data`.
+        const res = await apiClient.post<{ id: string }>("/assets/upload", form);
+        const assetId = (res.data as { id?: string })?.id;
+        if (!assetId) throw new Error("Upload did not return an asset id.");
+
+        const next: WizardImage = {
+          id: clientId("img"),
+          url: `/api/v1/assets/${assetId}/download`,
+        };
+        dispatch({
+          type: "PATCH",
+          patch: (prev) => ({
+            images: prev.images.length >= MAX ? prev.images : [...prev.images, next],
+          }),
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `Couldn't upload "${file.name}".`);
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    },
+    [dispatch]
+  );
+
+  /** Accept a batch (drop or multi-select), trimmed to the remaining capacity. */
+  const acceptFiles = useCallback(
+    (fileList: FileList | null) => {
+      setError(null);
+      const files = Array.from(fileList ?? []);
+      if (files.length === 0) return;
+
+      const room = MAX - images.length - uploading;
+      if (room <= 0) {
+        setError(`Maximum ${MAX} images.`);
+        return;
+      }
+      if (files.length > room) {
+        setError(`Only ${room} more image${room === 1 ? "" : "s"} can be added — the rest were skipped.`);
+      }
+      files.slice(0, room).forEach((f) => void uploadOne(f));
+    },
+    [images.length, uploading, uploadOne]
+  );
+
   const remove = (id: string) => setImages(images.filter((i) => i.id !== id));
 
   const makePrimary = (index: number) => {
@@ -75,37 +184,125 @@ export function ImagesStep() {
     setDragIndex(null);
   };
 
+  const full = images.length + uploading >= MAX;
+
   return (
     <StepShell
       title="Images"
-      description={`Add up to ${MAX} images. Drag to reorder — the first image is the thumbnail.`}
+      description={`Optional — add up to ${MAX} images. Drag to reorder; the first image is the thumbnail.`}
     >
-      <div className="flex items-end gap-2">
-        <Input
-          label="Image URL"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())}
-          placeholder="https://cdn.example.com/product-front.jpg"
-          error={error ?? undefined}
-        />
-        <Button onClick={add} leftIcon={<ImagePlus className="h-4 w-4" />} disabled={images.length >= MAX}>
-          Add
-        </Button>
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium leading-none">Product images</span>
+        <button
+          type="button"
+          onClick={() => {
+            setShowUrlInput((s) => !s);
+            setError(null);
+          }}
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <Link2 className="h-3 w-3" />
+          {showUrlInput ? "Upload instead" : "Add by URL"}
+        </button>
       </div>
 
-      {images.length === 0 ? (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border py-14 text-muted-foreground">
-          <ImageOff className="h-10 w-10" />
-          <p className="text-sm">No images yet. Add an image URL above.</p>
+      {showUrlInput && (
+        <div className="flex items-end gap-2">
+          <Input
+            label="Image URL"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), add())}
+            placeholder="https://cdn.example.com/product-front.jpg"
+          />
+          <Button onClick={add} leftIcon={<ImagePlus className="h-4 w-4" />} disabled={full}>
+            Add
+          </Button>
         </div>
-      ) : (
+      )}
+
+      {/*
+        The dropzone doubles as the empty state, so there is no separate "no
+        images yet" panel — the place you are told about is the place you drop.
+      */}
+      <div
+        role="button"
+        tabIndex={0}
+        aria-label="Add images"
+        onClick={() => !full && inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !full) {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => {
+          // Only react to files — a card being reordered also fires dragover.
+          if (dragIndex !== null) return;
+          e.preventDefault();
+          setDropActive(true);
+        }}
+        onDragLeave={() => setDropActive(false)}
+        onDrop={(e) => {
+          if (dragIndex !== null) return;
+          e.preventDefault();
+          setDropActive(false);
+          if (!full) acceptFiles(e.dataTransfer.files);
+        }}
+        className={cn(
+          "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed transition-colors",
+          images.length === 0 ? "py-14" : "py-8",
+          dropActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50",
+          full && "cursor-not-allowed opacity-60"
+        )}
+      >
+        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-muted">
+          {uploading > 0 ? (
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          ) : (
+            <Upload className={cn("h-5 w-5", dropActive ? "text-primary" : "text-muted-foreground")} />
+          )}
+        </div>
+        <span className="text-sm font-medium">
+          {uploading > 0
+            ? `Optimising and uploading ${uploading} image${uploading === 1 ? "" : "s"}…`
+            : full
+              ? `Maximum ${MAX} images reached`
+              : dropActive
+                ? "Drop to upload"
+                : "Drag images here, or click to browse"}
+        </span>
+        {!full && uploading === 0 && (
+          <span className="text-xs text-muted-foreground">
+            Any image format · up to 10 MB each · optional
+          </span>
+        )}
+      </div>
+
+      <input
+        ref={inputRef}
+        type="file"
+        // Any image the OS can offer. The browse dialog must not filter out a
+        // format the component is willing to convert.
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          acceptFiles(e.target.files);
+          e.target.value = ""; // allow re-selecting the same file
+        }}
+      />
+
+      {error && <p className="text-xs text-destructive">{error}</p>}
+
+      {images.length > 0 && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
           {images.map((img, index) => (
             <div
               key={img.id}
               draggable
               onDragStart={() => setDragIndex(index)}
+              onDragEnd={() => setDragIndex(null)}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => onDrop(index)}
               className={cn(
@@ -167,8 +364,8 @@ export function ImagesStep() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        {images.length}/{MAX} images. Products with photos sell noticeably better — front &amp; back at
-        minimum are recommended.
+        {images.length}/{MAX} images. Optional, but products with photos sell noticeably better —
+        front &amp; back at minimum are recommended.
       </p>
     </StepShell>
   );

@@ -24,6 +24,7 @@ import type {
   ActionModule,
   ActionType,
   AttendanceStatus,
+  EmployeeNoteCategory,
   EmployeeRole,
   EmploymentStatus,
 } from "../../generated/prisma";
@@ -54,6 +55,11 @@ const ROSTER_SELECT = {
   lastLogin: true,
   storeCode: true,
   shiftId: true,
+  // Enterprise upgrade: the roster tables surface the assigned till and the
+  // target. `monthlyTarget` is compensation-adjacent but not compensation —
+  // it is an operational goal a manager legitimately needs to see.
+  assignedRegister: true,
+  monthlyTarget: true,
   shift: {
     select: {
       id: true,
@@ -304,6 +310,8 @@ const LOGIN_HISTORY_SELECT = {
   durationMinutes: true,
   endReason: true,
   failureReason: true,
+  operatingSystem: true,
+  terminatedById: true,
 } as const;
 
 export interface LoginHistoryFilters {
@@ -374,6 +382,7 @@ async function createLoginSession(data: {
   browser: string | null;
   ipAddress: string | null;
   userAgent: string | null;
+  operatingSystem?: string | null;
   isSuccessful: boolean;
   failureReason?: string | null;
   storeCode?: string | null;
@@ -385,6 +394,7 @@ async function createLoginSession(data: {
       browser: data.browser,
       ipAddress: data.ipAddress,
       userAgent: data.userAgent,
+      operatingSystem: data.operatingSystem ?? null,
       isSuccessful: data.isSuccessful,
       failureReason: data.failureReason ?? null,
       storeCode: data.storeCode ?? null,
@@ -530,6 +540,34 @@ async function groupActivityByType(filters: {
   });
 }
 
+/**
+ * Activity counts grouped by (actionType, module).
+ *
+ * The module half is what makes "customers added" countable at all: creating a
+ * customer is a generic CREATE, and only the module distinguishes it from
+ * creating a product. Grouping by actionType alone cannot express that.
+ */
+async function groupActivityByTypeAndModule(filters: {
+  employeeIds?: string[] | undefined;
+  dateFrom?: Date | undefined;
+  dateTo?: Date | undefined;
+}) {
+  const where: Prisma.EmployeeActionWhereInput = {};
+  if (filters.employeeIds) where.employeeId = { in: filters.employeeIds };
+  if (filters.dateFrom || filters.dateTo) {
+    where.createdAt = {
+      ...(filters.dateFrom ? { gte: filters.dateFrom } : {}),
+      ...(filters.dateTo ? { lte: filters.dateTo } : {}),
+    };
+  }
+
+  return prisma.employeeAction.groupBy({
+    by: ["actionType", "module"],
+    where,
+    _count: { _all: true },
+  });
+}
+
 // =============================================================================
 // ATTENDANCE
 // =============================================================================
@@ -596,6 +634,8 @@ async function findAttendance(filters: AttendanceFilters) {
         lateMinutes: true,
         earlyExitMinutes: true,
         overtimeMinutes: true,
+        breakMinutes: true,
+        breakStartedAt: true,
         notes: true,
         shiftId: true,
         shiftStartMinute: true,
@@ -742,6 +782,69 @@ async function sumUnitsByEmployee(
   `;
 }
 
+/**
+ * The category an employee sells most of, by units, in a window.
+ *
+ * DISTINCT ON returns just the top row per employee in one index-ordered pass;
+ * the alternative (fetch every category per employee, sort in JS) would move
+ * the whole sales history over the wire to read one label off it.
+ */
+async function topCategoryByEmployee(
+  employeeIds: string[],
+  dateFrom: Date,
+  dateTo: Date
+) {
+  if (employeeIds.length === 0) return [];
+
+  return prisma.$queryRaw<
+    Array<{ employeeId: string; categoryName: string | null; units: bigint }>
+  >`
+    SELECT DISTINCT ON (t."employeeId")
+      t."employeeId", t."categoryName", t."units"
+    FROM (
+      SELECT
+        s."employeeId",
+        c."name" AS "categoryName",
+        SUM(si."quantity")::bigint AS units
+      FROM "sales" s
+      INNER JOIN "sale_items"       si ON si."saleId"    = s."id"
+      INNER JOIN "product_variants" pv ON pv."id"        = si."variantId"
+      INNER JOIN "products"         p  ON p."id"         = pv."productId"
+      LEFT  JOIN "categories"       c  ON c."id"         = p."categoryId"
+      WHERE s."employeeId" IN (${Prisma.join(employeeIds)})
+        AND s."status" = 'COMPLETED'
+        AND s."saleDate" >= ${dateFrom}
+        AND s."saleDate" <= ${dateTo}
+      GROUP BY s."employeeId", c."name"
+    ) t
+    ORDER BY t."employeeId", t."units" DESC
+  `;
+}
+
+/**
+ * Distinct customers served per employee.
+ *
+ * Counts PEOPLE, not transactions — a regular who visits five times is one
+ * customer served, which is the number this metric is asked for.
+ */
+async function countCustomersByEmployee(
+  employeeIds: string[],
+  dateFrom: Date,
+  dateTo: Date
+) {
+  if (employeeIds.length === 0) return [];
+
+  return prisma.$queryRaw<Array<{ employeeId: string; customers: bigint }>>`
+    SELECT s."employeeId", COUNT(DISTINCT s."customerId")::bigint AS customers
+    FROM "sales" s
+    WHERE s."employeeId" IN (${Prisma.join(employeeIds)})
+      AND s."status" = 'COMPLETED'
+      AND s."saleDate" >= ${dateFrom}
+      AND s."saleDate" <= ${dateTo}
+    GROUP BY s."employeeId"
+  `;
+}
+
 /** Exchange counts and value per employee. */
 async function groupExchangesByEmployee(
   employeeIds: string[],
@@ -779,6 +882,22 @@ async function groupReturnsByEmployee(
     },
     _count: { _all: true },
     _sum: { grandTotal: true },
+  });
+}
+
+/**
+ * Most recent completed sale per employee — the roster's "Last Sale" column.
+ *
+ * MAX() rather than a per-employee ORDER BY ... LIMIT 1: one grouped pass over
+ * the (employeeId, saleDate) index answers it for the whole page at once.
+ */
+async function lastSaleByEmployee(employeeIds: string[]) {
+  if (employeeIds.length === 0) return [];
+
+  return prisma.sale.groupBy({
+    by: ["employeeId"],
+    where: { employeeId: { in: employeeIds }, status: "COMPLETED" },
+    _max: { saleDate: true },
   });
 }
 
@@ -823,6 +942,36 @@ async function findShiftById(id: string) {
   return prisma.shift.findUnique({ where: { id }, select: SHIFT_SELECT });
 }
 
+async function createShift(data: Prisma.ShiftUncheckedCreateInput) {
+  return prisma.shift.create({ data, select: SHIFT_SELECT });
+}
+
+async function updateShift(id: string, data: Prisma.ShiftUncheckedUpdateInput) {
+  return prisma.shift.update({ where: { id }, data, select: SHIFT_SELECT });
+}
+
+/**
+ * Bulk shift assignment. One updateMany rather than a loop of updates — the
+ * whole point of the bulk action is that assigning 40 cashiers to the morning
+ * shift is one round trip, not forty.
+ */
+async function assignShiftToEmployees(employeeIds: string[], shiftId: string | null) {
+  const result = await prisma.employee.updateMany({
+    where: { id: { in: employeeIds } },
+    data: { shiftId },
+  });
+  return result.count;
+}
+
+/** Employees per shift, for the shift-management screen's headcount badges. */
+async function countEmployeesByShift() {
+  return prisma.employee.groupBy({
+    by: ["shiftId"],
+    where: { isActive: true },
+    _count: { _all: true },
+  });
+}
+
 // =============================================================================
 // MUTATIONS (OWNER-only paths; authorization enforced in the service)
 // =============================================================================
@@ -835,6 +984,265 @@ async function updateEmployeeWorkforceFields(
     where: { id },
     data,
     select: PROFILE_SELECT,
+  });
+}
+
+// =============================================================================
+// BREAK TRACKING
+// =============================================================================
+
+/**
+ * Opens or closes a break on an existing attendance day.
+ *
+ * Break state lives on the attendance row rather than in its own table because
+ * a break is an attribute of a worked day, and the (employeeId, date) unique
+ * constraint already gives us exactly one row to hold it.
+ */
+async function updateAttendanceBreak(
+  attendanceId: string,
+  data: { breakStartedAt?: Date | null; breakMinutes?: number }
+) {
+  return prisma.attendance.update({
+    where: { id: attendanceId },
+    data,
+  });
+}
+
+// =============================================================================
+// SESSION TERMINATION & SECURITY (Login History dashboard)
+// =============================================================================
+
+/**
+ * Force-ends ONE specific session, attributing it to the owner who did it.
+ *
+ * Distinct from closeOpenSessions (which ends every session for an employee,
+ * used by password reset and deactivation): the security dashboard terminates a
+ * single suspicious session and must leave the employee's other devices alone.
+ */
+async function terminateSession(
+  sessionId: string,
+  terminatedById: string,
+  now: Date = new Date()
+) {
+  // Same per-row duration arithmetic as closeOpenSessions — updateMany cannot
+  // subtract against the row's own loginAt.
+  const affected = await prisma.$executeRaw`
+    UPDATE "login_history"
+    SET "logoutAt" = ${now},
+        "endReason" = 'TERMINATED',
+        "terminatedById" = ${terminatedById},
+        "durationMinutes" = GREATEST(0, ROUND(EXTRACT(EPOCH FROM (${now}::timestamp - "loginAt")) / 60)::int)
+    WHERE "id" = ${sessionId}
+      AND "logoutAt" IS NULL
+      AND "isSuccessful" = true
+  `;
+
+  // 0 means the session was already closed — the caller reports that rather
+  // than claiming a termination that did not happen.
+  return affected > 0;
+}
+
+/** One session row, for authorization checks before terminating it. */
+async function findSessionById(sessionId: string) {
+  return prisma.loginHistory.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      employeeId: true,
+      logoutAt: true,
+      isSuccessful: true,
+      employee: { select: { id: true, role: true, firstName: true, lastName: true } },
+    },
+  });
+}
+
+/**
+ * Security counters for the Login History dashboard.
+ *
+ * Deliberately COUNT-only and computed in one round trip: this strip sits above
+ * a polled table, so it must not cost a scan per card.
+ */
+async function loginSecurityStats(params: {
+  employeeIds?: string[] | undefined;
+  since: Date;
+  presenceThresholdMinutes: number;
+}) {
+  const scope = params.employeeIds?.length
+    ? Prisma.sql`AND lh."employeeId" = ANY(${params.employeeIds}::text[])`
+    : Prisma.empty;
+
+  const cutoff = new Date(Date.now() - params.presenceThresholdMinutes * 60_000);
+
+  const rows = await prisma.$queryRaw<
+    Array<{
+      active_sessions: bigint;
+      failed_logins: bigint;
+      logged_in_today: bigint;
+      avg_session_minutes: number | null;
+      concurrent_peak: bigint;
+    }>
+  >`
+    SELECT
+      COUNT(*) FILTER (
+        WHERE lh."logoutAt" IS NULL
+          AND lh."isSuccessful" = true
+          AND COALESCE(lh."lastSeenAt", lh."loginAt") >= ${cutoff}
+      )::bigint AS active_sessions,
+
+      COUNT(*) FILTER (
+        WHERE lh."isSuccessful" = false AND lh."loginAt" >= ${params.since}
+      )::bigint AS failed_logins,
+
+      COUNT(DISTINCT lh."employeeId") FILTER (
+        WHERE lh."isSuccessful" = true AND lh."loginAt" >= ${params.since}
+      )::bigint AS logged_in_today,
+
+      AVG(lh."durationMinutes") FILTER (
+        WHERE lh."durationMinutes" IS NOT NULL AND lh."loginAt" >= ${params.since}
+      )::float AS avg_session_minutes,
+
+      -- Distinct employees holding an open session right now. "Concurrent" in
+      -- the sense a licence audit means it: people, not tabs.
+      COUNT(DISTINCT lh."employeeId") FILTER (
+        WHERE lh."logoutAt" IS NULL AND lh."isSuccessful" = true
+      )::bigint AS concurrent_peak
+    FROM "login_history" lh
+    WHERE TRUE ${scope}
+  `;
+
+  const row = rows[0];
+  return {
+    activeSessions: Number(row?.active_sessions ?? 0),
+    failedLogins: Number(row?.failed_logins ?? 0),
+    loggedInToday: Number(row?.logged_in_today ?? 0),
+    averageSessionMinutes: Math.round(row?.avg_session_minutes ?? 0),
+    concurrentSessions: Number(row?.concurrent_peak ?? 0),
+  };
+}
+
+/**
+ * Failed sign-in attempts grouped by (employee, IP) for the security table.
+ *
+ * Grouped rather than listed because the question is "who is being hammered,
+ * and from where" — twenty rows of the same IP answer it far worse than one row
+ * with a count of twenty.
+ */
+async function failedLoginAttempts(params: {
+  employeeIds?: string[] | undefined;
+  since: Date;
+  limit: number;
+}) {
+  const scope = params.employeeIds?.length
+    ? Prisma.sql`AND lh."employeeId" = ANY(${params.employeeIds}::text[])`
+    : Prisma.empty;
+
+  return prisma.$queryRaw<
+    Array<{
+      employeeId: string;
+      fullName: string | null;
+      employeeCode: string | null;
+      ipAddress: string | null;
+      failureReason: string | null;
+      attempts: bigint;
+      lastAttemptAt: Date;
+    }>
+  >`
+    SELECT
+      lh."employeeId",
+      (e."firstName" || ' ' || e."lastName") AS "fullName",
+      e."employeeCode",
+      lh."ipAddress",
+      MAX(lh."failureReason") AS "failureReason",
+      COUNT(*)::bigint      AS attempts,
+      MAX(lh."loginAt")     AS "lastAttemptAt"
+    FROM "login_history" lh
+    LEFT JOIN "employees" e ON e."id" = lh."employeeId"
+    WHERE lh."isSuccessful" = false
+      AND lh."loginAt" >= ${params.since}
+      ${scope}
+    GROUP BY lh."employeeId", e."firstName", e."lastName", e."employeeCode", lh."ipAddress"
+    ORDER BY attempts DESC, "lastAttemptAt" DESC
+    LIMIT ${params.limit}
+  `;
+}
+
+// =============================================================================
+// EMPLOYEE NOTES — OWNER-only. The service is the gate; this is plain storage.
+// =============================================================================
+
+const NOTE_SELECT = {
+  id: true,
+  employeeId: true,
+  authorId: true,
+  category: true,
+  body: true,
+  isPinned: true,
+  createdAt: true,
+  updatedAt: true,
+  author: {
+    select: { id: true, firstName: true, lastName: true, employeeCode: true },
+  },
+} as const;
+
+/** One employee's notes: pinned first, then newest — matching the tab's index. */
+async function findNotes(employeeId: string) {
+  return prisma.employeeNote.findMany({
+    where: { employeeId },
+    select: NOTE_SELECT,
+    orderBy: [{ isPinned: "desc" }, { createdAt: "desc" }],
+  });
+}
+
+async function findNoteById(id: string) {
+  return prisma.employeeNote.findUnique({
+    where: { id },
+    select: NOTE_SELECT,
+  });
+}
+
+async function createNote(data: {
+  employeeId: string;
+  authorId: string;
+  category: EmployeeNoteCategory;
+  body: string;
+  isPinned?: boolean;
+  storeCode?: string | null;
+}) {
+  return prisma.employeeNote.create({
+    data: {
+      employeeId: data.employeeId,
+      authorId: data.authorId,
+      category: data.category,
+      body: data.body,
+      isPinned: data.isPinned ?? false,
+      storeCode: data.storeCode ?? null,
+    },
+    select: NOTE_SELECT,
+  });
+}
+
+async function updateNote(
+  id: string,
+  data: Prisma.EmployeeNoteUncheckedUpdateInput
+) {
+  return prisma.employeeNote.update({
+    where: { id },
+    data,
+    select: NOTE_SELECT,
+  });
+}
+
+async function deleteNote(id: string) {
+  await prisma.employeeNote.delete({ where: { id } });
+}
+
+/** Note counts per employee, so the roster/drawer can badge without loading bodies. */
+async function countNotesByEmployee(employeeIds: string[]) {
+  if (employeeIds.length === 0) return [];
+  return prisma.employeeNote.groupBy({
+    by: ["employeeId"],
+    where: { employeeId: { in: employeeIds } },
+    _count: { _all: true },
   });
 }
 
@@ -857,6 +1265,7 @@ export const workforceRepository = {
   findActivity,
   findLastActivity,
   groupActivityByType,
+  groupActivityByTypeAndModule,
   // attendance
   findAttendance,
   findAttendanceForDate,
@@ -865,13 +1274,33 @@ export const workforceRepository = {
   groupAttendanceByStatus,
   attendanceTrend,
   upsertAttendance,
+  updateAttendanceBreak,
   // performance
   groupSalesByEmployee,
   sumUnitsByEmployee,
+  topCategoryByEmployee,
+  countCustomersByEmployee,
+  lastSaleByEmployee,
   groupExchangesByEmployee,
   groupReturnsByEmployee,
   salesTrendByEmployee,
   // shifts
   findShifts,
   findShiftById,
+  createShift,
+  updateShift,
+  assignShiftToEmployees,
+  countEmployeesByShift,
+  // security / sessions
+  terminateSession,
+  findSessionById,
+  loginSecurityStats,
+  failedLoginAttempts,
+  // notes (OWNER-only at the service layer)
+  findNotes,
+  findNoteById,
+  createNote,
+  updateNote,
+  deleteNote,
+  countNotesByEmployee,
 } as const;

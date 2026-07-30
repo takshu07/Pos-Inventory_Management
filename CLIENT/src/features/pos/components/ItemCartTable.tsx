@@ -17,7 +17,8 @@ export function ItemCartTable() {
       removeItem: s.removeItem,
     }))
   );
-  const { subtotal, discountAmount, grandTotal, returnTotal, saleTotal } = usePosTotals();
+  const { subtotal, discountAmount, grandTotal, returnTotal, saleTotal, roundOffAmount } =
+    usePosTotals();
   const lineDiscount = cart.reduce((s, i) => s + (i.discountAmount ?? 0), 0);
 
   return (
@@ -109,6 +110,18 @@ export function ItemCartTable() {
           <div className="flex justify-between text-sm text-red-500">
             <span>Returned value</span>
             <span>-{formatCurrency(returnTotal)}</span>
+          </div>
+        )}
+        {/* Round Off — shown only when a rounding actually occurred, so a clean
+            total is not cluttered with a "₹0.00" line. Its sign is explicit so
+            the column above visibly adds up to the total below. */}
+        {roundOffAmount !== 0 && (
+          <div className="flex justify-between text-sm text-muted-foreground">
+            <span>Round off</span>
+            <span>
+              {roundOffAmount > 0 ? "+" : "-"}
+              {formatCurrency(Math.abs(roundOffAmount))}
+            </span>
           </div>
         )}
         <div className="flex justify-between items-center text-lg font-bold pt-1 border-t border-dashed mt-1">

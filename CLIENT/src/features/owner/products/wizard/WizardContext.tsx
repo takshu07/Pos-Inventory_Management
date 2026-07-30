@@ -10,6 +10,7 @@ import {
 import {
   initialWizardState,
   type AttributeValues,
+  type VariantPriceOverride,
   type WizardState,
   type WizardVariant,
 } from "./types";
@@ -22,10 +23,20 @@ import { generateVariants } from "./helpers";
  * form state, not server cache, until the final atomic submit.
  */
 
-const DRAFT_KEY = "owner:product-wizard:draft:v1";
+// v2 — pricing moved to state.pricing and variants hold overrides only. v1 drafts
+// (per-variant costPrice/sellingPrice/mrp) are structurally incompatible, so the
+// key is bumped rather than migrated; stale v1 drafts are cleaned up on mount.
+const DRAFT_KEY = "owner:product-wizard:draft:v2";
+const LEGACY_DRAFT_KEYS = ["owner:product-wizard:draft:v1"];
 
 type Action =
-  | { type: "PATCH"; patch: Partial<WizardState> }
+  // The updater form is for patches that must build on the LATEST state rather
+  // than the state captured when the handler was created — e.g. several image
+  // uploads resolving concurrently, each appending to the same array.
+  | {
+      type: "PATCH";
+      patch: Partial<WizardState> | ((prev: WizardState) => Partial<WizardState>);
+    }
   | { type: "SET_ATTRIBUTES"; attributes: AttributeValues }
   | { type: "REGENERATE_VARIANTS" }
   | { type: "SET_VARIANTS"; variants: WizardVariant[] }
@@ -34,13 +45,19 @@ type Action =
   | { type: "REMOVE_VARIANT"; id: string }
   | { type: "RESTORE_VARIANT"; id: string }
   | { type: "PATCH_DEFAULTS"; patch: Partial<WizardState["defaults"]> }
+  | { type: "PATCH_PRICING"; patch: Partial<WizardState["pricing"]> }
+  | { type: "SET_PRICE_OVERRIDE"; id: string; override: VariantPriceOverride }
+  | { type: "CLEAR_PRICE_OVERRIDE"; id: string }
   | { type: "RESET" }
   | { type: "HYDRATE"; state: WizardState };
 
 function reducer(state: WizardState, action: Action): WizardState {
   switch (action.type) {
     case "PATCH":
-      return { ...state, ...action.patch };
+      return {
+        ...state,
+        ...(typeof action.patch === "function" ? action.patch(state) : action.patch),
+      };
     case "SET_ATTRIBUTES":
       return { ...state, attributes: action.attributes };
     case "REGENERATE_VARIANTS":
@@ -82,6 +99,24 @@ function reducer(state: WizardState, action: Action): WizardState {
       };
     case "PATCH_DEFAULTS":
       return { ...state, defaults: { ...state.defaults, ...action.patch } };
+    case "PATCH_PRICING":
+      // Product-level pricing changes need no variant fan-out: every variant
+      // without an override reads through to this object automatically.
+      return { ...state, pricing: { ...state.pricing, ...action.patch } };
+    case "SET_PRICE_OVERRIDE":
+      return {
+        ...state,
+        variants: state.variants.map((v) =>
+          v.id === action.id ? { ...v, priceOverride: action.override } : v
+        ),
+      };
+    case "CLEAR_PRICE_OVERRIDE":
+      return {
+        ...state,
+        variants: state.variants.map((v) =>
+          v.id === action.id ? { ...v, priceOverride: null } : v
+        ),
+      };
     case "HYDRATE":
       return action.state;
     case "RESET":
@@ -96,6 +131,10 @@ interface WizardContextValue {
   dispatch: React.Dispatch<Action>;
   patch: (patch: Partial<WizardState>) => void;
   patchDefaults: (patch: Partial<WizardState["defaults"]>) => void;
+  /** Update the single authoritative pricing block. */
+  patchPricing: (patch: Partial<WizardState["pricing"]>) => void;
+  setPriceOverride: (id: string, override: VariantPriceOverride) => void;
+  clearPriceOverride: (id: string) => void;
   lastSavedAt: Date | null;
   clearDraft: () => void;
   hasDraft: boolean;
@@ -115,15 +154,31 @@ export function WizardProvider({
   const [hasDraft, setHasDraft] = useState(false);
   const firstRun = useRef(true);
 
-  // Hydrate any existing draft once on mount.
+  // Hydrate any existing draft once on mount, and drop drafts from the older
+  // (duplicated-pricing) schema so they can never resurrect removed fields.
   useEffect(() => {
     if (!autosave) return;
     try {
+      LEGACY_DRAFT_KEYS.forEach((k) => localStorage.removeItem(k));
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as WizardState;
-        dispatch({ type: "HYDRATE", state: parsed });
-        setHasDraft(true);
+        // Shape guard: only hydrate drafts that carry the v2 pricing block.
+        if (parsed && typeof parsed === "object" && parsed.pricing) {
+          dispatch({
+            type: "HYDRATE",
+            state: {
+              ...parsed,
+              variants: (parsed.variants ?? []).map((v) => ({
+                ...v,
+                priceOverride: v.priceOverride ?? null,
+              })),
+            },
+          });
+          setHasDraft(true);
+        } else {
+          localStorage.removeItem(DRAFT_KEY);
+        }
       }
     } catch {
       /* ignore corrupt draft */
@@ -162,6 +217,10 @@ export function WizardProvider({
     dispatch,
     patch: (patch) => dispatch({ type: "PATCH", patch }),
     patchDefaults: (patch) => dispatch({ type: "PATCH_DEFAULTS", patch }),
+    patchPricing: (patch) => dispatch({ type: "PATCH_PRICING", patch }),
+    setPriceOverride: (id, override) =>
+      dispatch({ type: "SET_PRICE_OVERRIDE", id, override }),
+    clearPriceOverride: (id) => dispatch({ type: "CLEAR_PRICE_OVERRIDE", id }),
     lastSavedAt,
     clearDraft,
     hasDraft,

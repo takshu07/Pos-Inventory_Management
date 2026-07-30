@@ -9,9 +9,19 @@ import { cn } from "@/utils/cn";
 export function Skeleton({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("animate-pulse rounded-md bg-muted/60", className)}
+      className={cn("relative overflow-hidden rounded-md bg-muted/60", className)}
+      // A skeleton is decorative scaffolding, not content — screen readers should
+      // announce the loading state from the region that owns it, not read out a
+      // stack of empty boxes.
+      aria-hidden="true"
       {...props}
-    />
+    >
+      {/* GPU-composited sweep — see @keyframes skeleton-shimmer in styles/index.css. */}
+      <div
+        className="absolute inset-0 bg-gradient-to-r from-transparent via-foreground/[0.07] to-transparent"
+        style={{ animation: "skeleton-shimmer 1.6s ease-in-out infinite" }}
+      />
+    </div>
   );
 }
 

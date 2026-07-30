@@ -126,8 +126,28 @@ export async function updateOwnerPricing(input: {
 
 // ── Full transactional create (product creation wizard) ───────────────────────
 
+/**
+ * Creates a product with all its variants in ONE server-side transaction.
+ *
+ * TIMEOUT: overrides the client's 15s default. This endpoint does far more work
+ * than a normal request — product + N variants + N opening-stock movements +
+ * audit, all inside a single transaction against a network-latency-bound
+ * (Neon serverless) database. The server already budgets up to 15s to acquire a
+ * connection plus 30s for the transaction itself (see SERVER config/prisma.ts
+ * `transactionOptions`), so a 15s client timeout aborts requests the server is
+ * still legitimately processing.
+ *
+ * That failure mode is worse than a slow request: axios gives up, the UI shows
+ * "timeout of 15000ms exceeded", but the transaction keeps running and the
+ * product IS created — so the user retries and creates a duplicate. The client
+ * budget must therefore be at least the server's, plus headroom for transfer.
+ */
+const FULL_CREATE_TIMEOUT_MS = 60_000;
+
 export async function createFullProduct(payload: unknown): Promise<ProductDetail> {
-  const res = await apiClient.post<any>("/owner/products/full", payload);
+  const res = await apiClient.post<any>("/owner/products/full", payload, {
+    timeout: FULL_CREATE_TIMEOUT_MS,
+  });
   return res.data;
 }
 

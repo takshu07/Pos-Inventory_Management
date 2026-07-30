@@ -4,7 +4,58 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>client</title>
+
+    <title>CEX POS</title>
+    <meta name="description" content="CEX point-of-sale and inventory management." />
+
+    <!-- Colour the browser/OS chrome (mobile address bar, PWA titlebar) to match
+         whichever theme is active, instead of leaving a bright strip above a dark app. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#020817" />
+
+    <!--
+      PRE-PAINT THEME STAMP — must stay inline, synchronous, and above the stylesheet.
+
+      WHY: ThemeProvider applies the theme class from a useEffect, which cannot run
+      until the JS bundle has downloaded, parsed and mounted React. Until then the
+      document has no theme class, so a dark-theme user gets a full white page for
+      the whole boot, then a hard flip to dark once hydration lands. That white
+      flash is the most visible piece of jank in the entire app and it happens on
+      every single page load.
+
+      Running the same resolution here — synchronously, before first paint — means
+      the very first frame the user sees is already the right theme. There is no
+      flash to fix afterwards.
+
+      It also stamps data-theme, which the chart modules
+      (features/inventory, features/workforce) select on for their viz palettes.
+      Their CSS was written expecting this attribute; without it those charts
+      silently follow the OS setting while the rest of the app follows the in-app
+      toggle, so toggling the theme left the charts behind.
+
+      KEEP IN SYNC with src/components/theme-provider.tsx — same storage key,
+      same default, same resolution rule. It is duplicated on purpose: the whole
+      point is to run before any module code exists to be imported.
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("cex-ui-theme") || "system";
+          var resolved =
+            stored === "system"
+              ? window.matchMedia("(prefers-color-scheme: dark)").matches
+                ? "dark"
+                : "light"
+              : stored;
+          var root = document.documentElement;
+          root.classList.add(resolved);
+          root.setAttribute("data-theme", resolved);
+        } catch (e) {
+          /* Private-mode localStorage throws. Falling through leaves the document
+             unstamped, which is exactly the old behaviour — degraded, not broken. */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

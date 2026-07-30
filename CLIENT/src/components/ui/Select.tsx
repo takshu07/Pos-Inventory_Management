@@ -22,7 +22,12 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
   ({ className, label, error, hint, options, placeholder, id, ...props }, ref) => {
-    const selectId = id ?? React.useId();
+    // useId must be called UNCONDITIONALLY — `id ?? React.useId()` skips the
+    // hook when an `id` prop is present, so a component that sometimes passes
+    // one and sometimes doesn't changes its hook order between renders, which
+    // React treats as a fatal error. Generate always, then prefer the caller's.
+    const generatedId = React.useId();
+    const selectId = id ?? generatedId;
 
     return (
       <div className="flex flex-col gap-1.5 w-full">
