@@ -39,4 +39,9 @@ Thumbs.db
 *.swp
 
 # Project specific
-docs/
+# Documentation is part of the codebase and is versioned. Everything else that
+# lands in docs/ (generated coverage reports, exported dumps, scratch notes)
+# stays ignored — hence ignore-the-directory-then-un-ignore-the-Markdown rather
+# than dropping the rule entirely.
+docs/*
+!docs/*.md

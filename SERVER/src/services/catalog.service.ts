@@ -274,6 +274,11 @@ export async function listProducts(
   // product_stats rollup table (totalStock, minPrice, maxPrice, stockStatus)
   // maintained on variant/inventory changes, so price/stock sorts and
   // stock-status filters page entirely in SQL for 100k+ catalogs.
+  //
+  // DECIDED (2026-08-02): build this together with the `brand_stats` rollup
+  // described at brand.repository.statsFor. Both are fed by the same write
+  // paths, so doing them as one piece of work wires those hooks once. See
+  // docs/MODULE_STATUS.md §3.
   const WINDOW = 2000;
   const raw = await prisma.product.findMany({
     where,

@@ -85,8 +85,13 @@ export const brandRepository = {
    *      The page-local sort in BrandsPage.tsx and its caveat text are removed
    *      at that point.
    *
-   * The same pattern is already noted as pending for `product_stats` in
-   * catalog.service — do both together; they share the invalidation hooks.
+   * DECIDED (2026-08-02): this ships TOGETHER with the `product_stats` rollup
+   * already noted as pending in catalog.service — not before it. Both are fed
+   * by the same write paths (sale, goods receipt, stock adjustment, product
+   * create/archive, variant cost change), so building them separately means
+   * wiring those five hook points twice and maintaining two half-finished
+   * rollup systems in the meantime. Until then, page-local sorting stands and
+   * the UI says so.
    */
   async statsFor(brandIds: string[]) {
     if (brandIds.length === 0) return [];

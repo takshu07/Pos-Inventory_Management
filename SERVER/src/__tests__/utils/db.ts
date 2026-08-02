@@ -79,6 +79,13 @@ export async function cleanDatabase() {
  * The opt-in is deliberate. A destructive default that depends on remembering to
  * set an env var is the same trap in a different costume, so a database whose
  * name does not say "test" must be named explicitly via ALLOW_DB_WIPE.
+ *
+ * ⚠ ALLOW_DB_WIPE IS FOR A SCRATCH DATABASE THAT SIMPLY ISN'T NAMED "test".
+ * It is NOT a way to run the suite against the live database. Standing project
+ * rule (2026-08-02): automated tests are never pointed at live data — do not
+ * put this variable in package.json scripts, CI configuration, .env, or a shell
+ * profile. If the integration suite is skipping, the fix is a `.env.test`
+ * against a scratch database, not this flag.
  */
 function assertSafeTestDatabase(): void {
   const url = process.env["DATABASE_URL"] ?? "";
