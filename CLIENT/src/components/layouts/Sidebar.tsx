@@ -1,11 +1,7 @@
-import { NavLink } from "react-router";
 import { cn } from "@/utils/cn";
-import { prefetchHandlers } from "@/app/router/prefetch";
 import { useAuthStore } from "@/store/auth.store";
 import { useUIStore } from "@/store/ui.store";
-import { EMPLOYEE_NAV, ADMIN_NAV } from "@/config/navigation";
-import type { NavSection, NavItem } from "@/config/navigation";
-import type { Role } from "@/types";
+import { NavGroupList } from "./NavGroupList";
 import { ChevronLeft, Store } from "lucide-react";
 
 /**
@@ -15,68 +11,15 @@ import { ChevronLeft, Store } from "lucide-react";
  *   - Renders nav items the current user's role is allowed to see.
  *   - Collapses to icon-only on desktop, slides off-canvas on mobile.
  *   - Active route is highlighted via NavLink's isActive.
+ *
+ * The tree itself lives in NavGroupList, shared with MobileSidebar so the two
+ * cannot drift. This file owns only the chrome: brand, rail width, user footer.
  */
-
-function canAccess(item: NavItem, role: Role): boolean {
-  if (!item.allowedRoles || item.allowedRoles.length === 0) return true;
-  return item.allowedRoles.includes(role);
-}
-
-function NavSectionGroup({ section, collapsed, role }: { section: NavSection; collapsed: boolean; role: Role }) {
-  const visibleItems = section.items.filter((item) => canAccess(item, role));
-  if (visibleItems.length === 0) return null;
-
-  return (
-    <div className="mb-4">
-      {!collapsed && (
-        <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-          {section.title}
-        </p>
-      )}
-      <ul className="space-y-0.5">
-        {visibleItems.map((item) => (
-          <li key={item.path}>
-            <NavLink
-              to={item.path}
-              end={item.path === "/"}
-              // Warm this screen's chunk on hover/focus/touch, so the click that
-              // follows usually has nothing left to download. See app/router/prefetch.
-              {...prefetchHandlers(item.path)}
-              // `isPending` is true from the click until the lazy chunk resolves.
-              // Highlighting the clicked item makes the app answer instantly even
-              // though the screen hasn't swapped yet — the difference between
-              // "it's working on it" and "did my click register?".
-              className={({ isActive, isPending }) =>
-                cn(
-                  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all duration-150",
-                  "hover:bg-accent hover:text-accent-foreground",
-                  isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground",
-                  isPending && !isActive && "bg-accent text-accent-foreground",
-                  collapsed && "justify-center px-2"
-                )
-              }
-              title={collapsed ? item.label : undefined}
-            >
-              <item.icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 export function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const { sidebarCollapsed, toggleCollapsed } = useUIStore();
   const role = user?.role ?? "CASHIER";
-
-  // Determine which nav sections to show based on role
-  const allSections =
-    role === "CASHIER" ? EMPLOYEE_NAV : [...EMPLOYEE_NAV, ...ADMIN_NAV];
 
   return (
     <aside
@@ -99,7 +42,18 @@ export function Sidebar() {
             <span className="font-bold text-base tracking-tight truncate">CEX POS</span>
           </div>
         )}
-        {sidebarCollapsed && <Store className="h-6 w-6 text-primary" />}
+        {/* Collapsed: the logo itself expands the rail. Without this the only
+            way back out was the group buttons, which is not discoverable. */}
+        {sidebarCollapsed && (
+          <button
+            onClick={toggleCollapsed}
+            className="rounded-md p-1 text-primary transition-colors hover:bg-accent"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+          >
+            <Store className="h-6 w-6" />
+          </button>
+        )}
 
         {!sidebarCollapsed && (
           <button
@@ -113,15 +67,12 @@ export function Sidebar() {
       </div>
 
       {/* Nav Items */}
-      <nav className="flex-1 overflow-y-auto p-2 space-y-1">
-        {allSections.map((section) => (
-          <NavSectionGroup
-            key={section.title}
-            section={section}
-            collapsed={sidebarCollapsed}
-            role={role}
-          />
-        ))}
+      <nav className="flex-1 overflow-y-auto p-2" aria-label="Main navigation">
+        <NavGroupList
+          role={role}
+          collapsed={sidebarCollapsed}
+          onExpandSidebar={() => sidebarCollapsed && toggleCollapsed()}
+        />
       </nav>
 
       {/* User Footer */}

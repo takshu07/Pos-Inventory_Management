@@ -29,6 +29,11 @@ import { RecentSalesWidget } from "../widgets/RecentSalesWidget";
 import { TopProductsWidget } from "../widgets/TopProductsWidget";
 import { InventoryAlertsWidget } from "../widgets/InventoryAlertsWidget";
 import { QuickActionsWidget } from "../widgets/QuickActionsWidget";
+import {
+  InventoryAlertTiles,
+  OwnerAlertTiles,
+  AttendanceTile,
+} from "../widgets/AlertStrip";
 import { TIME_RANGES } from "../../constants";
 import { Select } from "@/components/ui/Select";
 import { formatCurrency } from "@/utils/formatters";
@@ -85,6 +90,18 @@ export function AdminDashboard() {
             options={TIME_RANGES}
           />
         </div>
+      </div>
+
+      {/* ── Alert strip ──────────────────────────────────────────────────────
+          The counterpart to the grouped sidebar: the figures that used to
+          justify keeping every screen permanently on screen now come here, each
+          linking to the page that answers it in full. Owners get the finance
+          tiles; managers get the operational ones their role can already read.
+      */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-7">
+        <InventoryAlertTiles />
+        {isOwner && <OwnerAlertTiles />}
+        <AttendanceTile />
       </div>
 
       {/* KPI Row */}

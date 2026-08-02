@@ -49,18 +49,26 @@ import {
 import { useReportDashboard, useSalesReport, useCategoryReport } from "../hooks/useReports";
 import { GlobalSearchBar } from "../components/GlobalSearchBar";
 
+/**
+ * Every report is still one click from here — that is this page's whole job,
+ * and it is why consolidating the sidebar costs nothing in reach.
+ *
+ * These point straight at the owning tab rather than the pre-consolidation
+ * paths. Those old paths still redirect here correctly, but linking through a
+ * redirect would cost an extra navigation on every click.
+ */
 const REPORT_LINKS = [
-  { to: "/admin/reports/sales", label: "Sales", icon: ShoppingBag, hint: "Gross, net, AOV, trend" },
-  { to: "/admin/reports/products", label: "Products", icon: Package, hint: "Best and worst sellers" },
-  { to: "/admin/reports/categories", label: "Categories", icon: Tag, hint: "Revenue and margin by category" },
-  { to: "/admin/reports/brands", label: "Brands", icon: Award, hint: "Revenue, margin and stock held" },
+  { to: "/admin/reports/sales?tab=sales", label: "Sales", icon: ShoppingBag, hint: "Gross, net, AOV, trend" },
+  { to: "/admin/reports/inventory?tab=products", label: "Products", icon: Package, hint: "Best and worst sellers" },
+  { to: "/admin/reports/inventory?tab=categories", label: "Categories", icon: Tag, hint: "Revenue and margin by category" },
+  { to: "/admin/reports/inventory?tab=brands", label: "Brands", icon: Award, hint: "Revenue, margin and stock held" },
   { to: "/admin/reports/customers", label: "Customers", icon: Users, hint: "New, returning, lifetime value" },
   { to: "/admin/reports/employees", label: "Employees", icon: Users, hint: "Leaderboard and discounting" },
-  { to: "/admin/reports/inventory", label: "Inventory", icon: Boxes, hint: "Stock health and valuation" },
-  { to: "/admin/reports/purchases", label: "Purchases", icon: Truck, hint: "Cost, suppliers, pending" },
-  { to: "/admin/reports/payments", label: "Payments", icon: CreditCard, hint: "Tender mix and trend" },
-  { to: "/admin/reports/returns", label: "Returns & Exchanges", icon: RefreshCcw, hint: "Reasons and repeat offenders" },
-  { to: "/admin/reports/profit", label: "Profit", icon: TrendingUp, hint: "Revenue, COGS, expenses, margin" },
+  { to: "/admin/reports/inventory?tab=stock", label: "Inventory", icon: Boxes, hint: "Stock health and valuation" },
+  { to: "/admin/reports/inventory?tab=purchases", label: "Purchases", icon: Truck, hint: "Cost, suppliers, pending" },
+  { to: "/admin/reports/sales?tab=payments", label: "Payments", icon: CreditCard, hint: "Tender mix and trend" },
+  { to: "/admin/reports/sales?tab=returns", label: "Returns & Exchanges", icon: RefreshCcw, hint: "Reasons and repeat offenders" },
+  { to: "/admin/reports/finance?tab=profit", label: "Profit", icon: TrendingUp, hint: "Revenue, COGS, expenses, margin" },
 ];
 
 export default function ReportsDashboardPage() {

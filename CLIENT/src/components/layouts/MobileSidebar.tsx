@@ -1,29 +1,22 @@
-import { NavLink } from "react-router";
-import { prefetchHandlers } from "@/app/router/prefetch";
 import { cn } from "@/utils/cn";
 import { useAuthStore } from "@/store/auth.store";
 import { useUIStore } from "@/store/ui.store";
-import { EMPLOYEE_NAV, ADMIN_NAV } from "@/config/navigation";
-import type { NavItem } from "@/config/navigation";
-import type { Role } from "@/types";
+import { NavGroupList } from "./NavGroupList";
 import { Store, X } from "lucide-react";
 
 /**
  * MobileSidebar — Slide-over drawer for small screens.
  * On desktop the permanent Sidebar is used instead.
+ *
+ * Renders the same NavGroupList as the desktop sidebar: the collapsible tree is
+ * defined once, so mobile can't drift from desktop the way the two hand-rolled
+ * copies did. Tapping a leaf closes the drawer.
  */
-
-function canAccess(item: NavItem, role: Role): boolean {
-  if (!item.allowedRoles || item.allowedRoles.length === 0) return true;
-  return item.allowedRoles.includes(role);
-}
 
 export function MobileSidebar() {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
   const user = useAuthStore((s) => s.user);
   const role = user?.role ?? "CASHIER";
-  const allSections =
-    role === "CASHIER" ? EMPLOYEE_NAV : [...EMPLOYEE_NAV, ...ADMIN_NAV];
 
   return (
     <div className={cn("fixed inset-0 z-40 md:hidden", !sidebarOpen && "pointer-events-none")}>
@@ -60,42 +53,8 @@ export function MobileSidebar() {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto p-3">
-          {allSections.map((section) => {
-            const visible = section.items.filter((i) => canAccess(i, role));
-            if (!visible.length) return null;
-            return (
-              <div key={section.title} className="mb-4">
-                <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  {section.title}
-                </p>
-                {visible.map((item) => (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === "/"}
-                    onClick={() => setSidebarOpen(false)}
-                    // On touch, `onTouchStart` fires ~100ms before the click —
-                    // enough of a head start to matter on mobile networks.
-                    {...prefetchHandlers(item.path)}
-                    className={({ isActive, isPending }) =>
-                      cn(
-                        "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium mb-0.5",
-                        "transition-all duration-150",
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                        isPending && !isActive && "bg-accent text-accent-foreground"
-                      )
-                    }
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    {item.label}
-                  </NavLink>
-                ))}
-              </div>
-            );
-          })}
+        <nav className="flex-1 overflow-y-auto p-3" aria-label="Main navigation">
+          <NavGroupList role={role} onNavigate={() => setSidebarOpen(false)} />
         </nav>
 
         {/* User */}

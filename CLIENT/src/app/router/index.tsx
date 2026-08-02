@@ -541,83 +541,66 @@ export const router = createBrowserRouter([
               return { Component: ReportsDashboardPage };
             },
           },
+          // ── The five consolidated report destinations ────────────────────
+          // Each hosts the original report pages as tabs (?tab=…). The reports
+          // themselves are unchanged — only how they are reached is.
           {
             path: "admin/reports/sales",
             async lazy() {
-              const { SalesReportPage } = await import("@/features/reports");
-              return { Component: SalesReportPage };
-            },
-          },
-          {
-            path: "admin/reports/products",
-            async lazy() {
-              const { ProductReportPage } = await import("@/features/reports");
-              return { Component: ProductReportPage };
-            },
-          },
-          {
-            path: "admin/reports/categories",
-            async lazy() {
-              const { CategoryReportPage } = await import("@/features/reports");
-              return { Component: CategoryReportPage };
-            },
-          },
-          {
-            path: "admin/reports/brands",
-            async lazy() {
-              const { BrandReportPage } = await import("@/features/reports");
-              return { Component: BrandReportPage };
-            },
-          },
-          {
-            path: "admin/reports/customers",
-            async lazy() {
-              const { CustomerReportPage } = await import("@/features/reports");
-              return { Component: CustomerReportPage };
-            },
-          },
-          {
-            path: "admin/reports/employees",
-            async lazy() {
-              const { EmployeeReportPage } = await import("@/features/reports");
-              return { Component: EmployeeReportPage };
+              const { SalesReportsPage } = await import("@/features/reports");
+              return { Component: SalesReportsPage };
             },
           },
           {
             path: "admin/reports/inventory",
             async lazy() {
-              const { InventoryReportPage } = await import("@/features/reports");
-              return { Component: InventoryReportPage };
+              const { InventoryReportsPage } = await import("@/features/reports");
+              return { Component: InventoryReportsPage };
             },
           },
           {
-            path: "admin/reports/purchases",
+            path: "admin/reports/customers",
             async lazy() {
-              const { PurchaseReportPage } = await import("@/features/reports");
-              return { Component: PurchaseReportPage };
+              const { CustomerReportsPage } = await import("@/features/reports");
+              return { Component: CustomerReportsPage };
             },
           },
           {
-            path: "admin/reports/payments",
+            path: "admin/reports/employees",
             async lazy() {
-              const { PaymentReportPage } = await import("@/features/reports");
-              return { Component: PaymentReportPage };
+              const { EmployeeReportsPage } = await import("@/features/reports");
+              return { Component: EmployeeReportsPage };
             },
           },
           {
-            path: "admin/reports/returns",
+            path: "admin/reports/finance",
             async lazy() {
-              const { ReturnReportPage } = await import("@/features/reports");
-              return { Component: ReturnReportPage };
+              const { FinanceReportsPage } = await import("@/features/reports");
+              return { Component: FinanceReportsPage };
             },
           },
-          {
-            path: "admin/reports/profit",
+
+          // ── Legacy report URLs → owning tab ──────────────────────────────
+          // These seven were sidebar destinations before the consolidation.
+          // They stay routable so bookmarks, shared links, browser history and
+          // any deep link elsewhere in the app resolve to the same report
+          // rather than hitting the 404 catch-all. `replace` keeps the dead URL
+          // out of history, so Back doesn't bounce through the redirect.
+          ...([
+            ["admin/reports/products",   "/admin/reports/inventory?tab=products"],
+            ["admin/reports/categories", "/admin/reports/inventory?tab=categories"],
+            ["admin/reports/brands",     "/admin/reports/inventory?tab=brands"],
+            ["admin/reports/purchases",  "/admin/reports/inventory?tab=purchases"],
+            ["admin/reports/payments",   "/admin/reports/sales?tab=payments"],
+            ["admin/reports/returns",    "/admin/reports/sales?tab=returns"],
+            ["admin/reports/profit",     "/admin/reports/finance?tab=profit"],
+          ] as const).map(([path, to]) => ({
+            path,
             async lazy() {
-              const { ProfitReportPage } = await import("@/features/reports");
-              return { Component: ProfitReportPage };
+              const { Navigate } = await import("react-router");
+              return { Component: () => <Navigate to={to} replace /> };
             },
-          },
+          })),
           // ── Catalog Discounts — the shelf-price rule layer (OWNER only) ──────
           // Rules here feed ProductVariant.sellingPrice through the pricing
           // engine. Cart-level promotions applied at checkout are separate.
@@ -628,10 +611,41 @@ export const router = createBrowserRouter([
               return { Component: DiscountsPage };
             },
           },
+          // ── Settings ─────────────────────────────────────────────────────
+          // Store Settings and Audit Logs were already placeholders; the four
+          // below are new nav destinations from the same group. All six are
+          // OWNER-only by virtue of sitting inside OwnerRoute, so the guard is
+          // identical to every other admin screen — no permission was widened.
+          // They render PlaceholderPage until the real screens are built; the
+          // sidebar marks each "Soon" so the nav doesn't overpromise.
           {
             path: "admin/settings",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Settings" /> };
+              return { Component: () => <PlaceholderPage title="Store Settings" /> };
+            },
+          },
+          {
+            path: "admin/settings/users",
+            async lazy() {
+              return { Component: () => <PlaceholderPage title="Users & Roles" /> };
+            },
+          },
+          {
+            path: "admin/settings/backup",
+            async lazy() {
+              return { Component: () => <PlaceholderPage title="Backup & Restore" /> };
+            },
+          },
+          {
+            path: "admin/settings/receipt",
+            async lazy() {
+              return { Component: () => <PlaceholderPage title="Receipt & Invoice Settings" /> };
+            },
+          },
+          {
+            path: "admin/settings/barcode",
+            async lazy() {
+              return { Component: () => <PlaceholderPage title="Barcode Settings" /> };
             },
           },
           {

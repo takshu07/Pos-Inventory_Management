@@ -26,8 +26,23 @@ export {
   ReturnReportPage,
 } from "./pages/OperationsReportPages";
 
+/**
+ * The five consolidated, tab-based report destinations the sidebar links to.
+ * The individual page exports above are retained: the tabs render them, and
+ * removing them would break the legacy-route redirects that still resolve.
+ */
+export {
+  SalesReportsPage,
+  InventoryReportsPage,
+  CustomerReportsPage,
+  EmployeeReportsPage,
+  FinanceReportsPage,
+} from "./pages/TabbedReportPages";
+
 export { GlobalSearchBar } from "./components/GlobalSearchBar";
 export { ReportShell } from "./components/ReportShell";
+export { TabbedReportPage, ReportTabs, useReportTab } from "./components/ReportTabs";
+export type { ReportTabDef } from "./components/ReportTabs";
 
 export {
   useReportDashboard,
