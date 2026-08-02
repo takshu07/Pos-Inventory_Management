@@ -13,9 +13,12 @@ import { z } from "zod";
 // SHARED FIELDS
 // =============================================================================
 
+// 200 rather than 100: the roster doubles as the source for pickers that need
+// the whole staff list in one shot (shift assignment, the activity filter), and
+// a store's headcount comfortably fits under that ceiling.
 const paginationSchema = {
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
+  limit: z.coerce.number().int().min(1).max(200).default(20),
 };
 
 /** Query-string booleans arrive as "true"/"false" literals, never as booleans. */
