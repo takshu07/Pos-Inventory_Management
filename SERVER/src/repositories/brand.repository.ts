@@ -53,6 +53,40 @@ export const brandRepository = {
    *
    * COUNT(DISTINCT p.id) is deliberate: a brand's product count must not be
    * multiplied by the number of variants or sale lines those products have.
+   *
+   * ───────────────────────────────────────────────────────────────────────────
+   * TODO(scale): GLOBAL BRAND STATISTICS VIA A ROLLUP TABLE
+   * ───────────────────────────────────────────────────────────────────────────
+   * This computes stats for the CURRENT PAGE ONLY (`WHERE b.id = ANY($ids)`),
+   * which is why the UI can only sort by product count / revenue / stock value
+   * WITHIN a page and says so explicitly. Sorting those globally is impossible
+   * today: the ordering column does not exist in SQL, so Postgres cannot ORDER
+   * BY it before paginating.
+   *
+   * Why not just aggregate every brand on each request: the revenue subquery
+   * walks sale_items → product_variants → products per brand. That is fine for
+   * the ~20 brands on a page and becomes a full scan of the sales history for a
+   * catalogue with thousands of brands, on every keystroke of the search box.
+   *
+   * The intended fix, when brand count or sales volume makes this hurt:
+   *
+   *   1. Add a `brand_stats` rollup table keyed by brandId, holding
+   *      productCount, variantCount, unitsSold, revenue, stockUnits and
+   *      stockValue, plus `computedAt`.
+   *   2. Maintain it incrementally from the events that can change it — a sale,
+   *      a goods receipt, a stock adjustment, a product create/archive, a
+   *      variant cost change. Each already flows through a single write path
+   *      (sale.service, inventoryMovement.service.executeMovement,
+   *      ownerProduct.service), so there are a small number of hook points.
+   *   3. Rebuild nightly as a reconciliation pass, so incremental drift is
+   *      self-healing rather than permanent.
+   *   4. Then `findMany` LEFT JOINs brand_stats and `sortBy` accepts
+   *      productCount / revenue / stockValue, sorting and paginating in SQL.
+   *      The page-local sort in BrandsPage.tsx and its caveat text are removed
+   *      at that point.
+   *
+   * The same pattern is already noted as pending for `product_stats` in
+   * catalog.service — do both together; they share the invalidation hooks.
    */
   async statsFor(brandIds: string[]) {
     if (brandIds.length === 0) return [];

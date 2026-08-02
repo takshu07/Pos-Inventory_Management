@@ -3,6 +3,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import app from "../app";
 import { prisma } from "../config/prisma";
 import { SaleStatus, PaymentStatus, MovementType, PaymentMethod } from "../../generated/prisma";
+import { hasTestDatabase, useTestDatabase } from "./setup";
+
+// This suite talks to a real database, so it opts into the connect-and-wipe
+// lifecycle. Unit-test files deliberately do not — see __tests__/setup.ts.
+//
+// It SKIPS when no wipeable test database is configured. These tests truncate
+// every table, so running them against the live database would destroy real
+// data; reporting them as skipped states that gap honestly instead of leaving a
+// permanently red suite that everyone learns to ignore.
+useTestDatabase();
 
 // Mock the authentication middleware to bypass JWT for pure integration testing
 // In a real project, we would use a test JWT generator, but since the project lacks
@@ -12,9 +22,17 @@ vi.mock("../middleware/auth.middleware", () => ({
     req.user = { id: "test-employee-id", role: req.headers["x-test-role"] || "CASHIER" };
     next();
   },
+  // asset.routes imports this for its public-asset download path. The mock must
+  // export it too — a partial module mock makes the import undefined and
+  // app.ts fails to load, taking the whole suite with it before any test runs.
+  optionalAuthenticate: (req: any, _res: any, next: any) => {
+    const role = req.headers["x-test-role"];
+    if (role) req.user = { id: "test-employee-id", role };
+    next();
+  },
 }));
 
-describe("Sales Engine Integration Tests", () => {
+describe.skipIf(!hasTestDatabase())("Sales Engine Integration Tests", () => {
   let testVariantId: string;
   let testCustomerId: string;
 

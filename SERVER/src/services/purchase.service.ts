@@ -21,6 +21,12 @@ import type {
   CancelPurchaseInput,
 } from "../validation/purchase.validation";
 import { deriveSettlementStatus } from "../engines/finance.engine";
+import {
+  calculatePurchaseTotals,
+  checkCancellable,
+  planReceipt,
+  summariseReceipt,
+} from "../engines/procurement.engine";
 import { executeMovement } from "./inventoryMovement.service";
 import { recomputeVariants } from "./effectivePrice.service";
 import { labelIntegrationService } from "./labelIntegration.service";
@@ -37,16 +43,8 @@ function generatePurchaseNumber(): string {
   return `PO-${datePart}-${randomPart}`;
 }
 
-function calculateTotals(items: { quantity: number; costPrice: number }[], discount: number, tax: number) {
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.costPrice, 0);
-  const totalAmount = subtotal - discount + tax;
-
-  if (totalAmount < 0) {
-    throw new AppError(HTTP_STATUS.BAD_REQUEST, "Total amount cannot be negative.");
-  }
-
-  return { subtotal, totalAmount };
-}
+/** Thin alias — the arithmetic itself lives in the procurement engine. */
+const calculateTotals = calculatePurchaseTotals;
 
 // -----------------------------------------------------------------------------
 // READ OPERATIONS
@@ -80,20 +78,11 @@ export async function getPurchaseById(id: string) {
   // goods receipt and payment side by side.
   const payments = await purchaseRepository.paymentsFor(id);
 
-  const receivedUnits = purchase.items.reduce((sum, i) => sum + i.receivedQuantity, 0);
-  const orderedUnits = purchase.items.reduce((sum, i) => sum + i.quantity, 0);
-
   return {
     ...purchase,
     payments,
     /** Receipt progress, derived once here so every client agrees on it. */
-    receipt: {
-      orderedUnits,
-      receivedUnits,
-      outstandingUnits: orderedUnits - receivedUnits,
-      isFullyReceived: receivedUnits >= orderedUnits && orderedUnits > 0,
-      percentReceived: orderedUnits === 0 ? 0 : Math.round((receivedUnits / orderedUnits) * 100),
-    },
+    receipt: summariseReceipt(purchase.items),
   };
 }
 
@@ -271,67 +260,16 @@ export async function receivePurchase(
 
   // ── Resolve what is actually being booked in on this receipt ───────────────
   //
-  // Omitting `items` means "receive everything still outstanding", which is the
-  // original all-or-nothing behaviour. Supplying it books the given quantities
-  // against the named lines and leaves the rest outstanding.
-  const outstandingByItem = new Map(
-    existing.items.map((i) => [i.id, i.quantity - i.receivedQuantity])
+  // The rules (omitted `items` = everything outstanding; over-receipt rejected,
+  // never clamped; a no-op receipt refused) live in the procurement engine so
+  // they are unit-testable without a database. See engines/procurement.engine.
+  const { instructions: receiptPlan, isFullyReceived } = planReceipt(
+    existing.items,
+    data.items
   );
-
-  let receiptPlan: { itemId: string; quantity: number }[];
-
-  if (data.items) {
-    const seen = new Set<string>();
-    for (const line of data.items) {
-      if (seen.has(line.itemId)) {
-        throw new AppError(
-          HTTP_STATUS.BAD_REQUEST,
-          "The same purchase line was submitted twice in one receipt."
-        );
-      }
-      seen.add(line.itemId);
-
-      const outstanding = outstandingByItem.get(line.itemId);
-      if (outstanding === undefined) {
-        throw new AppError(
-          HTTP_STATUS.BAD_REQUEST,
-          "A submitted line does not belong to this purchase."
-        );
-      }
-      // Over-receipt is a mis-keyed number far more often than a genuine
-      // over-shipment. Rejecting keeps physical stock honest; clamping would
-      // silently invent inventory.
-      if (line.quantity > outstanding) {
-        throw new AppError(
-          HTTP_STATUS.BAD_REQUEST,
-          `Cannot receive ${line.quantity} units — only ${outstanding} remain outstanding on that line.`,
-          { reason: "OVER_RECEIPT", itemId: line.itemId, outstanding }
-        );
-      }
-    }
-
-    receiptPlan = data.items.filter((l) => l.quantity > 0);
-  } else {
-    receiptPlan = existing.items
-      .map((i) => ({ itemId: i.id, quantity: i.quantity - i.receivedQuantity }))
-      .filter((l) => l.quantity > 0);
-  }
-
-  if (receiptPlan.length === 0) {
-    throw new AppError(
-      HTTP_STATUS.BAD_REQUEST,
-      "Nothing to receive — every line on this purchase is already fully received."
-    );
-  }
 
   const variantIdByItem = new Map(existing.items.map((i) => [i.id, i.variantId]));
   const costByItem = new Map(existing.items.map((i) => [i.id, i.costPrice]));
-
-  // Does this receipt close out the purchase, or leave lines open?
-  const isFullyReceived = existing.items.every((i) => {
-    const booked = receiptPlan.find((l) => l.itemId === i.id)?.quantity ?? 0;
-    return i.receivedQuantity + booked >= i.quantity;
-  });
 
   // Transaction: record the receipt AND move the stock, atomically.
   const receivedPurchase = await prisma.$transaction(async (tx) => {
@@ -470,24 +408,31 @@ export async function cancelPurchase(
     throw new AppError(HTTP_STATUS.NOT_FOUND, "Purchase not found.");
   }
 
-  if (existing.status === PurchaseStatus.CANCELLED) {
+  const receivedUnits = existing.items.reduce((sum, i) => sum + i.receivedQuantity, 0);
+  const paidAmount = Number(existing.paidAmount);
+
+  // The refusal rules live in the engine so they can be regression-tested.
+  const refusal = checkCancellable({
+    status: existing.status,
+    receivedUnits,
+    paidAmount,
+  });
+
+  if (refusal === "ALREADY_CANCELLED") {
     throw new AppError(HTTP_STATUS.BAD_REQUEST, "Purchase is already cancelled.");
   }
-
-  const receivedUnits = existing.items.reduce((sum, i) => sum + i.receivedQuantity, 0);
-  if (receivedUnits > 0) {
+  if (refusal === "ALREADY_RECEIVED") {
     throw new AppError(
       HTTP_STATUS.CONFLICT,
       "Stock has already been received against this purchase. Raise a supplier return instead of cancelling.",
       { reason: "ALREADY_RECEIVED", receivedUnits }
     );
   }
-
-  if (Number(existing.paidAmount) > 0) {
+  if (refusal === "ALREADY_PAID") {
     throw new AppError(
       HTTP_STATUS.CONFLICT,
       "Payments have been recorded against this bill. Reverse them before cancelling.",
-      { reason: "ALREADY_PAID", paidAmount: Number(existing.paidAmount) }
+      { reason: "ALREADY_PAID", paidAmount }
     );
   }
 

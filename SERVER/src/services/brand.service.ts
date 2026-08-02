@@ -9,6 +9,7 @@ import { auditRepository } from "../repositories/audit.repository";
 import { logger } from "../config/logger";
 import type { PaginatedResponse } from "../types/common.types";
 import { stripUndefined } from "../utils/object";
+import { projectBrandStats } from "../engines/procurement.engine";
 import type {
   CreateBrandInput,
   ListBrandsQuery,
@@ -27,25 +28,10 @@ async function withStats<T extends { id: string }>(brands: T[]) {
   const rows = await brandRepository.statsFor(brands.map((b) => b.id));
   const byId = new Map(rows.map((r) => [r.brandId, r]));
 
-  return brands.map((brand) => {
-    const s = byId.get(brand.id);
-    const unitsSold = Number(s?.unitsSold ?? 0);
-    const revenue = Number(s?.revenue ?? 0);
-
-    return {
-      ...brand,
-      stats: {
-        productCount: Number(s?.productCount ?? 0),
-        variantCount: Number(s?.variantCount ?? 0),
-        unitsSold,
-        revenue,
-        stockUnits: Number(s?.stockUnits ?? 0),
-        stockValue: Number(s?.stockValue ?? 0),
-        /** Average realised price per unit — 0 when nothing has sold. */
-        averageSellingPrice: unitsSold === 0 ? 0 : Number((revenue / unitsSold).toFixed(2)),
-      },
-    };
-  });
+  return brands.map((brand) => ({
+    ...brand,
+    stats: projectBrandStats(byId.get(brand.id)),
+  }));
 }
 
 export async function listBrands(query: ListBrandsQuery) {

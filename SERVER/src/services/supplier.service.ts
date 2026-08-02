@@ -9,6 +9,7 @@ import { auditRepository } from "../repositories/audit.repository";
 import { logger } from "../config/logger";
 import type { PaginatedResponse } from "../types/common.types";
 import { stripUndefined } from "../utils/object";
+import { deriveSupplierBalances } from "../engines/procurement.engine";
 import type {
   CreateSupplierInput,
   ListSuppliersQuery,
@@ -41,24 +42,21 @@ async function withStats<T extends { id: string }>(suppliers: T[]) {
     const pay = paymentById.get(supplier.id);
     const prod = productById.get(supplier.id);
 
-    const totalSpend = Number(p?._sum.totalAmount ?? 0);
-    const totalPaidOnBills = Number(p?._sum.paidAmount ?? 0);
-    const outstanding = Number(p?._sum.dueAmount ?? 0);
-    const totalPaid = Number(pay?._sum.amount ?? 0);
+    // Balance derivation (including the on-account credit rule) lives in the
+    // procurement engine so it is unit-testable.
+    const balances = deriveSupplierBalances({
+      purchaseCount: p?._count._all ?? 0,
+      totalSpend: p?._sum.totalAmount ?? 0,
+      paidOnBills: p?._sum.paidAmount ?? 0,
+      outstanding: p?._sum.dueAmount ?? 0,
+      totalPaid: pay?._sum.amount ?? 0,
+      paymentCount: pay?._count._all ?? 0,
+    });
 
     return {
       ...supplier,
       stats: {
-        purchaseCount: p?._count._all ?? 0,
-        totalSpend,
-        outstanding,
-        totalPaid,
-        /**
-         * Payments not tied to a specific bill. Positive means the supplier is
-         * holding credit for us beyond what the open bills account for.
-         */
-        onAccountCredit: Number((totalPaid - totalPaidOnBills).toFixed(2)),
-        paymentCount: pay?._count._all ?? 0,
+        ...balances,
         lastPurchaseDate: p?._max.purchaseDate ?? null,
         lastPaymentDate: pay?._max.paidAt ?? null,
         suppliedVariantCount: prod?._count._all ?? 0,

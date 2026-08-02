@@ -10,6 +10,11 @@
  * and the UI says so — those figures are computed per page, so a global sort
  * would need a rollup table. Silently sorting one page while implying a global
  * order would be a lie about the data.
+ *
+ * TODO(scale): when the `brand_stats` rollup table described in
+ * SERVER/src/repositories/brand.repository.ts (statsFor) lands, these three
+ * become real server-side sorts. Delete `localSort`, move the options into the
+ * server `sortBy` list, and remove the "within this page only" caveat below.
  */
 
 import { useMemo, useState } from "react";
