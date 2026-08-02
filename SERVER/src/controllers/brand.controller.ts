@@ -51,3 +51,13 @@ export const update = asyncHandler(async (req: Request, res: Response) => {
     data: result,
   });
 });
+
+export const remove = asyncHandler(async (req: Request, res: Response) => {
+  const result = await brandService.deleteBrand(req.params["id"] as string, req.user.id);
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Brand deleted successfully.",
+    data: result,
+  });
+});

@@ -34,6 +34,12 @@ const PREFIX_CHUNKS: ReadonlyArray<readonly [string, ChunkThunk]> = [
   ["/admin/discounts", () => import("@/features/owner/discounts")],
   ["/admin/products", () => import("@/features/owner/products")],
   ["/admin/labels", () => import("@/features/labels/pages/LabelSettingsPage")],
+  // Procurement is one barrel covering purchases (list + detail), suppliers
+  // (list + profile) and brands, so hovering any of the three nav items warms
+  // all five screens.
+  ["/admin/purchases", () => import("@/features/procurement")],
+  ["/admin/suppliers", () => import("@/features/procurement")],
+  ["/admin/brands", () => import("@/features/procurement")],
   // Reports and Finance are each ONE barrel covering ~12 and ~8 screens
   // respectively, so a single hover on the section's first nav item warms every
   // screen in it. That matters more here than elsewhere: these chunks carry

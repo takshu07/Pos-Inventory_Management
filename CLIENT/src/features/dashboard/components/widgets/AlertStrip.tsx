@@ -169,6 +169,10 @@ export function OwnerAlertTiles() {
   const todayRevenue = cards?.todayRevenue;
   const todayProfit = cards?.todayProfit;
   const cashInDrawer = cards?.cashInDrawer;
+  // The server calls this `outstandingSupplierPayments`; the tile below reads
+  // it as `payables`. Without this binding the identifier was simply undefined
+  // and the Supplier Payments tile did not compile.
+  const payables = cards?.outstandingSupplierPayments ?? 0;
   // Profit is the one figure here that can legitimately be negative, and a red
   // loss reads very differently from a green profit at a glance.
   const profit = todayProfit ?? 0;

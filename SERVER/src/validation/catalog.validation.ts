@@ -35,6 +35,8 @@ export const brandValidation = {
       .enum(["true", "false"])
       .transform((val) => val === "true")
       .optional(),
+    sortBy: z.enum(["name", "createdAt", "updatedAt"]).default("name"),
+    sortOrder: z.enum(["asc", "desc"]).default("asc"),
   }),
 } as const;
 
@@ -72,6 +74,8 @@ export const supplierValidation = {
       .enum(["true", "false"])
       .transform((val) => val === "true")
       .optional(),
+    sortBy: z.enum(["businessName", "createdAt", "updatedAt"]).default("businessName"),
+    sortOrder: z.enum(["asc", "desc"]).default("asc"),
   }),
 } as const;
 

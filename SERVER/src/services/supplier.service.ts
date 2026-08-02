@@ -15,12 +15,65 @@ import type {
   UpdateSupplierInput,
 } from "../validation/catalog.validation";
 
+/**
+ * Attaches procurement and settlement statistics to a page of suppliers.
+ *
+ * `outstanding` is summed from the bills' own `dueAmount` column rather than
+ * recomputed as (spend − paid). The two agree for bill-linked payments, but a
+ * supplier can also be paid ON ACCOUNT (a SupplierPayment with no purchaseId),
+ * and treating that as settling specific bills would understate what is still
+ * owed against them. The bills' own balance is the authoritative liability;
+ * on-account credit is reported separately.
+ */
+async function withStats<T extends { id: string }>(suppliers: T[]) {
+  const { purchases, payments, products } = await supplierRepository.statsFor(
+    suppliers.map((s) => s.id)
+  );
+
+  const purchaseById = new Map(purchases.map((p) => [p.supplierId, p]));
+  const paymentById = new Map(payments.map((p) => [p.supplierId, p]));
+  const productById = new Map(
+    products.filter((p) => p.supplierId).map((p) => [p.supplierId as string, p])
+  );
+
+  return suppliers.map((supplier) => {
+    const p = purchaseById.get(supplier.id);
+    const pay = paymentById.get(supplier.id);
+    const prod = productById.get(supplier.id);
+
+    const totalSpend = Number(p?._sum.totalAmount ?? 0);
+    const totalPaidOnBills = Number(p?._sum.paidAmount ?? 0);
+    const outstanding = Number(p?._sum.dueAmount ?? 0);
+    const totalPaid = Number(pay?._sum.amount ?? 0);
+
+    return {
+      ...supplier,
+      stats: {
+        purchaseCount: p?._count._all ?? 0,
+        totalSpend,
+        outstanding,
+        totalPaid,
+        /**
+         * Payments not tied to a specific bill. Positive means the supplier is
+         * holding credit for us beyond what the open bills account for.
+         */
+        onAccountCredit: Number((totalPaid - totalPaidOnBills).toFixed(2)),
+        paymentCount: pay?._count._all ?? 0,
+        lastPurchaseDate: p?._max.purchaseDate ?? null,
+        lastPaymentDate: pay?._max.paidAt ?? null,
+        suppliedVariantCount: prod?._count._all ?? 0,
+      },
+    };
+  });
+}
+
 export async function listSuppliers(query: ListSuppliersQuery) {
   const { data, total } = await supplierRepository.findMany(query);
   const totalPages = Math.ceil(total / query.limit);
+  const enriched = await withStats(data);
 
-  const response: PaginatedResponse<(typeof data)[0]> = {
-    data,
+  const response: PaginatedResponse<(typeof enriched)[0]> = {
+    data: enriched,
     meta: {
       total,
       page: query.page,
@@ -34,6 +87,12 @@ export async function listSuppliers(query: ListSuppliersQuery) {
   return response;
 }
 
+/**
+ * Full supplier profile: the record, its rollups, and the three histories the
+ * profile screen shows as tabs. Fetched together because the profile always
+ * renders all of them, so splitting into four round trips to a network-latency
+ * database would be slower for no benefit.
+ */
 export async function getSupplierById(id: string) {
   const supplier = await supplierRepository.findById(id);
 
@@ -41,7 +100,14 @@ export async function getSupplierById(id: string) {
     throw new AppError(HTTP_STATUS.NOT_FOUND, "Supplier not found.");
   }
 
-  return supplier;
+  const [[enriched], purchases, payments, products] = await Promise.all([
+    withStats([supplier]),
+    supplierRepository.purchaseHistory(id),
+    supplierRepository.paymentHistory(id),
+    supplierRepository.suppliedProducts(id),
+  ]);
+
+  return { ...enriched, purchases, payments, products };
 }
 
 export async function createSupplier(data: CreateSupplierInput, executorId: string) {
@@ -108,4 +174,51 @@ export async function updateSupplier(
   logger.info({ executorId, supplierId: id }, "Supplier updated");
 
   return updatedSupplier;
+}
+
+/**
+ * Deletes a supplier outright.
+ *
+ * Permitted only when nothing references them. A supplier with purchases,
+ * payments or supplied variants carries financial history that must survive —
+ * deactivating removes them from pickers while keeping every bill and payment
+ * intact and reportable.
+ */
+export async function deleteSupplier(id: string, executorId: string) {
+  const supplier = await supplierRepository.findById(id);
+
+  if (!supplier) {
+    throw new AppError(HTTP_STATUS.NOT_FOUND, "Supplier not found.");
+  }
+
+  const refs = await supplierRepository.referenceCounts(id);
+  const blocking = refs.purchases + refs.variants + refs.payments;
+
+  if (blocking > 0) {
+    const parts: string[] = [];
+    if (refs.purchases) parts.push(`${refs.purchases} purchase(s)`);
+    if (refs.payments) parts.push(`${refs.payments} payment(s)`);
+    if (refs.variants) parts.push(`${refs.variants} supplied product(s)`);
+
+    throw new AppError(
+      HTTP_STATUS.CONFLICT,
+      `${supplier.businessName} still has ${parts.join(", ")}. Deactivate the supplier instead of deleting.`,
+      { reason: "SUPPLIER_IN_USE", ...refs }
+    );
+  }
+
+  await supplierRepository.remove(id);
+
+  auditRepository.create({
+    performedBy: executorId,
+    action: "DELETE",
+    module: "SUPPLIER",
+    tableName: "suppliers",
+    recordId: id,
+    oldData: supplier as unknown as Record<string, unknown>,
+  });
+
+  logger.info({ executorId, supplierId: id }, "Supplier deleted");
+
+  return { id };
 }

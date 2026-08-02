@@ -336,22 +336,43 @@ export const router = createBrowserRouter([
               return { Component: OwnerCategoryAnalyticsPage };
             },
           },
+          // ── Procurement — brands, suppliers and purchasing ────────────────
+          // All OWNER-only, matching the backend: every /brands, /suppliers and
+          // /purchases route is requireRole("OWNER"). These sit inside
+          // OwnerRoute, which is the actual boundary.
           {
             path: "admin/brands",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Brand Management" /> };
+              const { BrandsPage } = await import("@/features/procurement");
+              return { Component: BrandsPage };
             },
           },
           {
             path: "admin/suppliers",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Supplier Management" /> };
+              const { SuppliersPage } = await import("@/features/procurement");
+              return { Component: SuppliersPage };
+            },
+          },
+          {
+            path: "admin/suppliers/:id",
+            async lazy() {
+              const { SupplierProfilePage } = await import("@/features/procurement");
+              return { Component: SupplierProfilePage };
             },
           },
           {
             path: "admin/purchases",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Purchase Management" /> };
+              const { PurchasesPage } = await import("@/features/procurement");
+              return { Component: PurchasesPage };
+            },
+          },
+          {
+            path: "admin/purchases/:id",
+            async lazy() {
+              const { PurchaseDetailPage } = await import("@/features/procurement");
+              return { Component: PurchaseDetailPage };
             },
           },
           // ── Inventory — the stock ledger (OWNER full surface) ─────────────

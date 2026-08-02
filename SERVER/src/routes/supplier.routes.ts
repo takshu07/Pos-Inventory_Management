@@ -24,5 +24,13 @@ router.patch(
   validateParam("id"),
   supplierController.update
 );
+// Hard delete, permitted only for a supplier with no purchases, payments or
+// supplied products. Anyone with history is deactivated via PATCH instead.
+router.delete(
+  "/:id",
+  requireRole("OWNER"),
+  validateParam("id"),
+  supplierController.remove
+);
 
 export default router;

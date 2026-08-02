@@ -63,9 +63,28 @@ export const receive = asyncHandler(async (req: Request, res: Response) => {
     req.user.role
   );
 
+  const fullyReceived = result.status === "RECEIVED";
+
   return res.status(HTTP_STATUS.OK).json({
     success: true,
-    message: "Purchase received and inventory updated successfully.",
+    message: fullyReceived
+      ? "Purchase received and inventory updated successfully."
+      : "Partial receipt recorded and inventory updated successfully.",
+    data: result,
+  });
+});
+
+export const cancel = asyncHandler(async (req: Request, res: Response) => {
+  const data = purchaseValidation.cancel.parse(req.body);
+  const result = await purchaseService.cancelPurchase(
+    req.params["id"] as string,
+    data,
+    req.user.id
+  );
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Purchase cancelled successfully.",
     data: result,
   });
 });

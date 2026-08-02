@@ -15,12 +15,46 @@ import type {
   UpdateBrandInput,
 } from "../validation/catalog.validation";
 
+/**
+ * Attaches catalogue and sales statistics to a page of brands.
+ *
+ * Stats are fetched for the CURRENT PAGE only — a single extra query per page
+ * regardless of how many brands exist. Postgres returns COUNT/SUM as BIGINT and
+ * Decimal as string, neither of which survives JSON, so both are normalised to
+ * numbers here rather than in every consumer.
+ */
+async function withStats<T extends { id: string }>(brands: T[]) {
+  const rows = await brandRepository.statsFor(brands.map((b) => b.id));
+  const byId = new Map(rows.map((r) => [r.brandId, r]));
+
+  return brands.map((brand) => {
+    const s = byId.get(brand.id);
+    const unitsSold = Number(s?.unitsSold ?? 0);
+    const revenue = Number(s?.revenue ?? 0);
+
+    return {
+      ...brand,
+      stats: {
+        productCount: Number(s?.productCount ?? 0),
+        variantCount: Number(s?.variantCount ?? 0),
+        unitsSold,
+        revenue,
+        stockUnits: Number(s?.stockUnits ?? 0),
+        stockValue: Number(s?.stockValue ?? 0),
+        /** Average realised price per unit — 0 when nothing has sold. */
+        averageSellingPrice: unitsSold === 0 ? 0 : Number((revenue / unitsSold).toFixed(2)),
+      },
+    };
+  });
+}
+
 export async function listBrands(query: ListBrandsQuery) {
   const { data, total } = await brandRepository.findMany(query);
   const totalPages = Math.ceil(total / query.limit);
+  const enriched = await withStats(data);
 
-  const response: PaginatedResponse<(typeof data)[0]> = {
-    data,
+  const response: PaginatedResponse<(typeof enriched)[0]> = {
+    data: enriched,
     meta: {
       total,
       page: query.page,
@@ -41,7 +75,8 @@ export async function getBrandById(id: string) {
     throw new AppError(HTTP_STATUS.NOT_FOUND, "Brand not found.");
   }
 
-  return brand;
+  const [enriched] = await withStats([brand]);
+  return enriched;
 }
 
 export async function createBrand(data: CreateBrandInput, executorId: string) {
@@ -105,4 +140,47 @@ export async function updateBrand(
   logger.info({ executorId, brandId: id }, "Brand updated");
 
   return updatedBrand;
+}
+
+/**
+ * Deletes a brand outright.
+ *
+ * Only ever permitted for a brand nothing references. Products hold a
+ * `Restrict` foreign key to Brand, so deleting a referenced brand would fail at
+ * the database anyway — this turns that raw constraint error into an actionable
+ * message and points at the right alternative. Deactivating is the correct move
+ * for a brand with history: it preserves every historical product and sale
+ * while removing the brand from pickers.
+ */
+export async function deleteBrand(id: string, executorId: string) {
+  const brand = await brandRepository.findById(id);
+
+  if (!brand) {
+    throw new AppError(HTTP_STATUS.NOT_FOUND, "Brand not found.");
+  }
+
+  const productCount = await brandRepository.referenceCount(id);
+
+  if (productCount > 0) {
+    throw new AppError(
+      HTTP_STATUS.CONFLICT,
+      `${brand.name} still has ${productCount} product(s). Deactivate the brand instead of deleting it.`,
+      { reason: "BRAND_IN_USE", productCount }
+    );
+  }
+
+  await brandRepository.remove(id);
+
+  auditRepository.create({
+    performedBy: executorId,
+    action: "DELETE",
+    module: "BRAND",
+    tableName: "brands",
+    recordId: id,
+    oldData: brand as unknown as Record<string, unknown>,
+  });
+
+  logger.info({ executorId, brandId: id }, "Brand deleted");
+
+  return { id };
 }

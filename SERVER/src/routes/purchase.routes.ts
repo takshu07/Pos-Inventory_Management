@@ -17,6 +17,9 @@ router.get("/:id", validateParam("id"), purchaseController.getById);
 
 router.post("/", purchaseController.create);
 router.patch("/:id", validateParam("id"), purchaseController.update);
+// Goods receipt — full when the body omits `items`, partial when it names
+// lines and quantities.
 router.post("/:id/receive", validateParam("id"), purchaseController.receive);
+router.post("/:id/cancel", validateParam("id"), purchaseController.cancel);
 
 export default router;

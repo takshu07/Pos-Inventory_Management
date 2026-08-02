@@ -24,5 +24,13 @@ router.patch(
   validateParam("id"),
   brandController.update
 );
+// Hard delete, permitted only for a brand no product references. Everything
+// with history is deactivated via PATCH { isActive: false } instead.
+router.delete(
+  "/:id",
+  requireRole("OWNER"),
+  validateParam("id"),
+  brandController.remove
+);
 
 export default router;
