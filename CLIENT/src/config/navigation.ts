@@ -294,7 +294,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 
   // ── Settings ──────────────────────────────────────────────────────────────
-  // Store Settings, Audit Logs and the four new entries are PlaceholderPage
+  // Users & Roles and Labels & Printers are built. The rest are PlaceholderPage
   // routes today. They are listed because the spec calls for them and every one
   // resolves to a real route rather than a dead link; `comingSoon` only styles
   // the row so nobody expects a working screen.
@@ -305,7 +305,9 @@ export const NAV_GROUPS: NavGroup[] = [
     allowedRoles: OWNER,
     items: [
       { label: "Store Settings",    path: "/admin/settings",          icon: Store,          allowedRoles: OWNER, comingSoon: true },
-      { label: "Users & Roles",     path: "/admin/settings/users",    icon: UserCog,        allowedRoles: OWNER, comingSoon: true },
+      // Built. Account administration: create accounts, assign roles,
+      // activate/deactivate, reset passwords.
+      { label: "Users & Roles",     path: "/admin/settings/users",    icon: UserCog,        allowedRoles: OWNER },
       { label: "Audit Logs",        path: "/admin/audit-logs",        icon: Shield,         allowedRoles: OWNER, comingSoon: true },
       { label: "Backup & Restore",  path: "/admin/settings/backup",   icon: DatabaseBackup, allowedRoles: OWNER, comingSoon: true },
       { label: "Receipt & Invoice", path: "/admin/settings/receipt",  icon: Receipt,        allowedRoles: OWNER, comingSoon: true },
