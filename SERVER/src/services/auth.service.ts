@@ -249,6 +249,58 @@ export async function logout(employeeId: string) {
 /**
  * Retrieves the authenticated employee's public profile.
  * The employee ID comes from the verified JWT payload (req.user.id).
+ *
+ * ───────────────────────────────────────────────────────────────────────────
+ * TODO(self-service): ADDITIVE `PATCH /auth/me` FOR SELF-SERVICE PROFILE EDITS
+ * ───────────────────────────────────────────────────────────────────────────
+ * Reading your own profile is self-service; UPDATING it is not. The only way
+ * to change a name, email or address today is `PATCH /employees/:id`, which is
+ * `requireRole("OWNER")` — so a manager or cashier who moves house has to ask
+ * the owner to edit the record for them.
+ *
+ * This is why CLIENT/src/features/profile renders the details as read-only
+ * facts rather than as a form. Rendering inputs that 403 for two of the three
+ * roles would be worse than not offering them.
+ *
+ * THE CONSTRAINT THAT DEFINES THIS ENDPOINT: it must never become a way to
+ * escalate privilege. `PATCH /employees/:id` is OWNER-only precisely because
+ * it can write `role`, `isActive` and `salary`. A self-service endpoint that
+ * reused that input schema would hand every cashier the ability to promote
+ * themselves. So this is a NEW, DELIBERATELY NARROW endpoint — not a relaxation
+ * of the guard on the existing one, and not a shared schema with an `omit()`
+ * applied at the edge (an omit is one careless edit away from being reverted).
+ *
+ * The intended implementation:
+ *
+ *   1. A SEPARATE zod schema in auth.validation — `updateMeSchema` — listing
+ *      the permitted fields POSITIVELY, never by subtracting from the employee
+ *      schema:
+ *          firstName, lastName, email, gender, address, dateOfBirth
+ *      NOT role. NOT isActive. NOT salary. NOT phone. NOT employeeCode.
+ *      • phone is excluded because it is a SIGN-IN IDENTIFIER: letting someone
+ *        move their own login to a new number is an account-takeover primitive
+ *        and needs the owner in the loop. Same reasoning applies to email the
+ *        moment email login is used as a recovery channel — revisit then.
+ *      • employeeCode is immutable everywhere; it is referenced by history.
+ *   2. `export async function updateMe(employeeId, input)` here, writing ONLY
+ *      via that schema's output and reusing the existing email/phone
+ *      uniqueness check so a self-edit cannot collide with another account.
+ *   3. `PATCH /auth/me` in auth.routes.ts behind `authenticate` — no
+ *      `requireRole`, since every authenticated role may edit their own record
+ *      and the employeeId comes from the verified JWT, never from the body or
+ *      the URL. There is no id to tamper with, which is what makes this safe
+ *      without a hierarchy check.
+ *   4. Write an `auditRepository.create` row with action "UPDATE", module
+ *      "EMPLOYEE", performedBy = the employee themselves — a self-edit must be
+ *      as traceable as an owner's edit.
+ *   5. No `invalidateAuthContext` and no session revocation: none of the
+ *      permitted fields appear in the JWT or affect authorisation. If that ever
+ *      stops being true, the field does not belong in this schema.
+ *   6. Client: turn the read-only cards in features/profile into a form, keep
+ *      the role/status rows read-only, and drop the "ask the owner" line.
+ *
+ * Not urgent — staff details change rarely and the owner can already do it.
+ * The value is removing a needless owner interruption, not unblocking anyone.
  */
 export async function me(employeeId: string) {
   const employee = await authRepository.findByIdForProfile(employeeId);

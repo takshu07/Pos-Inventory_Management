@@ -142,10 +142,15 @@ export const router = createBrowserRouter([
           return { Component: () => <PlaceholderPage title="Customer Profile" /> };
         },
       },
+      // My Profile is ONE component mounted on two routes — here for the
+      // manager portal and at /cashier/profile below. Nothing in it is
+      // portal-aware; the shell differs, the screen does not. Same pattern as
+      // PosView, and for the same reason: a second copy would drift.
       {
         path: "profile",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="My Profile" /> };
+          const { ProfileView } = await import("@/features/profile");
+          return { Component: ProfileView };
         },
       },
       {
@@ -645,10 +650,17 @@ export const router = createBrowserRouter([
               return { Component: () => <PlaceholderPage title="Store Settings" /> };
             },
           },
+          // Users & Roles is the account-administration screen: create accounts,
+          // assign roles, activate/deactivate, reset passwords. OWNER-only by
+          // virtue of sitting inside OwnerRoute, and every endpoint behind it
+          // independently 403s for a manager — the guard, not the nav hiding,
+          // is the boundary. Distinct from Workforce, which monitors how people
+          // are DOING rather than administering whether they can sign in.
           {
             path: "admin/settings/users",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Users & Roles" /> };
+              const { UsersRolesPage } = await import("@/features/users");
+              return { Component: UsersRolesPage };
             },
           },
           {
@@ -735,10 +747,12 @@ export const router = createBrowserRouter([
               return { Component: ShiftSummaryPage };
             },
           },
+          // The SAME ProfileView the manager portal mounts at /profile.
           {
             path: "profile",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="My Profile" /> };
+              const { ProfileView } = await import("@/features/profile");
+              return { Component: ProfileView };
             },
           },
         ],

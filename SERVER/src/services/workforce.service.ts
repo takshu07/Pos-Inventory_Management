@@ -1512,6 +1512,16 @@ export async function updateWorkforceProfile(
  * Bumping refreshTokenVersion (via the existing employee repository path) plus
  * closing open sessions is what makes this a real reset: every device the
  * employee was signed in on stops working immediately.
+ *
+ * ⚠ ARCHITECTURAL RULE — DO NOT MOVE THIS TO `PATCH /employees/:id`.
+ * This function and `changeRole` below live on the workforce tree specifically
+ * BECAUSE they perform session invalidation, which the generic employee update
+ * path does not and should not. Consolidating them into that endpoint for tidiness
+ * would silently drop `invalidateAuthContext` + `closeOpenSessions` and leave
+ * stale credentials live — a reset that does not sign the employee out is not a
+ * reset, and a demotion the old JWT still overrides is not a demotion.
+ * Session revocation is a security requirement of these two operations.
+ * See docs/USERS_AND_PROFILE.md §2.1.
  */
 export async function resetPassword(
   id: string,

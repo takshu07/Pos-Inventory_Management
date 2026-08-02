@@ -3,7 +3,7 @@
 What is built, what is a placeholder, and what each remaining screen needs.
 Kept current so "is X done?" has one answer rather than a grep.
 
-Last updated: 2026-08-02, after the Procurement milestone.
+Last updated: 2026-08-03, after the Users & Roles / My Profile milestone.
 
 ---
 
@@ -24,15 +24,18 @@ Last updated: 2026-08-02, after the Procurement milestone.
 | **Reports** | 5 tabbed destinations, global search | OWNER (search MANAGER+) | [FINANCE_REGISTER_REPORTING.md](./FINANCE_REGISTER_REPORTING.md) |
 | **Labels & Barcodes** | Template engine, print jobs, driver/transport split | OWNER | — |
 | **Discounts** | Rules, promotions, coupons | OWNER | — |
-| **Procurement** | **Purchases (partial receive), Suppliers, Brands** | OWNER | [PROCUREMENT.md](./PROCUREMENT.md) |
+| **Procurement** | Purchases (partial receive), Suppliers, Brands | OWNER | [PROCUREMENT.md](./PROCUREMENT.md) |
+| **Users & Roles** | **Account CRUD, role assignment, activation, password reset** | OWNER | [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md) |
+| **My Profile** | **Own details, account info, password change (both portals)** | All | [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md) |
 
 ---
 
 ## 2. Remaining placeholder pages
 
-Nine routes still render `PlaceholderPage`. They are **routed and reachable** —
-the nav links resolve rather than dead-ending — and the six under Settings carry
-a `comingSoon: true` chip so the UI does not promise more than it has.
+Seven routes still render `PlaceholderPage` (was nine; Users & Roles and My
+Profile shipped 2026-08-03). They are **routed and reachable** — the nav links
+resolve rather than dead-ending — and the five remaining under Settings carry a
+`comingSoon: true` chip so the UI does not promise more than it has.
 
 Grouped by what they actually need, because they are not equivalent work.
 
@@ -48,11 +51,16 @@ missing is the CRUD surface and the screens.
 | Receipt & Invoice Settings | `/admin/settings/receipt` | Receipt header/footer, invoice numbering, print options. Overlaps the Label Engine's template model; check before building a second one. |
 | Barcode Settings | `/admin/settings/barcode` | Symbology defaults, label size. **Largely exists already** inside the Label Engine — this may be a link rather than a new screen. |
 
-### 2.2 Users & Roles — needs no new backend
+### 2.2 Users & Roles — ✅ BUILT (2026-08-03)
 
-| Screen | Route | Notes |
-|---|---|---|
-| Users & Roles | `/admin/settings/users` | Employee CRUD and role assignment. The `employee` service already has create / update / role-change, all OWNER-gated. This is a **frontend-only** build against existing endpoints — the cheapest remaining item. |
+Shipped as predicted: **frontend-only**, no new endpoints, no schema change.
+See [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md).
+
+One thing worth carrying forward: role change and password reset deliberately
+call the **workforce** tree (`/owner/workforce/employees/:id/role`,
+`.../reset-password`) rather than `PATCH /employees/:id`. Only the workforce
+path revokes the target's sessions, so a demotion through the employees
+endpoint would leave the old role live in their JWT until it expired.
 
 ### 2.3 Audit Logs — needs a read API
 
@@ -64,18 +72,20 @@ missing is the CRUD surface and the screens.
 
 | Screen | Route | Notes |
 |---|---|---|
-| My Profile | `/profile` (both portals) | Own details, password change. `auth.service.changePassword` exists. Two routes render this — build once. |
+| ~~My Profile~~ | `/profile`, `/cashier/profile` | ✅ **BUILT 2026-08-03.** One `ProfileView` mounted on both routes, as planned. Read-only details + password change — there is no self-service profile-update endpoint, so editing would need an additive `PATCH /auth/me`. See [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md). |
 | Notifications | `/notifications` | `notification.service` and the `Notification` model exist; the engine already writes low-stock and workforce alerts. Needs a list, read/unread and preferences. |
 | Customer Profile | `/customers/:customerId` | The customers list and analytics are built; this is the per-customer view — purchase history, exchange history, lifetime value. Closest analogue is the supplier profile just built; reuse its tab pattern. |
 
 ### 2.5 Suggested order
 
-1. **Users & Roles** — no backend work, unblocks account administration.
-2. **My Profile** — small, and every role hits it.
+1. ~~**Users & Roles**~~ — ✅ done 2026-08-03.
+2. ~~**My Profile**~~ — ✅ done 2026-08-03.
 3. **Customer Profile** — completes the Customers module; pattern already exists.
 4. **Store Settings** — establishes the settings form pattern.
 5. **Notifications** — model and writers exist.
 6. **Audit Logs** — needs a new read API; largest table, so paginate carefully.
+   Now more valuable than before: Users & Roles writes `ROLE_CHANGED`,
+   `PASSWORD_RESET` and `EMPLOYEE_DEACTIVATED` rows that nothing can read yet.
 7. **Receipt & Barcode Settings** — resolve the Label Engine overlap first.
 
 Backup & Restore is **not** in this list — the decision is not to build it
@@ -141,6 +151,32 @@ should be preserved:
 - `cleanDatabase()` in the test harness refuses to truncate a database whose
   name does not contain "test".
 
+### 2.8 Standing security rules — DECIDED, do not re-open
+
+Settled 2026-08-03 at the Users & Roles merge. Recorded here because both are
+the kind of rule a later "simplification" removes by accident. Full reasoning in
+[USERS_AND_PROFILE.md §7.3–§7.4](./USERS_AND_PROFILE.md).
+
+1. **Session invalidation stays on the Workforce services.** Role change and
+   password reset must keep routing through
+   `/owner/workforce/employees/:id/role` and `.../reset-password` — the only
+   paths that call `invalidateAuthContext` + `closeOpenSessions`. Consolidating
+   them into `PATCH /employees/:id` *would appear to work* (it accepts `role`
+   and enforces the hierarchy) while silently leaving a demoted manager's JWT
+   valid and a reset employee's sessions live. **Session revocation is a
+   security requirement of these operations, not an implementation detail.**
+
+2. **The three client-side self-guards are security rules, not UI polish.** No
+   self-role-change, no self-deactivation, no self-password-reset through the
+   admin interface. The server's `enforceHierarchy` *permits* self-modification;
+   the owner-guards cover the first two only by coincidence of the current role
+   set, and the third has no server counterpart at all — the owner-reset path
+   needs no current password, so aiming it at your own account converts an
+   unlocked session into an account takeover.
+
+Both are pinned by tests (`usersApi.test.ts`, `accountRules.test.ts`). A failure
+in either after a refactor means the refactor is wrong, not the test.
+
 ---
 
 ## 3. Known technical debt
@@ -150,6 +186,8 @@ should be preserved:
 | **Global brand statistics** | `brand.repository.statsFor` | Brand stats are per-page, so product-count / revenue / stock-value sorting is page-local. Needs a `brand_stats` rollup table. **Deferred by decision (2026-08-02): ship it together with the product-statistics rollup below, not before.** They share invalidation hooks, and building them separately means wiring the same five write paths twice. Full plan in the `TODO(scale)` comment and [PROCUREMENT.md §7.1](./PROCUREMENT.md). |
 | **Global product statistics** | `catalog.service` | Same shape of problem — price/stock sorts use a bounded 2000-row in-memory window. Paired with the brand rollup above; do them as one piece of work. |
 | **No test database** | `SERVER/.env` | `DATABASE_URL` points at live Neon, so `sale.integration.test.ts` (9 tests) is **skipped** rather than run. `cleanDatabase()` refuses to truncate a non-test database. **Standing rule (2026-08-02): automated tests are never to be pointed at the live database — no `ALLOW_DB_WIPE=yes` in any script, CI job or local shell profile.** The fix is a `.env.test` against a scratch database; until that exists the suite stays skipped, which is the correct trade. |
+| **No `/employees/stats`** | `employee.service` | Users & Roles shows role/status counts derived from the LOADED PAGE, labelled "on this page"; only the total is global. **Planned, additive** — one `GROUP BY`, no rollup table needed (unlike the two above: `employees` is sized by staff count, not transaction count). Spec above `listEmployees`; see [USERS_AND_PROFILE.md §7.1](./USERS_AND_PROFILE.md). |
+| **No self-service profile edit** | `auth.service` | A cashier who moves house must ask the owner — `PATCH /employees/:id` is OWNER-only. **Planned, additive** `PATCH /auth/me` with a positively-listed field allowlist (never role/isActive/salary/phone). Spec above `me`; see [USERS_AND_PROFILE.md §7.2](./USERS_AND_PROFILE.md). |
 | **Supplier returns** | — | `SUPPLIER_RETURN` movement type exists with no UI. This is why a received purchase cannot be cancelled — there is no sanctioned way to reverse the stock. |
 | **No procurement export** | — | Reports and Inventory share `utils/exportRenderer.ts`; purchases / suppliers / brands do not use it yet. |
 | **`migrate dev` is unusable** | `SERVER/prisma` | The historical `_perf` migration fails shadow-DB replay. Use `prisma migrate deploy`. |
@@ -158,15 +196,55 @@ should be preserved:
 
 ## 4. Test coverage
 
+### 4.1 Server — `cd SERVER && npm run test:unit`
+
 | Suite | Tests | Notes |
 |---|---|---|
 | `procurement.engine` | 52 | Partial receive, settlement, due amounts, supplier balances, brand stats, RBAC, inventory reconciliation |
+| `employeeValidation` | 49 | **New.** The server side of the contract the client mirrors: role enum (OWNER not assignable), password policy, `email:""` clears, `isActive` on update, list-query filters and sort keys |
 | `finance.engine` | — | P&L, settlement, payroll, period resolution |
 | `inventory.engine`, `cashRegister.engine`, `workforce.engine`, `catalogPricing.engine`, `asset.engine`, `promotion`/`discountDates` | — | Pure engine rules |
 | `authContextCache`, `exchangeWindow` | — | Utils |
 | `sale.integration` | 9 | **Skipped** — needs a test database (see §3) |
 
-**Totals: 256 passing, 9 skipped, 0 failing.**
+**Totals: 305 passing, 9 skipped, 0 failing.** (Was 256 before the Users &
+Roles milestone.)
 
 Database access in tests is **opt-in per file** via `useTestDatabase()`. Pure
 unit tests run with no connection, no truncation and no network.
+
+### 4.2 Client — `cd CLIENT && npm test`
+
+**New in 2026-08-03.** The client had no test infrastructure before this
+milestone. `CLIENT/vitest.config.ts` runs PURE unit tests only — node
+environment, no DOM, no setup file — mirroring the server's `test:unit`
+philosophy.
+
+| Suite | Tests | Notes |
+|---|---|---|
+| `users/accountRules` | 29 | Every RBAC guard: self-demotion, owner deactivation, cross-owner administration, role assignment, unauthenticated actor |
+| `users/validation` | 39 | Form schemas mirroring `employee.validation` |
+| `users/format` | 28 | Null-safety — "Not recorded" vs ₹0, "Never" vs a date, em dash vs "Invalid Date" |
+| `users/usersApi` | 15 | Endpoint routing (role change must hit the workforce tree), empty-param dropping, `isActive:false` / `email:""` survival |
+
+**Total: 111 passing, 0 failing.**
+
+#### Testing policy — DECIDED 2026-08-03
+
+**Logic tests are mandatory.** Any feature shipping RBAC rules, validation
+schemas, money/date maths, filter derivation or transport routing lands with
+unit tests covering them. Those regressions are silent: nothing crashes, the
+types still check, and a permission that stopped being enforced is invisible
+until it causes harm.
+
+**Component/UI tests are a separate infrastructure milestone** — deliberately
+not set up here. They need jsdom, `@testing-library/react`, a setup file and a
+house style for queries and async assertions. That must not be bolted onto a
+feature build: a half-adopted testing library is worse than none, because it
+sets a precedent nobody follows consistently. When that milestone happens, add
+a jsdom project *alongside* `CLIENT/vitest.config.ts` rather than flipping it,
+so the pure-logic suites keep running with no DOM and no setup cost.
+
+The split follows where failure is invisible: a button that moves is caught by
+looking at the screen; a guard that stopped refusing self-demotion is not.
+Policy is restated at the top of `CLIENT/vitest.config.ts`.

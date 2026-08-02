@@ -71,6 +71,56 @@ function enforceHierarchy(executor: AuthenticatedUser, targetRole: Role, targetI
 // SERVICE METHODS
 // =============================================================================
 
+/**
+ * Paginated employee list.
+ *
+ * `meta.total` is a TRUE global count of everything matching the filters — it
+ * comes from a COUNT query, not from `data.length`. That distinction matters
+ * for the TODO below: the total is trustworthy, the breakdowns are not,
+ * because there are no breakdowns here to trust.
+ *
+ * ───────────────────────────────────────────────────────────────────────────
+ * TODO(stats): GLOBAL EMPLOYEE STATISTICS VIA `GET /employees/stats`
+ * ───────────────────────────────────────────────────────────────────────────
+ * There is no endpoint returning grouped account counts, so every consumer
+ * that wants "how many managers / cashiers / deactivated accounts are there"
+ * has to derive it from whatever page it happens to have loaded.
+ *
+ * Who is affected today:
+ *   • CLIENT/src/features/users/components/UserStatCards.tsx — computes the
+ *     role and status breakdown from the LOADED PAGE and labels each card
+ *     "on this page" rather than implying a global figure. Only the
+ *     "Accounts" card (fed by `meta.total` above) is a real total.
+ *   • Any future dashboard headcount tile would hit the same wall.
+ *
+ * Why the client does not simply fetch every account and count them: that
+ * downloads the entire employee table on every visit to render four numbers,
+ * and it silently breaks past the `limit: 100` cap the list query enforces.
+ *
+ * The intended fix — ADDITIVE, no breaking change to `GET /employees`:
+ *
+ *   1. Add `employeeRepository.stats(filters)` issuing ONE grouped query:
+ *        SELECT role, is_active, COUNT(*) FROM employees GROUP BY 1, 2
+ *      Cheap and index-friendly — `employees` is a small table (staff count,
+ *      not transaction count), so unlike the brand/product rollups this needs
+ *      NO denormalisation and NO incremental maintenance. That is the whole
+ *      reason this TODO is a different shape from the TODO(scale) ones.
+ *   2. Accept the SAME filter params as `listQuery` (search, role, isActive)
+ *      so the cards can reflect the active filters rather than always
+ *      reporting store-wide figures. Reuse the zod schema; do not fork it.
+ *   3. Add `GET /employees/stats` to employee.routes.ts, guarded
+ *      `requireRole("OWNER")` — this is account administration data, and the
+ *      Users & Roles screen behind it is already OWNER-only. Declare it
+ *      BEFORE `/:id` or "stats" is captured as an employee id.
+ *   4. Return `{ total, active, inactive, byRole: { OWNER, MANAGER, CASHIER } }`.
+ *   5. Client: add `fetchUserStats` + `useUserStats`, then delete the
+ *      page-derived arithmetic in UserStatCards and the "on this page"
+ *      qualifiers with it.
+ *
+ * Until then the UI must keep saying "on this page". A page-scoped count
+ * presented as a global one is a lie about the data, and headcount is exactly
+ * the kind of number somebody would act on.
+ */
 export async function listEmployees(query: ListEmployeesQuery) {
   const { data, total } = await employeeRepository.findMany(query);
 

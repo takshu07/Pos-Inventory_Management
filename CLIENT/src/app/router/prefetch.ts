@@ -29,6 +29,9 @@ type ChunkThunk = () => Promise<unknown>;
  * would ever match, and `/admin/inventory/...` before `/admin/inventory`.
  */
 const PREFIX_CHUNKS: ReadonlyArray<readonly [string, ChunkThunk]> = [
+  // Users & Roles must precede any "/admin/settings" entry a future settings
+  // screen adds, since longest-prefix-first is enforced by ordering here.
+  ["/admin/settings/users", () => import("@/features/users")],
   ["/admin/inventory", () => import("@/features/inventory")],
   ["/admin/categories", () => import("@/features/owner/categories")],
   ["/admin/discounts", () => import("@/features/owner/discounts")],
@@ -72,6 +75,11 @@ const PREFIX_CHUNKS: ReadonlyArray<readonly [string, ChunkThunk]> = [
 const EXACT_CHUNKS: Readonly<Record<string, ChunkThunk>> = {
   "/": () => import("@/features/dashboard"),
   "/cashier": () => import("@/features/pos"),
+  // Both portals mount the SAME ProfileView, so either entry warms one chunk
+  // that serves both. Exact rather than prefix: "/profile" as a prefix would
+  // also swallow any future /profile/* route belonging to another feature.
+  "/profile": () => import("@/features/profile"),
+  "/cashier/profile": () => import("@/features/profile"),
 };
 
 /**
