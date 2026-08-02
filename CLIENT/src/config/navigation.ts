@@ -33,6 +33,12 @@ import {
   Flame,
   TrendingDown,
   Wrench,
+  Banknote,
+  Scale,
+  ArrowLeftRight,
+  Receipt,
+  CreditCard,
+  RotateCcw,
 } from "lucide-react";
 
 /**
@@ -79,6 +85,17 @@ export const EMPLOYEE_NAV: NavSection[] = [
       { label: "POS Checkout",    path: "/pos",            icon: ShoppingCart },
       { label: "Sales History",   path: "/sales",          icon: History },
       { label: "Customers",       path: "/customers",      icon: Users },
+    ],
+  },
+  {
+    // The drawer. Deliberately operational rather than owner-only: anyone who
+    // rings up a sale needs an open register, and the backend narrows what each
+    // actor sees per session rather than per route.
+    title: "Cash Register",
+    items: [
+      { label: "My Register",      path: "/register",           icon: Wallet },
+      { label: "Register History", path: "/register/history",   icon: History },
+      { label: "Drops & Payouts",  path: "/register/movements", icon: Banknote },
     ],
   },
   {
@@ -177,12 +194,41 @@ export const ADMIN_NAV: NavSection[] = [
     ],
   },
   {
+    title: "Finance",
+    items: [
+      { label: "Overview",          path: "/admin/finance",             icon: DollarSign,   allowedRoles: ["OWNER"] },
+      { label: "Revenue",           path: "/admin/finance/revenue",     icon: TrendingUp,   allowedRoles: ["OWNER"] },
+      { label: "Profit & Loss",     path: "/admin/finance/profit-loss", icon: Scale,        allowedRoles: ["OWNER"] },
+      { label: "Cash Flow",         path: "/admin/finance/cash-flow",   icon: ArrowLeftRight, allowedRoles: ["OWNER"] },
+      { label: "Expenses",          path: "/admin/finance/expenses",    icon: Receipt,      allowedRoles: ["OWNER"] },
+      { label: "Supplier Payments", path: "/admin/finance/payables",    icon: Truck,        allowedRoles: ["OWNER"] },
+      { label: "Salaries",          path: "/admin/finance/salaries",    icon: Users,        allowedRoles: ["OWNER"] },
+      { label: "Payment Analytics", path: "/admin/finance/payments",    icon: CreditCard,   allowedRoles: ["OWNER"] },
+    ],
+  },
+  {
+    // The BI centre. Ordered by how often each is opened rather than
+    // alphabetically — Sales and Profit are daily reads, Purchases is monthly.
+    title: "Reports",
+    items: [
+      { label: "Overview",   path: "/admin/reports",            icon: BarChart3,   allowedRoles: ["OWNER"] },
+      { label: "Sales",      path: "/admin/reports/sales",      icon: ShoppingCart, allowedRoles: ["OWNER"] },
+      { label: "Profit",     path: "/admin/reports/profit",     icon: TrendingUp,  allowedRoles: ["OWNER"] },
+      { label: "Products",   path: "/admin/reports/products",   icon: Boxes,       allowedRoles: ["OWNER"] },
+      { label: "Categories", path: "/admin/reports/categories", icon: Tag,         allowedRoles: ["OWNER"] },
+      { label: "Brands",     path: "/admin/reports/brands",     icon: Award,       allowedRoles: ["OWNER"] },
+      { label: "Customers",  path: "/admin/reports/customers",  icon: Users,       allowedRoles: ["OWNER"] },
+      { label: "Employees",  path: "/admin/reports/employees",  icon: UserCog,     allowedRoles: ["OWNER"] },
+      { label: "Inventory",  path: "/admin/reports/inventory",  icon: PackageSearch, allowedRoles: ["OWNER"] },
+      { label: "Purchases",  path: "/admin/reports/purchases",  icon: ClipboardList, allowedRoles: ["OWNER"] },
+      { label: "Payments",   path: "/admin/reports/payments",   icon: CreditCard,  allowedRoles: ["OWNER"] },
+      { label: "Returns",    path: "/admin/reports/returns",    icon: RotateCcw,   allowedRoles: ["OWNER"] },
+    ],
+  },
+  {
     title: "Business",
     items: [
-      { label: "Reports",       path: "/admin/reports",    icon: BarChart3,    allowedRoles: ["OWNER"] },
-      { label: "Finance",       path: "/admin/finance",    icon: DollarSign,   allowedRoles: ["OWNER"] },
-      { label: "Discounts",     path: "/admin/discounts",  icon: BadgePercent, allowedRoles: ["OWNER"] },
-      { label: "Cash Register", path: "/finance/register", icon: Wallet,       allowedRoles: ["OWNER"] },
+      { label: "Discounts", path: "/admin/discounts", icon: BadgePercent, allowedRoles: ["OWNER"] },
     ],
   },
   {

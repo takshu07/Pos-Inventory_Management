@@ -163,6 +163,15 @@ enum ActionModule {
   // printer/settings action is audited under this module.
   LABEL
   PRINTER
+  // ── Finance, Cash Register & Reporting ─────────────────────────────────────
+  // FINANCE is the money-movement module (revenue, P&L, cash flow). CASH_REGISTER
+  // is the drawer/shift module. They are separate so a drawer discrepancy can be
+  // audited without wading through every expense approval, and vice versa.
+  FINANCE
+  CASH_REGISTER
+  SUPPLIER_PAYMENT
+  SALARY
+  REPORT
 }
 
 enum ActionType {
@@ -203,6 +212,25 @@ enum ActionType {
   SHIFT_ASSIGNED
   LEAVE_REQUESTED
   LEAVE_REVIEWED
+  // ── Cash Register audit actions ────────────────────────────────────────────
+  // Each drawer event is its own action rather than a generic UPDATE, because
+  // "who took cash out of the till" is the question an audit actually asks, and
+  // answering it must not require parsing a JSON diff.
+  REGISTER_OPENED
+  REGISTER_CLOSED
+  REGISTER_RECONCILED
+  CASH_DROP_RECORDED
+  CASH_PAYOUT_RECORDED
+  // ── Finance audit actions ──────────────────────────────────────────────────
+  EXPENSE_APPROVED
+  EXPENSE_REJECTED
+  SUPPLIER_PAYMENT_RECORDED
+  SALARY_PAID
+  SALARY_ADJUSTED
+  // ── Reporting ──────────────────────────────────────────────────────────────
+  // Exporting a financial report moves data OUT of the system, so it is an
+  // audited event in its own right.
+  REPORT_EXPORTED
 }
 
 /// Identifies the entity type that an EmployeeAction record refers to.
@@ -233,6 +261,13 @@ enum ReferenceType {
   ATTENDANCE
   SHIFT
   LEAVE_REQUEST
+  // Finance & Cash Register entities.
+  CASH_REGISTER
+  CASH_DROP
+  CASH_PAYOUT
+  SUPPLIER_PAYMENT
+  SALARY_PAYMENT
+  SALARY_ADJUSTMENT
 }
 
 enum CashTransactionType {
@@ -243,6 +278,92 @@ enum CashTransactionType {
 enum RegisterStatus {
   OPEN
   CLOSED
+  /// Closed and signed off by an owner/manager after review. A RECONCILED
+  /// session is frozen: the shift summary it produced can never change, which
+  /// is what makes yesterday's cash position a fact rather than a live query.
+  RECONCILED
+}
+
+// =============================================================================
+// FINANCE & CASH REGISTER ENUMS
+// =============================================================================
+
+/// What a cash payout was spent on. An enum rather than free text so the expense
+/// report can group by category in SQL instead of parsing prose typed by a
+/// cashier at 9pm.
+enum PayoutCategory {
+  TEA
+  COURIER
+  PACKAGING
+  CLEANING
+  TRANSPORT
+  STATIONERY
+  MAINTENANCE
+  UTILITIES
+  STAFF_WELFARE
+  MISCELLANEOUS
+}
+
+/// Every discrete thing that happened during a shift, in one timeline.
+///
+/// This exists because a shift summary alone cannot answer "when did the drawer
+/// go wrong". Sales, refunds, drops and payouts each already live in their own
+/// table; RegisterActivity is the ordered, denormalised narrative that ties them
+/// to one session so the timeline is ONE indexed read rather than a five-way
+/// union sorted in application memory.
+enum RegisterActivityType {
+  OPENED
+  SALE
+  REFUND
+  EXCHANGE
+  CASH_DROP
+  CASH_PAYOUT
+  EXPENSE
+  ADJUSTMENT
+  NOTE
+  CLOSED
+  RECONCILED
+}
+
+/// Shared approval lifecycle for expenses and payouts.
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Settlement state of a supplier bill (a Purchase).
+/// DERIVED from paidAmount vs totalAmount by the finance engine and STORED, so
+/// the outstanding-payables query is an indexed filter rather than a full scan
+/// with arithmetic. OVERDUE additionally depends on the clock, so it is
+/// recomputed whenever a bill is read or a payment lands.
+enum SupplierPaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+/// Settlement state of one employee's salary for one pay period.
+enum SalaryPaymentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+/// A line item that moves an employee's net payable up or down.
+/// ADVANCE is negative at settlement time (already handed over), BONUS and
+/// OVERTIME positive, DEDUCTION negative. Storing the type rather than a signed
+/// amount alone is what lets the payslip itemise instead of showing one net figure.
+enum SalaryAdjustmentType {
+  ADVANCE
+  BONUS
+  OVERTIME
+  INCENTIVE
+  DEDUCTION
+  REIMBURSEMENT
 }
 
 // =============================================================================
@@ -467,6 +588,20 @@ model Employee {
   leavesReviewed   LeaveRequest[]     @relation("LeaveReviewedBy")
   notes            EmployeeNote[]     @relation("NoteSubject")
   notesAuthored    EmployeeNote[]     @relation("NoteAuthor")
+
+  // ── Finance, Cash Register & Payroll ───────────────────────────────────────
+  reconciledRegisters CashRegister[]     @relation("ReconciledRegisters")
+  cashDrops           CashDrop[]         @relation("CashDropBy")
+  cashDropsWitnessed  CashDrop[]         @relation("CashDropWitness")
+  cashPayouts         CashPayout[]       @relation("CashPayoutBy")
+  cashPayoutsApproved CashPayout[]       @relation("CashPayoutApprover")
+  registerActivities  RegisterActivity[] @relation("RegisterActivityBy")
+  expensesApproved    Expense[]          @relation("ExpenseApprover")
+  supplierPayments    SupplierPayment[]  @relation("SupplierPaymentBy")
+  salaryPayments      SalaryPayment[]    @relation("SalaryOf")
+  salariesCreated     SalaryPayment[]    @relation("SalaryCreatedBy")
+  salariesPaid        SalaryPayment[]    @relation("SalaryPaidBy")
+  salaryAdjustments   SalaryAdjustment[] @relation("SalaryAdjustmentBy")
 
   // ── Inventory module ───────────────────────────────────────────────────────
   reservationsCreated  InventoryReservation[] @relation("ReservationCreatedBy")
@@ -747,6 +882,7 @@ model Supplier {
 
   purchases Purchase[]
   variants  ProductVariant[]
+  payments  SupplierPayment[]
 
   @@index([businessName])
   @@index([phone])
@@ -1287,10 +1423,23 @@ model Purchase {
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
 
+  // ── Payables (Finance module) ──────────────────────────────────────────────
+  // A Purchase IS the supplier bill; these columns make it a settleable one.
+  // paidAmount/dueAmount are maintained transactionally by the finance service
+  // alongside every SupplierPayment insert, so "outstanding payables" is a SUM
+  // over an indexed column rather than a correlated subquery per supplier.
+  paidAmount    Decimal               @default(0) @db.Decimal(12, 2)
+  dueAmount     Decimal               @default(0) @db.Decimal(12, 2)
+  paymentStatus SupplierPaymentStatus @default(UNPAID)
+  /// When payment is contractually due. NULL = no agreed term, which is treated
+  /// as "not overdue" rather than "overdue immediately".
+  dueDate       DateTime?
+
   supplier           Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   employee           Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
   items              PurchaseItem[]
   inventoryMovements InventoryMovement[]
+  payments           SupplierPayment[]
 
   @@index([purchaseNumber])
   @@index([supplierInvoiceNumber])
@@ -1298,6 +1447,9 @@ model Purchase {
   @@index([purchaseDate])
   @@index([status])
   @@index([createdAt])
+  /// The payables queue: unsettled bills by due date.
+  @@index([paymentStatus, dueDate], map: "purchases_paymentstatus_duedate_idx")
+  @@index([supplierId, paymentStatus], map: "purchases_supplier_paymentstatus_idx")
   @@map("purchases")
 }
 
@@ -1624,11 +1776,25 @@ model ExpenseCategory {
   id        String   @id @default(cuid())
   name      String   @unique
   isActive  Boolean  @default(true)
+
+  /// Stable machine key ("RENT", "ELECTRICITY"). Lets the seeder and the
+  /// payout→expense bridge resolve a category without matching on display text
+  /// that an owner is free to rename.
+  code String? @unique
+
+  /// Ordering in pickers and on the expense-breakdown chart.
+  displayOrder Int @default(0)
+
+  /// Expenses in this category are recurring overheads (rent, internet) rather
+  /// than variable spend. Drives the fixed-vs-variable split on the P&L.
+  isRecurring Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   expenses Expense[]
 
+  @@index([displayOrder])
   @@map("expense_categories")
 }
 
@@ -1637,7 +1803,7 @@ model Expense {
   expenseCode     String        @unique
   categoryId      String
   title           String
-  amount          Decimal       @db.Decimal(10, 2)
+  amount          Decimal       @db.Decimal(12, 2)
   vendorName      String?
   paymentMethod   PaymentMethod @default(CASH)
   referenceNumber String?
@@ -1648,18 +1814,56 @@ model Expense {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  category ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  employee Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  // ── Approval workflow ──────────────────────────────────────────────────────
+  // Default APPROVED preserves every existing row's meaning: expenses recorded
+  // before this workflow existed were, in effect, approved on entry. Making the
+  // default PENDING would retroactively invalidate the historical P&L.
+  approvalStatus  ApprovalStatus @default(APPROVED)
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  /// Uploaded bill/receipt (an Asset id).
+  receiptAssetId String?
+
+  /// The drawer this was paid from, when paid in cash during an open shift.
+  registerId String?
+
+  /// Multi-store readiness.
+  storeCode String?
+
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  employee   Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  approvedBy Employee?       @relation("ExpenseApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  register   CashRegister?   @relation(fields: [registerId], references: [id], onDelete: SetNull)
+
+  /// The drawer-side twin, when this expense originated as a cash payout.
+  payout CashPayout?
 
   @@index([expenseCode])
   @@index([categoryId])
   @@index([expenseDate])
   @@index([paymentMethod])
+  @@index([approvalStatus])
+  @@index([registerId])
+  /// The P&L hot path: approved expenses inside a date window.
+  @@index([approvalStatus, expenseDate(sort: Desc)], map: "expenses_approval_date_idx")
   @@map("expenses")
 }
 
 // =============================================================================
 // CASH MANAGEMENT (DRAWER / REGISTER)
+//
+// A CashRegister row is ONE SHIFT SESSION of one physical till — not the till
+// itself. `registerNumber` names the physical counter ("REG-01"); the row is the
+// period between one open and one close. That distinction is the module's core
+// modelling decision: it is what lets two cashiers work the same counter on
+// consecutive shifts and each be accountable for only their own drawer.
+//
+// The closing rollups (cashSales, upiSales, …) are SNAPSHOTS written at close,
+// not views over the sales table. A shift summary must never change after the
+// fact — if it were recomputed on read, a late refund posted against a sale from
+// a closed shift would silently rewrite a reconciliation an owner already signed.
 // =============================================================================
 
 model CashRegister {
@@ -1668,32 +1872,367 @@ model CashRegister {
   openedAt DateTime       @default(now())
   closedAt DateTime?
 
-  openingBalance  Decimal  @db.Decimal(10, 2)
-  closingBalance  Decimal? @db.Decimal(10, 2)
-  expectedBalance Decimal? @db.Decimal(10, 2)
-  difference      Decimal? @db.Decimal(10, 2) // positive = excess, negative = shortage
+  /// The physical till this session belongs to, e.g. "REG-01". Free text rather
+  /// than a FK for the reason documented on Employee.assignedRegister: there is
+  /// no "till" entity, only sessions of one.
+  registerNumber String @default("REG-01")
+
+  /// Human handle for the session itself ("SH-20260730-0003"), so a shift can be
+  /// referenced in conversation and on a printed summary.
+  sessionNumber String? @unique
+
+  // ── Cash positions ─────────────────────────────────────────────────────────
+  // `openingBalance` / `closingBalance` / `expectedBalance` are the original
+  // column names and remain the source of truth for every existing reader.
+  // `countedCash` is the NEW, distinct concept the spec requires: what the
+  // cashier physically counted, as opposed to what the system finally recorded.
+  // They are equal today (the service writes both), but they are separate
+  // columns because a supervisor override at close would make them diverge, and
+  // a schema that cannot express that divergence cannot audit it.
+  openingBalance  Decimal  @db.Decimal(12, 2)
+  closingBalance  Decimal? @db.Decimal(12, 2)
+  expectedBalance Decimal? @db.Decimal(12, 2)
+  countedCash     Decimal? @db.Decimal(12, 2)
+  difference      Decimal? @db.Decimal(12, 2) // positive = over (excess), negative = short
+
+  /// MANDATORY when |difference| > 0 — enforced at the validation layer. A
+  /// discrepancy without a stated reason is the single most common way cash
+  /// shrinkage becomes untraceable.
+  discrepancyReason String?
+
+  /// Denomination breakdown of the physical count, e.g. {"500": 4, "200": 3}.
+  /// JSON because the note/coin set is a jurisdiction detail, not a schema one.
+  denominations Json?
+
+  // ── Shift rollups, frozen at close ─────────────────────────────────────────
+  cashSales        Decimal @default(0) @db.Decimal(12, 2)
+  upiSales         Decimal @default(0) @db.Decimal(12, 2)
+  cardSales        Decimal @default(0) @db.Decimal(12, 2)
+  otherSales       Decimal @default(0) @db.Decimal(12, 2)
+  /// Gross value of bills settled with more than one tender. Deliberately NOT a
+  /// sum of the columns above — a split bill's cash leg already counts in
+  /// cashSales; this is the count-adjacent metric "how much business was split".
+  splitSales       Decimal @default(0) @db.Decimal(12, 2)
+  refundTotal      Decimal @default(0) @db.Decimal(12, 2)
+  exchangeTotal    Decimal @default(0) @db.Decimal(12, 2)
+  discountTotal    Decimal @default(0) @db.Decimal(12, 2)
+  cashDropTotal    Decimal @default(0) @db.Decimal(12, 2)
+  cashPayoutTotal  Decimal @default(0) @db.Decimal(12, 2)
+  transactionCount Int     @default(0)
+  /// Wall-clock shift length, written at close so history never subtracts.
+  durationMinutes  Int?
 
   openedById String
   closedById String?
   notes      String?
+
+  /// Owner/manager sign-off. Set together with status = RECONCILED.
+  reconciledById String?
+  reconciledAt   DateTime?
+  reconcileNotes String?
+
+  /// Multi-store readiness — NULL = the single default store.
+  storeCode String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   openedBy     Employee          @relation("OpenedRegisters", fields: [openedById], references: [id], onDelete: Restrict)
   closedBy     Employee?         @relation("ClosedRegisters", fields: [closedById], references: [id], onDelete: Restrict)
+  reconciledBy Employee?         @relation("ReconciledRegisters", fields: [reconciledById], references: [id], onDelete: SetNull)
   transactions CashTransaction[]
+  drops        CashDrop[]
+  payouts      CashPayout[]
+  activities   RegisterActivity[]
+  expenses     Expense[]
+  salaryPayments SalaryPayment[]
+  supplierPayments SupplierPayment[]
 
   @@index([status])
   @@index([openedAt])
+  /// THE open-session lookup: "is this till already open?". Partial in spirit —
+  /// there is at most one OPEN row per registerNumber, enforced by the service.
+  @@index([registerNumber, status], map: "cash_registers_number_status_idx")
+  /// Register history, newest first, filterable by employee.
+  @@index([openedById, openedAt(sort: Desc)], map: "cash_registers_employee_openedat_idx")
+  @@index([storeCode])
   @@map("cash_registers")
 }
 
+/// Cash physically removed from the drawer and moved to a safe/bank.
+///
+/// A drop REDUCES the expected drawer balance but is NOT an expense — the money
+/// still belongs to the business. Conflating the two (as a single "cash out"
+/// row would) makes the P&L wrong by the amount of every safe drop.
+model CashDrop {
+  id         String @id @default(cuid())
+  registerId String
+
+  /// Human handle, e.g. "DROP-20260730-0002".
+  dropNumber String @unique
+
+  amount Decimal @db.Decimal(12, 2)
+  reason String
+
+  /// Where the money went — safe, bank deposit slip, etc.
+  destination String?
+  /// Bank deposit slip / envelope number.
+  referenceNumber String?
+
+  employeeId String
+  /// Supervisor who witnessed the drop, when the store requires dual control.
+  witnessedById String?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+
+  register    CashRegister @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  employee    Employee     @relation("CashDropBy", fields: [employeeId], references: [id], onDelete: Restrict)
+  witnessedBy Employee?    @relation("CashDropWitness", fields: [witnessedById], references: [id], onDelete: SetNull)
+
+  @@index([registerId])
+  @@index([employeeId])
+  @@index([createdAt(sort: Desc)], map: "cash_drops_createdat_idx")
+  @@map("cash_drops")
+}
+
+/// A business expense paid in cash straight out of the drawer.
+///
+/// Unlike a drop this DOES hit the P&L, so every payout also materialises an
+/// Expense row (linked below). The payout is the drawer-side record; the Expense
+/// is the accounting-side record. One event, two ledgers, joined — rather than
+/// one row that has to pretend to be both.
+model CashPayout {
+  id         String @id @default(cuid())
+  registerId String
+
+  payoutNumber String @unique
+
+  category PayoutCategory
+  amount   Decimal        @db.Decimal(12, 2)
+  reason   String
+
+  /// Who was paid.
+  payeeName String?
+
+  /// Uploaded bill/receipt. An Asset id — the Asset engine owns the bytes.
+  receiptAssetId String?
+
+  /// Payouts above the configured threshold require approval before they are
+  /// accepted; below it they are auto-approved at creation. Either way the
+  /// approver is recorded, so "who authorised this" always has an answer.
+  approvalStatus ApprovalStatus @default(APPROVED)
+  approvedById   String?
+  approvedAt     DateTime?
+  rejectionReason String?
+
+  employeeId String
+
+  /// The accounting-side twin of this payout. Nullable only for the instant
+  /// between the two inserts inside one transaction.
+  expenseId String? @unique
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  register   CashRegister @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  employee   Employee     @relation("CashPayoutBy", fields: [employeeId], references: [id], onDelete: Restrict)
+  approvedBy Employee?    @relation("CashPayoutApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  expense    Expense?     @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+
+  @@index([registerId])
+  @@index([category])
+  @@index([approvalStatus])
+  @@index([createdAt(sort: Desc)], map: "cash_payouts_createdat_idx")
+  @@map("cash_payouts")
+}
+
+/// The ordered narrative of one shift. See RegisterActivityType.
+model RegisterActivity {
+  id         String @id @default(cuid())
+  registerId String
+
+  type        RegisterActivityType
+  description String
+
+  /// Signed cash impact of this event on the drawer. ZERO for non-cash events
+  /// (a card sale is part of the shift's story but not of its drawer balance),
+  /// which is precisely why it is stored per-activity rather than inferred
+  /// from the type.
+  amount Decimal @default(0) @db.Decimal(12, 2)
+
+  /// Running expected drawer balance AFTER this event. Storing it turns "when
+  /// did the drawer diverge" into a scan of one column instead of a replay.
+  balanceAfter Decimal? @db.Decimal(12, 2)
+
+  referenceType ReferenceType?
+  referenceId   String?
+
+  employeeId String
+
+  createdAt DateTime @default(now())
+
+  register CashRegister @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  employee Employee     @relation("RegisterActivityBy", fields: [employeeId], references: [id], onDelete: Restrict)
+
+  /// The timeline read: one session, oldest first.
+  @@index([registerId, createdAt], map: "register_activities_register_createdat_idx")
+  @@index([type])
+  @@map("register_activities")
+}
+
+// =============================================================================
+// SUPPLIER PAYMENTS & SALARY
+// =============================================================================
+
+/// One payment against a supplier — optionally against a specific Purchase bill.
+///
+/// `purchaseId` is nullable because an on-account payment ("₹50,000 towards the
+/// running balance") is a real thing suppliers do, and forcing it onto an
+/// arbitrary bill would corrupt that bill's settlement history.
+model SupplierPayment {
+  id            String @id @default(cuid())
+  paymentNumber String @unique
+
+  supplierId String
+  purchaseId String?
+
+  amount        Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod @default(CASH)
+
+  referenceNumber String?
+  notes           String?
+
+  paidAt DateTime @default(now())
+
+  /// Set when the payment was made in cash from an open drawer, so the shift's
+  /// expected balance accounts for it.
+  registerId String?
+
+  createdById String
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplier  Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchase  Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  createdBy Employee      @relation("SupplierPaymentBy", fields: [createdById], references: [id], onDelete: Restrict)
+  register  CashRegister? @relation(fields: [registerId], references: [id], onDelete: SetNull)
+
+  @@index([supplierId, paidAt(sort: Desc)], map: "supplier_payments_supplier_paidat_idx")
+  @@index([purchaseId])
+  @@index([paidAt(sort: Desc)], map: "supplier_payments_paidat_idx")
+  @@map("supplier_payments")
+}
+
+/// One employee's salary for one pay period.
+///
+/// The period is stored as (year, month) integers rather than a date range
+/// because payroll is a calendar-month concept, and a range invites two rows
+/// for the same month that overlap by a day. The unique constraint on
+/// (employeeId, periodYear, periodMonth) is what makes payroll idempotent.
+model SalaryPayment {
+  id            String @id @default(cuid())
+  paymentNumber String @unique
+
+  employeeId String
+
+  periodYear  Int
+  periodMonth Int // 1–12
+
+  /// Snapshot of Employee.salary when the period was generated. Frozen so a
+  /// later raise does not retroactively rewrite last quarter's payroll.
+  baseSalary Decimal @db.Decimal(12, 2)
+
+  /// Rollups of the adjustments below, maintained by the service in the same
+  /// transaction that writes them.
+  totalBonus      Decimal @default(0) @db.Decimal(12, 2)
+  totalOvertime   Decimal @default(0) @db.Decimal(12, 2)
+  totalIncentive  Decimal @default(0) @db.Decimal(12, 2)
+  totalAdvance    Decimal @default(0) @db.Decimal(12, 2)
+  totalDeduction  Decimal @default(0) @db.Decimal(12, 2)
+
+  /// base + bonus + overtime + incentive − advance − deduction.
+  netPayable Decimal @db.Decimal(12, 2)
+  paidAmount Decimal @default(0) @db.Decimal(12, 2)
+  /// netPayable − paidAmount, stored so the outstanding-salaries KPI is a SUM
+  /// of one indexed column rather than a subtraction across every row.
+  dueAmount  Decimal @db.Decimal(12, 2)
+
+  status SalaryPaymentStatus @default(PENDING)
+
+  paymentMethod PaymentMethod @default(CASH)
+  paidAt        DateTime?
+  referenceNumber String?
+  notes           String?
+
+  /// Set when paid in cash from an open drawer.
+  registerId String?
+
+  createdById String
+  paidById    String?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee    Employee           @relation("SalaryOf", fields: [employeeId], references: [id], onDelete: Restrict)
+  createdBy   Employee           @relation("SalaryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  paidBy      Employee?          @relation("SalaryPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  register    CashRegister?      @relation(fields: [registerId], references: [id], onDelete: SetNull)
+  adjustments SalaryAdjustment[]
+
+  /// One salary row per employee per month — the module's core invariant.
+  @@unique([employeeId, periodYear, periodMonth])
+  @@index([status])
+  @@index([periodYear, periodMonth], map: "salary_payments_period_idx")
+  @@index([paidAt(sort: Desc)], map: "salary_payments_paidat_idx")
+  @@map("salary_payments")
+}
+
+/// An itemised line on a salary payment. See SalaryAdjustmentType.
+model SalaryAdjustment {
+  id              String @id @default(cuid())
+  salaryPaymentId String
+
+  type   SalaryAdjustmentType
+  /// Always POSITIVE. Direction is carried by `type`, not by the sign, so a
+  /// deduction can never be entered as a negative bonus.
+  amount Decimal              @db.Decimal(12, 2)
+  reason String
+
+  /// Set when an advance was handed over in cash from the drawer.
+  registerId String?
+
+  createdById String
+
+  createdAt DateTime @default(now())
+
+  salaryPayment SalaryPayment @relation(fields: [salaryPaymentId], references: [id], onDelete: Cascade)
+  createdBy     Employee      @relation("SalaryAdjustmentBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([salaryPaymentId])
+  @@index([type])
+  @@map("salary_adjustments")
+}
+
+/// The drawer's double-entry ledger. EVERY rupee that enters or leaves a till
+/// is one row here — a cash sale, a drop, a payout, a cash refund.
+///
+/// This table, not the sales table, is what `expectedCash` is computed from.
+/// Deriving expected cash from sales instead would silently ignore drops and
+/// payouts, which is exactly the class of bug that makes a drawer "short".
 model CashTransaction {
   id            String              @id @default(cuid())
   registerId    String
   type          CashTransactionType
-  amount        Decimal             @db.Decimal(10, 2)
+  amount        Decimal             @db.Decimal(12, 2)
   reason        String
   referenceId   String?
   referenceType ReferenceType?
@@ -1706,6 +2245,8 @@ model CashTransaction {
   @@index([registerId])
   @@index([type])
   @@index([createdAt])
+  /// The expected-cash aggregate: one register's movements grouped by direction.
+  @@index([registerId, type], map: "cash_transactions_register_type_idx")
   @@map("cash_transactions")
 }
 

@@ -34,6 +34,12 @@ const PREFIX_CHUNKS: ReadonlyArray<readonly [string, ChunkThunk]> = [
   ["/admin/discounts", () => import("@/features/owner/discounts")],
   ["/admin/products", () => import("@/features/owner/products")],
   ["/admin/labels", () => import("@/features/labels/pages/LabelSettingsPage")],
+  // Reports and Finance are each ONE barrel covering ~12 and ~8 screens
+  // respectively, so a single hover on the section's first nav item warms every
+  // screen in it. That matters more here than elsewhere: these chunks carry
+  // recharts, which is the largest dependency in the app.
+  ["/admin/reports", () => import("@/features/reports")],
+  ["/admin/finance", () => import("@/features/finance")],
   // The whole workforce module is one barrel: activity, managers, staff,
   // attendance, performance and login history all ride the same chunk.
   ["/admin/employees", () => import("@/features/workforce")],
@@ -42,7 +48,11 @@ const PREFIX_CHUNKS: ReadonlyArray<readonly [string, ChunkThunk]> = [
   ["/admin/attendance", () => import("@/features/workforce")],
   ["/admin/performance", () => import("@/features/workforce")],
   ["/admin/login-history", () => import("@/features/workforce")],
+  ["/cashier/register", () => import("@/features/register")],
   ["/cashier/pos", () => import("@/features/pos")],
+  // The register barrel serves both portals — the cashier and manager shells
+  // render the same components, so one chunk covers both prefixes.
+  ["/register", () => import("@/features/register")],
   ["/customers", () => import("@/features/customers")],
   ["/categories", () => import("@/features/manager/categories")],
   ["/products", () => import("@/features/manager/products")],

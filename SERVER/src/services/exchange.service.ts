@@ -6,6 +6,10 @@ import { logger } from "../config/logger";
 import { auditRepository } from "../repositories/audit.repository";
 import { exchangeRepository } from "../repositories/exchange.repository";
 import { executeMovement } from "./inventoryMovement.service";
+import {
+  requireOpenSessionForSale,
+  recordExchangeOnDrawer,
+} from "./cashRegister.service";
 import { formatPaginatedResponse } from "../utils/queryEngine";
 import { evaluateExchangeWindow } from "../utils/exchangeWindow";
 import type { PaginationParams } from "../types/common.types";
@@ -150,7 +154,15 @@ export const exchangeService = {
       }
     }
 
-    // 5. Execute Transaction
+    // 5. THE REGISTER GATE — an exchange moves cash, so it needs a drawer.
+    //
+    // Same rule and same single definition as checkout: an exchange can hand
+    // back a refund or take a top-up payment, and either way the till must be
+    // accountable for it. Resolved before the transaction so a missing session
+    // is an immediate 409 rather than a rollback.
+    const registerSession = await requireOpenSessionForSale(employeeId);
+
+    // 6. Execute Transaction
     const exchange = await prisma.$transaction(async (tx) => {
       const exchangeNumber = await exchangeRepository.generateNextExchangeNumber(tx);
 
@@ -229,10 +241,36 @@ export const exchangeService = {
         });
       }
 
+      // Post the drawer impact INSIDE this transaction, for the same reason as
+      // checkout: an exchange that committed without its cash movement leaves
+      // the till wrong by the refund amount with no trace of why.
+      //
+      // Only the CASH leg touches the drawer. A top-up paid by card, and a
+      // refund issued as store credit (the branch above), move no notes — so
+      // the amount posted here is the cash-settled portion, not the headline
+      // price difference.
+      if (registerSession) {
+        const cashTopUp = payments
+          .filter((p) => p.method === "CASH")
+          .reduce((sum, p) => sum.plus(new Prisma.Decimal(p.amount)), new Prisma.Decimal(0));
+
+        // A negative difference was settled as store credit above, so it never
+        // leaves the drawer; only a positive difference brings cash in.
+        const cashDelta = priceDifference.greaterThan(0) ? cashTopUp : new Prisma.Decimal(0);
+
+        await recordExchangeOnDrawer(tx, {
+          registerId: registerSession.id,
+          exchangeId: createdExchange.id,
+          exchangeNumber: createdExchange.exchangeNumber,
+          employeeId,
+          cashDifference: cashDelta,
+        });
+      }
+
       return createdExchange;
     });
 
-    // 6. Asynchronous Audit Logging
+    // 7. Asynchronous Audit Logging
     auditRepository.create({
       performedBy: employeeId,
       action: "CREATE",

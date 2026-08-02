@@ -253,6 +253,42 @@ export const router = createBrowserRouter([
         },
       },
 
+      // ── Cash Register — operational (every role in this shell) ─────────────
+      // Deliberately OUTSIDE OwnerRoute. A manager who rings up a bill needs a
+      // drawer exactly as much as a cashier does, and the backend scopes which
+      // SESSIONS each actor can see per-row rather than per-route: a cashier
+      // opening /register/history gets their own shifts, an owner gets
+      // everyone's. Reconciliation is guarded separately (MANAGER+), and the
+      // service additionally refuses to let anyone sign off their own shift.
+      {
+        path: "register",
+        async lazy() {
+          const { CashRegisterPage } = await import("@/features/register");
+          return { Component: CashRegisterPage };
+        },
+      },
+      {
+        path: "register/history",
+        async lazy() {
+          const { RegisterHistoryPage } = await import("@/features/register");
+          return { Component: RegisterHistoryPage };
+        },
+      },
+      {
+        path: "register/movements",
+        async lazy() {
+          const { DropsPayoutsPage } = await import("@/features/register");
+          return { Component: DropsPayoutsPage };
+        },
+      },
+      {
+        path: "register/sessions/:sessionId",
+        async lazy() {
+          const { ShiftSummaryPage } = await import("@/features/register");
+          return { Component: ShiftSummaryPage };
+        },
+      },
+
       // ── Business administration — OWNER only (wrapped in OwnerRoute) ───────
       // A MANAGER who types any of these URLs is redirected to /unauthorized by
       // OwnerRoute; the backend independently returns 403. Nav links are hidden
@@ -272,10 +308,14 @@ export const router = createBrowserRouter([
               return { Component: OwnerProductsPage };
             },
           },
+          // The old owner-only /finance/register path. Kept as a redirect to the
+          // operational route so existing bookmarks and the previous nav entry
+          // do not 404 — the register is no longer owner-scoped.
           {
             path: "finance/register",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Cash Register" /> };
+              const { Navigate } = await import("react-router");
+              return { Component: () => <Navigate to="/register" replace /> };
             },
           },
           // ── Owner Category Management — full CRUD + analytics (OWNER only) ──
@@ -428,16 +468,154 @@ export const router = createBrowserRouter([
               return { Component: LabelSettingsPage };
             },
           },
-          {
-            path: "admin/reports",
-            async lazy() {
-              return { Component: () => <PlaceholderPage title="Reports" /> };
-            },
-          },
+          // ── Finance — OWNER only ───────────────────────────────────────────
+          // Revenue, margins, payroll and supplier balances are the business's
+          // private financials. A MANAGER who types any of these URLs is
+          // redirected by OwnerRoute, and every endpoint behind them returns
+          // 403 independently — the guard, not the nav hiding, is the boundary.
           {
             path: "admin/finance",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Finance" /> };
+              const { FinanceDashboardPage } = await import("@/features/finance");
+              return { Component: FinanceDashboardPage };
+            },
+          },
+          {
+            path: "admin/finance/revenue",
+            async lazy() {
+              const { RevenuePage } = await import("@/features/finance");
+              return { Component: RevenuePage };
+            },
+          },
+          {
+            path: "admin/finance/profit-loss",
+            async lazy() {
+              const { ProfitLossPage } = await import("@/features/finance");
+              return { Component: ProfitLossPage };
+            },
+          },
+          {
+            path: "admin/finance/cash-flow",
+            async lazy() {
+              const { CashFlowPage } = await import("@/features/finance");
+              return { Component: CashFlowPage };
+            },
+          },
+          {
+            path: "admin/finance/expenses",
+            async lazy() {
+              const { ExpensesPage } = await import("@/features/finance");
+              return { Component: ExpensesPage };
+            },
+          },
+          {
+            path: "admin/finance/payables",
+            async lazy() {
+              const { PayablesPage } = await import("@/features/finance");
+              return { Component: PayablesPage };
+            },
+          },
+          {
+            path: "admin/finance/salaries",
+            async lazy() {
+              const { SalariesPage } = await import("@/features/finance");
+              return { Component: SalariesPage };
+            },
+          },
+          {
+            path: "admin/finance/payments",
+            async lazy() {
+              const { PaymentAnalyticsPage } = await import("@/features/finance");
+              return { Component: PaymentAnalyticsPage };
+            },
+          },
+
+          // ── Reports — the Business Intelligence centre (OWNER only) ────────
+          // Twelve screens sharing one filter vocabulary and one export
+          // mechanism. Global search is the single exception the backend allows
+          // a manager to reach, and it is surfaced from the Reports dashboard.
+          {
+            path: "admin/reports",
+            async lazy() {
+              const { ReportsDashboardPage } = await import("@/features/reports");
+              return { Component: ReportsDashboardPage };
+            },
+          },
+          {
+            path: "admin/reports/sales",
+            async lazy() {
+              const { SalesReportPage } = await import("@/features/reports");
+              return { Component: SalesReportPage };
+            },
+          },
+          {
+            path: "admin/reports/products",
+            async lazy() {
+              const { ProductReportPage } = await import("@/features/reports");
+              return { Component: ProductReportPage };
+            },
+          },
+          {
+            path: "admin/reports/categories",
+            async lazy() {
+              const { CategoryReportPage } = await import("@/features/reports");
+              return { Component: CategoryReportPage };
+            },
+          },
+          {
+            path: "admin/reports/brands",
+            async lazy() {
+              const { BrandReportPage } = await import("@/features/reports");
+              return { Component: BrandReportPage };
+            },
+          },
+          {
+            path: "admin/reports/customers",
+            async lazy() {
+              const { CustomerReportPage } = await import("@/features/reports");
+              return { Component: CustomerReportPage };
+            },
+          },
+          {
+            path: "admin/reports/employees",
+            async lazy() {
+              const { EmployeeReportPage } = await import("@/features/reports");
+              return { Component: EmployeeReportPage };
+            },
+          },
+          {
+            path: "admin/reports/inventory",
+            async lazy() {
+              const { InventoryReportPage } = await import("@/features/reports");
+              return { Component: InventoryReportPage };
+            },
+          },
+          {
+            path: "admin/reports/purchases",
+            async lazy() {
+              const { PurchaseReportPage } = await import("@/features/reports");
+              return { Component: PurchaseReportPage };
+            },
+          },
+          {
+            path: "admin/reports/payments",
+            async lazy() {
+              const { PaymentReportPage } = await import("@/features/reports");
+              return { Component: PaymentReportPage };
+            },
+          },
+          {
+            path: "admin/reports/returns",
+            async lazy() {
+              const { ReturnReportPage } = await import("@/features/reports");
+              return { Component: ReturnReportPage };
+            },
+          },
+          {
+            path: "admin/reports/profit",
+            async lazy() {
+              const { ProfitReportPage } = await import("@/features/reports");
+              return { Component: ProfitReportPage };
             },
           },
           // ── Catalog Discounts — the shelf-price rule layer (OWNER only) ──────
@@ -494,6 +672,32 @@ export const router = createBrowserRouter([
             async lazy() {
               const { PosView } = await import("@/features/pos");
               return { Component: PosView };
+            },
+          },
+          // ── The cashier's drawer ──────────────────────────────────────────
+          // Not optional: a cashier cannot record a sale without an open
+          // register, so without these routes the POS is unusable for them.
+          // The same components the manager portal uses — the service scopes
+          // every read to the signed-in cashier's own sessions.
+          {
+            path: "register",
+            async lazy() {
+              const { CashRegisterPage } = await import("@/features/register");
+              return { Component: CashRegisterPage };
+            },
+          },
+          {
+            path: "register/history",
+            async lazy() {
+              const { RegisterHistoryPage } = await import("@/features/register");
+              return { Component: RegisterHistoryPage };
+            },
+          },
+          {
+            path: "register/sessions/:sessionId",
+            async lazy() {
+              const { ShiftSummaryPage } = await import("@/features/register");
+              return { Component: ShiftSummaryPage };
             },
           },
           {

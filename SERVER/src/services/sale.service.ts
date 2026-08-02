@@ -18,6 +18,10 @@ import { ConfigurationEngine } from "../engines/configuration.engine";
 import { PaymentService } from "./payment.service";
 import { InvoiceService } from "./invoice.service";
 import { executeMovement } from "./inventoryMovement.service";
+import {
+  requireOpenSessionForSale,
+  recordSaleOnDrawer,
+} from "./cashRegister.service";
 import { EventBus } from "../events/eventBus";
 import { EventTopic } from "../events/domainEvents";
 import type { SaleCompletedPayload } from "../events/domainEvents";
@@ -50,7 +54,16 @@ export class SaleService {
       return this.buildCheckoutResponse(existingSale);
     }
 
-    // 2. Extract and pre-validate database variants (No Prisma in Service)
+    // 2. THE REGISTER GATE — a sale must belong to an open drawer.
+    //
+    // Checked BEFORE any pricing work so a cashier with no session gets an
+    // immediate, actionable 409 rather than a failure after the engine has run.
+    // The rule itself lives in cashRegister.service so the exchange flow and
+    // any future till-bound operation share one definition of it; returns null
+    // only when a store has disabled register enforcement in settings.
+    const registerSession = await requireOpenSessionForSale(employeeId);
+
+    // 3. Extract and pre-validate database variants (No Prisma in Service)
     const variants = await this.fetchVariants(payload.items);
     this.validateVariants(variants, payload.items);
 
@@ -93,7 +106,8 @@ export class SaleService {
     // 4. Execute the core transaction with resiliency
     const saleId = await executeWithRetry(
       () => this.executeCheckoutTransaction(
-        payload, variants, employee, activePromotions, pricingConfig.defaultTaxRate, idempotencyKey, discountRules
+        payload, variants, employee, activePromotions, pricingConfig.defaultTaxRate, idempotencyKey, discountRules,
+        registerSession?.id ?? null
       ),
       (error: any) => error?.code === "P2002", // Retry only on Unique Constraint (Invoice collision)
       3 // Max 3 retries
@@ -295,7 +309,9 @@ export class SaleService {
     activePromotions: any[],
     taxRate: any,
     idempotencyKey: string,
-    discountRules: PricingRuleInput[] = []
+    discountRules: PricingRuleInput[] = [],
+    /** Open drawer this sale belongs to. NULL when register enforcement is off. */
+    registerId: string | null = null
   ): Promise<string> {
     return prisma.$transaction(async (tx) => {
       // 0. Determine or Create Customer inside transaction
@@ -365,6 +381,24 @@ export class SaleService {
 
       // 4. Deduct Inventory (The `executeMovement` function verifies stock >= 0 internally again)
       await this.deductInventory(payload.items, createdSale.id, employee.id, tx);
+
+      // 5. Post the cash leg to the drawer, INSIDE this transaction.
+      //
+      // A sale that committed without its cash movement would leave the drawer
+      // short by exactly that sale's cash — the most damaging failure mode this
+      // module has. Committing them together makes that state unreachable.
+      if (registerId) {
+        await recordSaleOnDrawer(tx, {
+          registerId,
+          saleId: createdSale.id,
+          saleNumber: createdSale.saleNumber,
+          employeeId: employee.id,
+          payments: payments.processedPayments.map((p) => ({
+            method: p.method,
+            amount: p.amount,
+          })),
+        });
+      }
 
       return createdSale.id;
     }, SaleService.TX_OPTIONS);

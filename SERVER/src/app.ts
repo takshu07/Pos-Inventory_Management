@@ -55,6 +55,8 @@ import analyticsRoutes from "./routes/analytics.routes";
 import configurationRoutes from "./routes/configuration.routes";
 import notificationRoutes from "./routes/notification.routes";
 import financeRoutes from "./routes/finance.routes";
+import registerRoutes from "./routes/register.routes";
+import reportsRoutes from "./routes/reports.routes";
 import assetRoutes from "./routes/asset.routes";
 import labelRoutes from "./routes/label.routes";
 import ownerLabelRoutes from "./routes/owner.labels.routes";
@@ -221,7 +223,19 @@ app.use("/api/v1/sales", saleRoutes);
 app.use("/api/v1/analytics", analyticsRoutes);
 app.use("/api/v1/configuration", configurationRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+// ── Finance, Cash Register & Reporting ──────────────────────────────────────
+// Three trees with deliberately different reach:
+//   /register  OPERATIONAL — every authenticated role. A cashier must be able
+//              to open their own drawer, or they cannot sell at all. Which
+//              SESSIONS an actor may touch is a per-row decision the service
+//              makes, not something a route guard can express.
+//   /finance   OWNER-only. Revenue, margins, payroll and supplier balances are
+//              the business's private financials.
+//   /reports   OWNER-only, except global search, which managers need for
+//              day-to-day invoice and customer lookup.
+app.use("/api/v1/register", registerRoutes);
 app.use("/api/v1/finance", financeRoutes);
+app.use("/api/v1/reports", reportsRoutes);
 app.use("/api/v1/assets", assetRoutes);
 // Label Management & Printing Engine. /labels is the operational surface every
 // role uses (preview, print, queue); /owner/labels is administration
