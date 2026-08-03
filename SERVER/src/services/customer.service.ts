@@ -2,7 +2,11 @@ import { Prisma } from "../../generated/prisma";
 import { AppError } from "../errors/AppError";
 import { HTTP_STATUS } from "../constants/httpStatus";
 import { logger } from "../config/logger";
-import { customerRepository } from "../repositories/customer.repository";
+import {
+  customerRepository,
+  ACTIVE_WINDOW_DAYS,
+  PROFILE_HISTORY_LIMIT,
+} from "../repositories/customer.repository";
 import { auditRepository } from "../repositories/audit.repository";
 import { stripUndefined } from "../utils/object";
 import type { PaginationParams, PaginatedResponse } from "../types/common.types";
@@ -231,6 +235,66 @@ export const customerService = {
     logger.info({ customerId: id, executorId }, "Customer updated");
 
     return updatedCustomer;
+  },
+
+  /**
+   * Full customer profile for the OWNER-only profile screen: the record, its
+   * sale and exchange rollups, and the histories rendered as tabs.
+   *
+   * Fetched in one round trip rather than four. The profile always renders every
+   * tab, and against a network-latency (Neon) database four serial queries cost
+   * four round trips for no benefit — the same reasoning as getSupplierById.
+   *
+   * The permanent Walk-In record is rejected: it is a system placeholder that
+   * accumulates every anonymous sale in the shop, so a "profile" for it would
+   * present unrelated transactions as one person's purchase history.
+   */
+  async getCustomerProfile(id: string) {
+    const customer = await customerRepository.findById(id);
+    if (!customer) {
+      throw new AppError(HTTP_STATUS.NOT_FOUND, "Customer not found");
+    }
+
+    if (customer.isWalkIn) {
+      throw new AppError(
+        HTTP_STATUS.BAD_REQUEST,
+        "The Walk-In record is a system placeholder, not a customer, and has no profile."
+      );
+    }
+
+    const [saleStats, exchangeStats, purchases, exchanges, topProducts] =
+      await Promise.all([
+        customerRepository.getStatistics(id),
+        customerRepository.getExchangeStatistics(id),
+        customerRepository.purchaseHistory(id),
+        customerRepository.exchangeHistory(id),
+        customerRepository.topPurchasedProducts(id),
+      ]);
+
+    // Purchasing-recency status, derived from the same ACTIVE_WINDOW_DAYS the
+    // customer table and analytics cards use, so the profile badge can never
+    // disagree with the list the user clicked through from.
+    const lastVisit = saleStats.lastVisit;
+    const activeThreshold = new Date(
+      Date.now() - ACTIVE_WINDOW_DAYS * 86_400_000
+    );
+    const active = lastVisit !== null && lastVisit >= activeThreshold;
+
+    return {
+      ...customer,
+      statistics: {
+        ...saleStats,
+        lifetimeSpend: Number(saleStats.lifetimeSpend),
+        ...exchangeStats,
+        active,
+        activeWindowDays: ACTIVE_WINDOW_DAYS,
+      },
+      purchases,
+      exchanges,
+      topProducts,
+      /** The server-side cap applied to each history list above. */
+      historyLimit: PROFILE_HISTORY_LIMIT,
+    };
   },
 
   /**

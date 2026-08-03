@@ -10,6 +10,25 @@ import type { PaginationParams } from "../types/common.types";
  */
 export const ACTIVE_WINDOW_DAYS = 90;
 
+/**
+ * Rows returned per history list on the customer profile. The profile shows a
+ * recent slice, not an unbounded history — the UI states the cap so a user
+ * reconciling against a report knows they are not seeing everything.
+ */
+export const PROFILE_HISTORY_LIMIT = 50;
+
+/** One row of the "most purchased" rollup, grouped on SaleItem's snapshots. */
+export interface TopProductRow {
+  variantId: string;
+  sku: string;
+  productName: string;
+  sizeName: string;
+  colorName: string;
+  totalQuantity: number;
+  totalSpend: number;
+  lastPurchased: Date;
+}
+
 /** One row of the owner customer table — customer columns + sale aggregates. */
 export interface CustomerTableRow {
   id: string;
@@ -392,6 +411,138 @@ export const customerRepository = {
     // COALESCE(active) — the raw boolean is NULL when lastVisit is NULL.
     const normalized = rows.map((r) => ({ ...r, active: r.active === true }));
     return { rows: normalized, total: Number(countResult[0]?.count ?? 0) };
+  },
+
+  // ===========================================================================
+  // CUSTOMER PROFILE — per-customer histories and rollups
+  //
+  // These back the OWNER-only profile screen at /customers/:customerId. Each
+  // history is capped server-side (the profile shows a recent slice, not an
+  // unbounded list) and the caller states the cap in the UI rather than
+  // truncating silently. Mirrors the supplier profile's shape.
+  // ===========================================================================
+
+  /**
+   * Purchase history for a customer, newest first.
+   *
+   * Every sale is returned regardless of status — a VOIDED or PARTIAL sale is
+   * part of the relationship history and hiding it would make the tab disagree
+   * with the customer's own receipts. The COMPLETED-only filtering that governs
+   * spend rollups lives in `getStatistics`, not here.
+   */
+  async purchaseHistory(customerId: string, limit = PROFILE_HISTORY_LIMIT) {
+    return prisma.sale.findMany({
+      where: { customerId },
+      orderBy: { saleDate: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        saleNumber: true,
+        saleDate: true,
+        status: true,
+        subtotal: true,
+        discountAmount: true,
+        manualDiscountAmount: true,
+        taxAmount: true,
+        grandTotal: true,
+        paidAmount: true,
+        dueAmount: true,
+        employee: { select: { id: true, firstName: true, lastName: true } },
+        _count: { select: { items: true } },
+      },
+    });
+  },
+
+  /**
+   * Exchange history for a customer, newest first.
+   *
+   * `priceDifference` is signed at the source: positive means the customer paid
+   * extra, negative means the shop refunded them. It is passed through unchanged
+   * so the UI can render the direction rather than re-deriving it from
+   * issued − returned, which drifts once an exchange is partially settled.
+   */
+  async exchangeHistory(customerId: string, limit = PROFILE_HISTORY_LIMIT) {
+    return prisma.exchange.findMany({
+      where: { customerId },
+      orderBy: { exchangeDate: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        exchangeNumber: true,
+        exchangeDate: true,
+        status: true,
+        returnedValue: true,
+        issuedValue: true,
+        priceDifference: true,
+        exchangeReason: true,
+        originalSale: { select: { id: true, saleNumber: true } },
+        employee: { select: { id: true, firstName: true, lastName: true } },
+        _count: { select: { returnedItems: true, issuedItems: true } },
+      },
+    });
+  },
+
+  /**
+   * Exchange-side rollups for the profile KPIs.
+   *
+   * Counted over all exchanges, with net price difference summed separately —
+   * a customer with two offsetting exchanges has a net near zero but still has
+   * two exchange events, and the profile needs to show both facts.
+   */
+  async getExchangeStatistics(customerId: string) {
+    const [totals, last] = await Promise.all([
+      prisma.exchange.aggregate({
+        where: { customerId },
+        _count: { id: true },
+        _sum: { returnedValue: true, issuedValue: true, priceDifference: true },
+      }),
+      prisma.exchange.findFirst({
+        where: { customerId },
+        orderBy: { exchangeDate: "desc" },
+        select: { exchangeDate: true },
+      }),
+    ]);
+
+    return {
+      totalExchanges: totals._count.id || 0,
+      totalReturnedValue: Number(totals._sum.returnedValue || 0),
+      totalIssuedValue: Number(totals._sum.issuedValue || 0),
+      /** Signed: positive = customer paid extra overall, negative = refunded. */
+      netPriceDifference: Number(totals._sum.priceDifference || 0),
+      lastExchangeDate: last?.exchangeDate ?? null,
+    };
+  },
+
+  /**
+   * The customer's most-purchased variants, ranked by quantity over COMPLETED
+   * sales only. Aggregated in PostgreSQL so a customer with thousands of line
+   * items never ships them all to the browser to be counted client-side.
+   *
+   * Groups on SaleItem's archival snapshots (productName/sizeName/colorName/sku)
+   * rather than joining the live product tables. That is deliberate: the
+   * snapshots exist so historical lines render as they were sold, and joining
+   * `products` would relabel past purchases whenever a product is renamed. The
+   * variantId is still carried through for linking, taken as MAX() since it is
+   * functionally dependent on the snapshot group.
+   */
+  async topPurchasedProducts(customerId: string, limit = 10) {
+    return prisma.$queryRaw<TopProductRow[]>`
+      SELECT
+        MAX(si."variantId")           AS "variantId",
+        si."sku",
+        si."productName",
+        si."sizeName",
+        si."colorName",
+        SUM(si."quantity")::int       AS "totalQuantity",
+        SUM(si."totalPrice")::float8  AS "totalSpend",
+        MAX(s."saleDate")             AS "lastPurchased"
+      FROM "sale_items" si
+      JOIN "sales" s ON s."id" = si."saleId"
+      WHERE s."customerId" = ${customerId} AND s."status" = 'COMPLETED'
+      GROUP BY si."sku", si."productName", si."sizeName", si."colorName"
+      ORDER BY "totalQuantity" DESC, "totalSpend" DESC
+      LIMIT ${limit}
+    `;
   },
 
   /**

@@ -122,6 +122,19 @@ export const customerController = {
   }),
 
   /**
+   * GET /api/v1/customers/:id/profile  (owner only)
+   * Record + sale/exchange rollups + capped histories in a single response.
+   */
+  getCustomerProfile: asyncHandler(async (req: Request, res: Response) => {
+    const profile = await customerService.getCustomerProfile(req.params["id"] as string);
+    res.status(200).json({
+      success: true,
+      message: "Customer profile retrieved successfully.",
+      data: profile,
+    });
+  }),
+
+  /**
    * GET /api/v1/customers/:id/purchases
    */
   getCustomerPurchases: asyncHandler(async (req: Request, res: Response) => {

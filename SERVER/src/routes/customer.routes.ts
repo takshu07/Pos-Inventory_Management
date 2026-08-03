@@ -30,6 +30,10 @@ router.get("/table", requireRole("OWNER"), customerController.getCustomerTable);
 router.get("/analytics", requireRole("OWNER"), customerController.getCustomerAnalytics);
 router.get("/phone/:phone", requireRole("CASHIER"), customerController.getCustomerByPhone);
 router.get("/:id", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerById);
+// Full profile (rollups + purchase/exchange history) is business intelligence,
+// not shop-floor data — OWNER only, matching /table and /analytics above. The
+// basic record on "/:id" stays available to CASHIER for attaching to a sale.
+router.get("/:id/profile", validateParam("id"), requireRole("OWNER"), customerController.getCustomerProfile);
 router.get("/:id/purchases", validateParam("id"), requireRole("CASHIER"), customerController.getCustomerPurchases);
 router.get("/:id/exchange-eligibility", validateParam("id"), requireRole("CASHIER"), customerController.getExchangeEligibility);
 
