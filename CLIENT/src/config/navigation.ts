@@ -308,7 +308,8 @@ export const NAV_GROUPS: NavGroup[] = [
       // Built. Account administration: create accounts, assign roles,
       // activate/deactivate, reset passwords.
       { label: "Users & Roles",     path: "/admin/settings/users",    icon: UserCog,        allowedRoles: OWNER },
-      { label: "Audit Logs",        path: "/admin/audit-logs",        icon: Shield,         allowedRoles: OWNER, comingSoon: true },
+      // Built. Read-only trail of every recorded change, OWNER-only.
+      { label: "Audit Logs",        path: "/admin/audit-logs",        icon: Shield,         allowedRoles: OWNER },
       { label: "Backup & Restore",  path: "/admin/settings/backup",   icon: DatabaseBackup, allowedRoles: OWNER, comingSoon: true },
       { label: "Receipt & Invoice", path: "/admin/settings/receipt",  icon: Receipt,        allowedRoles: OWNER, comingSoon: true },
       { label: "Barcode Settings",  path: "/admin/settings/barcode",  icon: ScanBarcode,    allowedRoles: OWNER, comingSoon: true },

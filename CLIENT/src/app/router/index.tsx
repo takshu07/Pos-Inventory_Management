@@ -682,9 +682,12 @@ export const router = createBrowserRouter([
             },
           },
           {
+            // Audit Logs is a real screen as of 2026-08-03. OWNER-only by
+            // virtue of sitting inside OwnerRoute, like every route above.
             path: "admin/audit-logs",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Audit Logs" /> };
+              const { AuditLogsPage } = await import("@/features/audit");
+              return { Component: AuditLogsPage };
             },
           },
         ],

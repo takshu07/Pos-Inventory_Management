@@ -11,6 +11,7 @@ client; Express 5 + Prisma 7 + PostgreSQL (Neon) on the server.
 | [docs/PROCUREMENT.md](docs/PROCUREMENT.md) | Purchases (incl. partial goods receipt), Suppliers, Brands — API, schema, invariants. |
 | [docs/FINANCE_REGISTER_REPORTING.md](docs/FINANCE_REGISTER_REPORTING.md) | Cash Register, Finance and Reports — the drawer ledger and accounting definitions. |
 | [docs/USERS_AND_PROFILE.md](docs/USERS_AND_PROFILE.md) | Users & Roles and My Profile — account administration, the RBAC/privilege-escalation rules, and why role changes route through the workforce tree. |
+| [docs/AUDIT_LOGS.md](docs/AUDIT_LOGS.md) | Audit Logs — the read API over `audit_logs`, why severity is derived rather than stored, and the performance rules for the largest table in the system. |
 
 ## Running it
 
@@ -69,6 +70,9 @@ Open items carried from earlier sessions:
   wizard; see MODULE_STATUS).
 - Users & Roles and My Profile were the last two placeholder screens needing no
   new backend — **done** (see USERS_AND_PROFILE.md).
+- Audit Logs needed a new read API over the largest table in the system —
+  **done** (see AUDIT_LOGS.md). Additive only: no schema change, and audit
+  writing is untouched.
 - Change the owner / manager / cashier credentials before any real deployment —
   the seeded ones above are public in this repo. The owner can now do this in
   the app: **Settings → Users & Roles** for staff accounts, **My Profile** for

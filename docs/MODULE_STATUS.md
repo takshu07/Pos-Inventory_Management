@@ -3,7 +3,7 @@
 What is built, what is a placeholder, and what each remaining screen needs.
 Kept current so "is X done?" has one answer rather than a grep.
 
-Last updated: 2026-08-03, after the Users & Roles / My Profile milestone.
+Last updated: 2026-08-03, after the Audit Logs milestone.
 
 ---
 
@@ -27,15 +27,16 @@ Last updated: 2026-08-03, after the Users & Roles / My Profile milestone.
 | **Procurement** | Purchases (partial receive), Suppliers, Brands | OWNER | [PROCUREMENT.md](./PROCUREMENT.md) |
 | **Users & Roles** | **Account CRUD, role assignment, activation, password reset** | OWNER | [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md) |
 | **My Profile** | **Own details, account info, password change (both portals)** | All | [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md) |
+| **Audit Logs** | **Read-only trail: filter by user/module/entity/action/severity/period, field-level diff, session context** | OWNER | [AUDIT_LOGS.md](./AUDIT_LOGS.md) |
 
 ---
 
 ## 2. Remaining placeholder pages
 
-Seven routes still render `PlaceholderPage` (was nine; Users & Roles and My
-Profile shipped 2026-08-03). They are **routed and reachable** — the nav links
-resolve rather than dead-ending — and the five remaining under Settings carry a
-`comingSoon: true` chip so the UI does not promise more than it has.
+Six routes still render `PlaceholderPage` (was nine; Users & Roles, My Profile
+and Audit Logs shipped 2026-08-03). They are **routed and reachable** — the nav
+links resolve rather than dead-ending — and the four remaining under Settings
+carry a `comingSoon: true` chip so the UI does not promise more than it has.
 
 Grouped by what they actually need, because they are not equivalent work.
 
@@ -62,11 +63,11 @@ call the **workforce** tree (`/owner/workforce/employees/:id/role`,
 path revokes the target's sessions, so a demotion through the employees
 endpoint would leave the old role live in their JWT until it expired.
 
-### 2.3 Audit Logs — needs a read API
+### 2.3 Audit Logs — BUILT
 
 | Screen | Route | Notes |
 |---|---|---|
-| Audit Logs | `/admin/audit-logs` | `audit_logs` is written by every module via `auditRepository.create` and is the largest table in the system. There is **no read endpoint** — needs a paginated, filterable list (by module, action, actor, date) plus a diff view for `oldData`/`newData`. |
+| ~~Audit Logs~~ | `/admin/audit-logs` | ✅ **BUILT 2026-08-03.** New OWNER-only read API at `/api/v1/owner/audit-logs` (list, detail, related, filters, summary) over the existing table. **No schema change, no migration, audit-writing untouched.** Severity is DERIVED from `action` and filtered as an indexed `action IN (...)`; IP/device is correlated from `login_history` and labelled as session-derived. See [AUDIT_LOGS.md](./AUDIT_LOGS.md). |
 
 ### 2.4 Profile & notifications — small, self-contained
 
@@ -80,12 +81,12 @@ endpoint would leave the old role live in their JWT until it expired.
 
 1. ~~**Users & Roles**~~ — ✅ done 2026-08-03.
 2. ~~**My Profile**~~ — ✅ done 2026-08-03.
-3. **Customer Profile** — completes the Customers module; pattern already exists.
-4. **Store Settings** — establishes the settings form pattern.
-5. **Notifications** — model and writers exist.
-6. **Audit Logs** — needs a new read API; largest table, so paginate carefully.
-   Now more valuable than before: Users & Roles writes `ROLE_CHANGED`,
-   `PASSWORD_RESET` and `EMPLOYEE_DEACTIVATED` rows that nothing can read yet.
+3. ~~**Audit Logs**~~ — ✅ done 2026-08-03. Taken ahead of Customer Profile
+   because Users & Roles had started writing `ROLE_CHANGED`, `PASSWORD_RESET`
+   and `EMPLOYEE_DEACTIVATED` rows that nothing could read.
+4. **Customer Profile** — completes the Customers module; pattern already exists.
+5. **Store Settings** — establishes the settings form pattern.
+6. **Notifications** — model and writers exist.
 7. **Receipt & Barcode Settings** — resolve the Label Engine overlap first.
 
 Backup & Restore is **not** in this list — the decision is not to build it
@@ -205,10 +206,13 @@ in either after a refactor means the refactor is wrong, not the test.
 | `finance.engine` | — | P&L, settlement, payroll, period resolution |
 | `inventory.engine`, `cashRegister.engine`, `workforce.engine`, `catalogPricing.engine`, `asset.engine`, `promotion`/`discountDates` | — | Pure engine rules |
 | `authContextCache`, `exchangeWindow` | — | Utils |
+| `audit.engine` | 29 | **New.** Severity policy over every `ActionType`, the severity→actions inversion (round-trip + partition, no gaps/overlaps), validation-enum sync with Prisma, diff honesty (`null` vs `""` vs absent, credentials never rendered), half-open period ranges |
+| `audit.service` | 22 | **New.** Severity filtering compiles to an indexed `action IN (...)`; the empty-intersection case returns nothing rather than everything; `lt` not `lte`; deep-offset refusal; capped counts; list never selects `oldData`/`newData`; session context tagged `SESSION` |
+| `audit.validation` | 16 | **New.** Enum guards as an injection surface, comma-list *and* repeated-param forms, custom-range rules, `limit` cap |
 | `sale.integration` | 9 | **Skipped** — needs a test database (see §3) |
 
-**Totals: 305 passing, 9 skipped, 0 failing.** (Was 256 before the Users &
-Roles milestone.)
+**Totals: 372 passing, 9 skipped, 0 failing.** (Was 305 before the Audit Logs
+milestone, 256 before Users & Roles.)
 
 Database access in tests is **opt-in per file** via `useTestDatabase()`. Pure
 unit tests run with no connection, no truncation and no network.
@@ -226,8 +230,10 @@ philosophy.
 | `users/validation` | 39 | Form schemas mirroring `employee.validation` |
 | `users/format` | 28 | Null-safety — "Not recorded" vs ₹0, "Never" vs a date, em dash vs "Invalid Date" |
 | `users/usersApi` | 15 | Endpoint routing (role change must hit the workforce tree), empty-param dropping, `isActive:false` / `email:""` survival |
+| `audit/auditApi` | 14 | **New.** Envelope level (this tree is FLAT), array filters comma-joined, empty params dropped, `totalIsExact` defaults, and an assertion that **no write functions exist** on the audit API surface |
+| `audit/format` | 25 | **New.** `null` vs `""` vs absent vs `false` all render distinctly, severity variants stay visually distinct, capped totals render with a `+` |
 
-**Total: 111 passing, 0 failing.**
+**Total: 150 passing, 0 failing.**
 
 #### Testing policy — DECIDED 2026-08-03
 

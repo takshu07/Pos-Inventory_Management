@@ -61,6 +61,7 @@ import assetRoutes from "./routes/asset.routes";
 import labelRoutes from "./routes/label.routes";
 import ownerLabelRoutes from "./routes/owner.labels.routes";
 import ownerWorkforceRoutes from "./routes/owner.workforce.routes";
+import ownerAuditRoutes from "./routes/owner.audit.routes";
 import managerWorkforceRoutes from "./routes/manager.workforce.routes";
 import healthRoutes from "./routes/health.routes";
 import crypto from "crypto";
@@ -249,6 +250,10 @@ app.use("/api/v1/owner/labels", ownerLabelRoutes);
 // routes at all, so the read-only guarantee is structural, not just guarded.
 app.use("/api/v1/owner/workforce", ownerWorkforceRoutes);
 app.use("/api/v1/manager/workforce", managerWorkforceRoutes);
+// Audit trail. READ-ONLY and OWNER-only — there is no manager counterpart by
+// design, and no write routes exist because entries are written by the module
+// that performed the action, never through the API.
+app.use("/api/v1/owner/audit-logs", ownerAuditRoutes);
 
 // ── Inventory ───────────────────────────────────────────────────────────────
 // Three trees, one controller. /owner/inventory is the full surface including
