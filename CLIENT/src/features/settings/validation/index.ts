@@ -163,6 +163,10 @@ export const CRITICAL_FIELDS: Record<string, string> = {
     "Reducing retention means older audit entries become eligible for deletion.",
   "storeConfig.storeStatus":
     "Closing or putting the store into maintenance affects whether staff can transact.",
+  "invoiceConfig.invoicePrefix":
+    "Every invoice issued from now on carries the new prefix, and its daily sequence restarts at 1. Existing invoices keep their numbers — your records will contain both formats.",
+  "invoiceConfig.invoiceNumberLength":
+    "Changes the width of every future invoice number. Existing numbers are not re-padded, so the two will not sort together as text.",
 };
 
 /**

@@ -41,6 +41,7 @@
 
 // ── Pages ───────────────────────────────────────────────────────────────────
 export { StoreSettingsPage } from "./pages/StoreSettingsPage";
+export { ReceiptInvoiceSettingsPage } from "./pages/ReceiptInvoiceSettingsPage";
 
 // ── Data layer ──────────────────────────────────────────────────────────────
 export { settingsKeys, useSettings, useUpdateSettings, applyPatch } from "./hooks/useSettings";
@@ -84,9 +85,11 @@ export {
   findCriticalChanges,
   validateStoreSettings,
 } from "./validation";
+export { validateReceiptSettings } from "./validation/receipt";
 
 // ── Utilities ───────────────────────────────────────────────────────────────
 export { countChanges } from "./utils/patch";
+export { previewInvoiceNumber } from "./utils/invoicePreview";
 export * from "./utils/options";
 
 // ── Types ───────────────────────────────────────────────────────────────────

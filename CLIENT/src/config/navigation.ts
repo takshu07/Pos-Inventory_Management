@@ -313,7 +313,8 @@ export const NAV_GROUPS: NavGroup[] = [
       // Built. Read-only trail of every recorded change, OWNER-only.
       { label: "Audit Logs",        path: "/admin/audit-logs",        icon: Shield,         allowedRoles: OWNER },
       { label: "Backup & Restore",  path: "/admin/settings/backup",   icon: DatabaseBackup, allowedRoles: OWNER, comingSoon: true },
-      { label: "Receipt & Invoice", path: "/admin/settings/receipt",  icon: Receipt,        allowedRoles: OWNER, comingSoon: true },
+      // Built. Document numbering (live on the sale path) and receipt content.
+      { label: "Receipt & Invoice", path: "/admin/settings/receipt",  icon: Receipt,        allowedRoles: OWNER },
       { label: "Barcode Settings",  path: "/admin/settings/barcode",  icon: ScanBarcode,    allowedRoles: OWNER, comingSoon: true },
       // Printers and label templates. A built, owner-only screen that predates
       // the spec's Settings list; kept so its only nav entry isn't lost.

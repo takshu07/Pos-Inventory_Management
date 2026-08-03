@@ -97,6 +97,18 @@ export const TABLE_DENSITY_OPTIONS: SelectOption[] = [
 ];
 
 /**
+ * Barcode symbologies the Label Engine can render.
+ *
+ * The labels state the constraint rather than just the name: EAN-13 will not
+ * encode an arbitrary SKU (it needs a valid 13-digit code with a correct check
+ * digit), so choosing it without that is how labels silently fail to print.
+ */
+export const BARCODE_FORMAT_OPTIONS: SelectOption[] = [
+  { value: "CODE128", label: "CODE128 — encodes any SKU" },
+  { value: "EAN13", label: "EAN-13 — requires a valid 13-digit code" },
+];
+
+/**
  * 0–23, labelled in 12-hour form.
  *
  * The stored value stays a 24-hour integer — the label is presentation only, so

@@ -675,10 +675,15 @@ export const router = createBrowserRouter([
               return { Component: () => <PlaceholderPage title="Backup & Restore" /> };
             },
           },
+          // Receipt & Invoice Settings is a real screen as of 2026-08-03. Second
+          // consumer of the centralized settings architecture — it owns the
+          // `invoiceConfig` block and shares every hook and primitive with Store
+          // Settings rather than defining its own form handling.
           {
             path: "admin/settings/receipt",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Receipt & Invoice Settings" /> };
+              const { ReceiptInvoiceSettingsPage } = await import("@/features/settings");
+              return { Component: ReceiptInvoiceSettingsPage };
             },
           },
           {

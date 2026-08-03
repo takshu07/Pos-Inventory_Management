@@ -17,20 +17,7 @@ import { AlertTriangle } from "lucide-react";
 import { Button, Modal } from "@/components/ui";
 import { CRITICAL_FIELDS } from "../validation";
 
-/** Human-readable field names, so the dialog does not leak JSON paths. */
-const FIELD_LABELS: Record<string, string> = {
-  currency: "Currency",
-  "pricingConfig.taxInclusive": "Tax mode",
-  "pricingConfig.defaultTaxRate": "Default tax rate",
-  "pricingConfig.maximumDiscountPercent": "Maximum discount",
-  "pricingConfig.cashierDiscountLimit": "Cashier discount limit",
-  "pricingConfig.managerDiscountLimit": "Manager discount limit",
-  "inventoryConfig.allowNegativeStock": "Allow negative stock",
-  "securityConfig.sessionTimeoutMins": "Session timeout",
-  "securityConfig.jwtExpirationHours": "Sign-in duration",
-  "securityConfig.auditLogRetentionDays": "Audit log retention",
-  "storeConfig.storeStatus": "Store status",
-};
+import { CRITICAL_FIELD_LABELS } from "../validation/criticalLabels";
 
 interface CriticalChangeDialogProps {
   open: boolean;
@@ -79,7 +66,7 @@ export function CriticalChangeDialog({
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">
-                {FIELD_LABELS[path] ?? path}
+                {CRITICAL_FIELD_LABELS[path] ?? path}
               </p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                 {CRITICAL_FIELDS[path]}

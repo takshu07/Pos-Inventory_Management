@@ -18,6 +18,7 @@ import {
   findCriticalChanges,
   validateStoreSettings,
 } from "../validation";
+import { CRITICAL_FIELD_LABELS } from "../validation/criticalLabels";
 import type { FullConfiguration } from "../types";
 
 /** A valid baseline; each test perturbs one thing. */
@@ -258,6 +259,19 @@ describe("findCriticalChanges", () => {
     for (const [path, message] of Object.entries(CRITICAL_FIELDS)) {
       expect(message, `${path} has no explanation`).toBeTruthy();
       expect(message.length).toBeGreaterThan(20);
+    }
+  });
+
+  it("has a human-readable dialog label for every field it can flag", () => {
+    // Without a label the confirmation dialog falls back to the raw JSON path
+    // ("invoiceConfig.invoicePrefix"), which is not a sentence anyone should be
+    // asked to approve. Adding a CRITICAL_FIELDS entry without a FIELD_LABELS
+    // entry is the easy half of the mistake, so it is asserted here.
+    for (const path of Object.keys(CRITICAL_FIELDS)) {
+      expect(
+        CRITICAL_FIELD_LABELS[path],
+        `${path} has no label in CriticalChangeDialog's FIELD_LABELS`
+      ).toBeTruthy();
     }
   });
 });
