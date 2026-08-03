@@ -11,6 +11,8 @@ export type ExchangeConfig = z.infer<typeof schemas.exchangeConfigSchema>;
 export type InventoryConfig = z.infer<typeof schemas.inventoryConfigSchema>;
 export type SecurityConfig = z.infer<typeof schemas.securityConfigSchema>;
 export type ReportingConfig = z.infer<typeof schemas.reportingConfigSchema>;
+export type SystemConfig = z.infer<typeof schemas.systemConfigSchema>;
+export type IntegrationConfig = z.infer<typeof schemas.integrationConfigSchema>;
 
 export interface FullConfiguration {
   storeName: string;
@@ -24,6 +26,15 @@ export interface FullConfiguration {
   inventoryConfig: InventoryConfig;
   securityConfig: SecurityConfig;
   reportingConfig: ReportingConfig;
+  /**
+   * ADDITIVE (2026-08). Backed by the `customerConfig` / `notificationConfig`
+   * columns respectively — both were declared in the schema from the start but
+   * never read, so adopting them needed no migration. configuration.service.ts
+   * owns that logical-name → column mapping; everything downstream sees only
+   * these names.
+   */
+  systemConfig: SystemConfig;
+  integrationConfig: IntegrationConfig;
 }
 
 export class ConfigurationEngine {
@@ -68,6 +79,10 @@ export class ConfigurationEngine {
             inventoryConfig: schemas.inventoryConfigSchema.parse(rawSettings.inventoryConfig || {}),
             securityConfig: schemas.securityConfigSchema.parse(rawSettings.securityConfig || {}),
             reportingConfig: schemas.reportingConfigSchema.parse(rawSettings.reportingConfig || {}),
+            // Column names differ from the logical block names for these two —
+            // see the FullConfiguration doc comment.
+            systemConfig: schemas.systemConfigSchema.parse(rawSettings.customerConfig || {}),
+            integrationConfig: schemas.integrationConfigSchema.parse(rawSettings.notificationConfig || {}),
           };
           logger.info(`ConfigurationEngine initialized. Version: ${this.cache.version}`);
         }
@@ -108,7 +123,9 @@ export class ConfigurationEngine {
   static getStoreName(): string { return this.ensureCache().storeName; }
   static getCurrency(): string { return this.ensureCache().currency; }
   static getTimeZone(): string { return this.ensureCache().timeZone; }
-  
+  /** Monotonic write counter. Clients use it to detect a stale edit buffer. */
+  static getVersion(): number { return this.ensureCache().version; }
+
   static getStoreSettings(): StoreConfig { return this.ensureCache().storeConfig; }
   static getInvoiceSettings(): InvoiceConfig { return this.ensureCache().invoiceConfig; }
   static getPricingSettings(): PricingConfig { return this.ensureCache().pricingConfig; }
@@ -116,6 +133,8 @@ export class ConfigurationEngine {
   static getInventorySettings(): InventoryConfig { return this.ensureCache().inventoryConfig; }
   static getSecuritySettings(): SecurityConfig { return this.ensureCache().securityConfig; }
   static getReportingSettings(): ReportingConfig { return this.ensureCache().reportingConfig; }
+  static getSystemSettings(): SystemConfig { return this.ensureCache().systemConfig; }
+  static getIntegrationSettings(): IntegrationConfig { return this.ensureCache().integrationConfig; }
 
   // ==========================================================================
   // DEFAULT BUILDER
@@ -132,7 +151,9 @@ export class ConfigurationEngine {
       exchangeConfig: schemas.exchangeConfigSchema.parse({}),
       inventoryConfig: schemas.inventoryConfigSchema.parse({}),
       securityConfig: schemas.securityConfigSchema.parse({}),
-      reportingConfig: schemas.reportingConfigSchema.parse({})
+      reportingConfig: schemas.reportingConfigSchema.parse({}),
+      systemConfig: schemas.systemConfigSchema.parse({}),
+      integrationConfig: schemas.integrationConfigSchema.parse({})
     };
   }
 }

@@ -14,8 +14,18 @@ export const getSettings = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const updateSettings = asyncHandler(async (req: Request, res: Response) => {
-  const data = configurationUpdateSchema.parse({ body: req.body }).body;
-  const result = await configurationService.updateConfiguration(data, req.user.id);
+  // `expectedVersion` is optimistic-concurrency metadata, not configuration, so
+  // it is pulled off before the body is validated — the update schema is strict
+  // about which keys it accepts and would otherwise have to model a field that
+  // is never persisted. Optional: omitting it keeps last-write-wins.
+  const { expectedVersion, ...body } = req.body ?? {};
+  const data = configurationUpdateSchema.parse({ body }).body;
+
+  const result = await configurationService.updateConfiguration(
+    data,
+    req.user.id,
+    typeof expectedVersion === "number" ? expectedVersion : undefined
+  );
 
   return res.status(HTTP_STATUS.OK).json({
     success: true,
