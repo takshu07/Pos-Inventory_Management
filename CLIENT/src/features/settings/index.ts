@@ -17,6 +17,26 @@
  *
  * Nothing new is needed in the API or hook layer — `GET/PATCH /settings` already
  * carries every block.
+ *
+ * ⚠ BINDING CONSTRAINTS (set 2026-08-03, confirmed at review — see
+ * docs/STORE_SETTINGS.md §9). These are decisions, not preferences:
+ *
+ *   • DO NOT DUPLICATE THIS INFRASTRUCTURE. No second dirty-check, no second
+ *     patch differ, no locally-defined settings row. That is how three screens
+ *     end up with three different unsaved-changes behaviours and only one of
+ *     them correct. If a screen needs something this layer lacks, EXTEND THIS
+ *     LAYER so every screen gets it.
+ *
+ *   • OPTIMISTIC CONCURRENCY IS MANDATORY. Every screen sends `expectedVersion`
+ *     and handles 409 SETTINGS_VERSION_CONFLICT. `useSettingsForm` does this for
+ *     you — you get it by using the hook and lose it by hand-rolling a mutation.
+ *     The version covers the WHOLE document, so two owners on two different
+ *     settings screens still conflict. That is correct: they are writing the
+ *     same row.
+ *
+ *   • PATCHES MERGE, NEVER REPLACE. Send only changed fields. Replacing a
+ *     config block silently reverts every field the patch did not mention to its
+ *     Zod default, throwing nothing and logging nothing.
  */
 
 // ── Pages ───────────────────────────────────────────────────────────────────

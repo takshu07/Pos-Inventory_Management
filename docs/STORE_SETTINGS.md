@@ -309,3 +309,127 @@ deliberately not bolted on here.
    returned in full to any OWNER and is copied verbatim into the audit log.
    Secrets belong in environment variables; the schema models booleans and
    non-secret addresses only.
+
+---
+
+## 8. TODO — public read-only store configuration
+
+**Status: planned, additive, not built.** Tracked in
+[MODULE_STATUS.md §3](./MODULE_STATUS.md).
+
+### 8.1 The problem
+
+`GET /settings` is OWNER-only and must stay that way — it returns security
+policy, discount ceilings, audit retention and integration wiring. But three of
+its fields are pure presentation and are needed by **every** role:
+
+```
+currency                    e.g. "INR"
+timeZone                    e.g. "Asia/Kolkata"
+systemConfig.numberLocale   e.g. "en-IN"
+systemConfig.dateFormat     e.g. "DD-MM-YYYY"
+systemConfig.timeFormat     e.g. "12H"
+```
+
+Because a cashier cannot read them, `SettingsSync` and the `useStoreConfig`
+hooks are role-gated and fall back to defaults (§5.3). A store configured to
+`AED` shows `₹` on every cashier screen.
+
+The amounts themselves are always correct — they are computed server-side from
+`ConfigurationEngine` and arrive formatted-agnostic — so this is a **display
+inconsistency, not a correctness bug**. That is why it was deferred rather than
+solved by widening access to the full document.
+
+### 8.2 The shape
+
+Additive. Changes nothing that exists.
+
+```
+GET /api/v1/settings/public        authenticate, NO requireRole
+```
+
+```jsonc
+{
+  "currency": "INR",
+  "timeZone": "Asia/Kolkata",
+  "storeName": "CEX Fashion",     // already on receipts the cashier prints
+  "dateFormat": "DD-MM-YYYY",
+  "timeFormat": "12H",
+  "numberLocale": "en-IN",
+  "version": 12                    // so the client can cache on it
+}
+```
+
+### 8.3 ⚠ Rules for whoever builds it
+
+1. **Positive allowlist, never a deletion.** Build the response by naming the
+   fields to include. Do NOT take the full configuration and strip keys — the
+   next field added to `securityConfig` would silently join the public payload.
+   A test must assert the response has exactly the expected key set.
+2. **`authenticate` yes, `requireRole` no.** It is not anonymous; it is
+   any-authenticated-role. Do not mount it before the auth middleware.
+3. **Read-only.** No PATCH counterpart. Writes stay OWNER-only on `/settings`.
+4. **Serve it from `ConfigurationEngine`,** like `GET /settings` does — it is a
+   memory read, not a query, so it can be called on every session boot.
+5. **`storeName` is in and nothing else from `storeConfig` is.** A cashier
+   already prints it on receipts. Address, GST, phone and email are business
+   identity — leave them out until something concretely needs them.
+
+### 8.4 Client changes it unlocks
+
+- `SettingsSync` drops its `isOwner` gate and uses the public endpoint.
+- `useStoreConfig`'s hooks read whichever document is available, preferring the
+  full one when the user is an OWNER (so a settings edit updates formatting
+  live without a second fetch).
+- The fallback constants stay. They are still the pre-load and
+  endpoint-unavailable path, and they must keep mirroring the server's Zod
+  defaults.
+
+---
+
+## 9. Binding constraints for future settings work
+
+These are **decisions, not preferences.** They were set with the Store Settings
+milestone (2026-08-03) and confirmed at review. Re-open them explicitly if
+needed — do not drift from them by building around them.
+
+### 9.1 One settings infrastructure
+
+`CLIENT/src/features/settings` is the **single foundation for every settings
+page**. Receipt & Invoice Settings, Barcode Settings and anything after them use
+`useSettingsForm`, the `SettingsSection`/`Row`/`Toggle` primitives,
+`SettingsSaveBar`, `SettingsSkeleton`/`SettingsErrorState`,
+`CriticalChangeDialog` and the shared query/mutation layer.
+
+**Do not duplicate settings infrastructure.** A second dirty-check, a second
+patch differ, or a locally-defined settings row is how three screens end up with
+three different unsaved-changes behaviours and only one of them correct. If a
+screen needs something the shared layer lacks, **extend the shared layer** so
+every screen gets it.
+
+New screens should need **no new API or hook code** — the endpoints already
+carry every block.
+
+### 9.2 Optimistic concurrency is mandatory
+
+Every settings screen sends `expectedVersion` and handles
+**409 `SETTINGS_VERSION_CONFLICT`**. `useSettingsForm` does this automatically;
+a screen gets it by using the hook, and loses it by hand-rolling a mutation.
+
+The version is a property of the **whole settings document**, not of a block, so
+two owners editing different screens still conflict — correctly. Both are
+writing the same row.
+
+### 9.3 Merge-based patches, always
+
+Partial updates **merge**; they never replace a configuration block. This holds
+on both sides of the wire:
+
+- **Server:** `mergeConfigBlock` over the stored value, and `toPatchSchema()`
+  (never `.partial()`) so absent keys stay absent. §3.2.
+- **Client:** send only changed fields (`useSettingsForm`'s diff), and mirror the
+  same merge in `applyPatch` for the optimistic update.
+
+Replacing a block silently reverts every field the patch did not mention to its
+Zod default. It throws nothing and logs nothing. §3.2 is the full account; the
+regression suites in §6 exist to keep it fixed.

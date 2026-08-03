@@ -22,9 +22,14 @@
  *
  * ⚠ If the store's currency is ever configured to something other than the
  * default, cashier-facing screens will render the default symbol until the
- * currency is exposed on a non-owner endpoint (e.g. folded into the session
- * payload). Deliberately not done here: widening who can read the settings
- * document is a security decision, not a formatting one.
+ * currency is exposed on a non-owner endpoint. Deliberately not done here:
+ * widening who can read the settings document is a security decision, not a
+ * formatting one.
+ *
+ * TODO(settings): once `GET /settings/public` exists (spec in
+ * docs/STORE_SETTINGS.md §8), drop the `isOwner` gate below and read that
+ * endpoint instead. The fallbacks in useStoreConfig.ts stay either way — they
+ * are still the pre-load path.
  */
 
 import { useEffect } from "react";
