@@ -3,7 +3,7 @@
 What is built, what is a placeholder, and what each remaining screen needs.
 Kept current so "is X done?" has one answer rather than a grep.
 
-Last updated: 2026-08-03, after the Audit Logs milestone.
+Last updated: 2026-08-03, after the Customer Profile milestone.
 
 ---
 
@@ -14,7 +14,7 @@ Last updated: 2026-08-03, after the Audit Logs milestone.
 | **Auth & RBAC** | Login, JWT, role hierarchy `OWNER > MANAGER > CASHIER` | All | — |
 | **POS Checkout** | `/cashier/pos`, held bills, exchanges | CASHIER+ | — |
 | **Sales** | History, detail, void, invoices | MANAGER+ | — |
-| **Customers** | List, search, CRUD; analytics dashboard | MANAGER+ (analytics OWNER) | — |
+| **Customers** | List, search, CRUD; analytics dashboard; **per-customer profile** | MANAGER+ (analytics + profile OWNER) | [CUSTOMER_PROFILE.md](./CUSTOMER_PROFILE.md) |
 | **Products** | Owner CRUD + 9-step creation wizard; manager read-only catalogue | Split by role | — |
 | **Categories** | Full CRUD, analytics, bulk actions | OWNER | — |
 | **Inventory** | Stock ledger, movements, adjustments, cycle counts, valuation, reorder, velocity | OWNER (manager narrowed) | — |
@@ -33,10 +33,11 @@ Last updated: 2026-08-03, after the Audit Logs milestone.
 
 ## 2. Remaining placeholder pages
 
-Six routes still render `PlaceholderPage` (was nine; Users & Roles, My Profile
-and Audit Logs shipped 2026-08-03). They are **routed and reachable** — the nav
-links resolve rather than dead-ending — and the four remaining under Settings
-carry a `comingSoon: true` chip so the UI does not promise more than it has.
+Five routes still render `PlaceholderPage` (was nine; Users & Roles, My Profile,
+Audit Logs and Customer Profile all shipped 2026-08-03). They are **routed and
+reachable** — the nav links resolve rather than dead-ending — and the four
+remaining under Settings carry a `comingSoon: true` chip so the UI does not
+promise more than it has.
 
 Grouped by what they actually need, because they are not equivalent work.
 
@@ -75,7 +76,7 @@ endpoint would leave the old role live in their JWT until it expired.
 |---|---|---|
 | ~~My Profile~~ | `/profile`, `/cashier/profile` | ✅ **BUILT 2026-08-03.** One `ProfileView` mounted on both routes, as planned. Read-only details + password change — there is no self-service profile-update endpoint, so editing would need an additive `PATCH /auth/me`. See [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md). |
 | Notifications | `/notifications` | `notification.service` and the `Notification` model exist; the engine already writes low-stock and workforce alerts. Needs a list, read/unread and preferences. |
-| Customer Profile | `/customers/:customerId` | The customers list and analytics are built; this is the per-customer view — purchase history, exchange history, lifetime value. Closest analogue is the supplier profile just built; reuse its tab pattern. |
+| ~~Customer Profile~~ | `/customers/:customerId` | ✅ **BUILT 2026-08-03.** Per-customer view — purchase history, exchange history, lifetime value, most-purchased items. New OWNER-only `GET /customers/:id/profile` returning record + rollups + capped histories in one round trip. **No schema change, no migration.** Spend rollups count COMPLETED sales only while the history tab shows every status — deliberate, and the reason the two numbers can differ. See [CUSTOMER_PROFILE.md](./CUSTOMER_PROFILE.md). |
 
 ### 2.5 Suggested order
 
@@ -84,7 +85,7 @@ endpoint would leave the old role live in their JWT until it expired.
 3. ~~**Audit Logs**~~ — ✅ done 2026-08-03. Taken ahead of Customer Profile
    because Users & Roles had started writing `ROLE_CHANGED`, `PASSWORD_RESET`
    and `EMPLOYEE_DEACTIVATED` rows that nothing could read.
-4. **Customer Profile** — completes the Customers module; pattern already exists.
+4. ~~**Customer Profile**~~ — ✅ done 2026-08-03. Completed the Customers module.
 5. **Store Settings** — establishes the settings form pattern.
 6. **Notifications** — model and writers exist.
 7. **Receipt & Barcode Settings** — resolve the Label Engine overlap first.

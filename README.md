@@ -12,6 +12,7 @@ client; Express 5 + Prisma 7 + PostgreSQL (Neon) on the server.
 | [docs/FINANCE_REGISTER_REPORTING.md](docs/FINANCE_REGISTER_REPORTING.md) | Cash Register, Finance and Reports — the drawer ledger and accounting definitions. |
 | [docs/USERS_AND_PROFILE.md](docs/USERS_AND_PROFILE.md) | Users & Roles and My Profile — account administration, the RBAC/privilege-escalation rules, and why role changes route through the workforce tree. |
 | [docs/AUDIT_LOGS.md](docs/AUDIT_LOGS.md) | Audit Logs — the read API over `audit_logs`, why severity is derived rather than stored, and the performance rules for the largest table in the system. |
+| [docs/CUSTOMER_PROFILE.md](docs/CUSTOMER_PROFILE.md) | Customer Profile — the per-customer view, and why spend rollups count completed sales only while the history tab shows every status. |
 
 ## Running it
 
@@ -73,6 +74,10 @@ Open items carried from earlier sessions:
 - Audit Logs needed a new read API over the largest table in the system —
   **done** (see AUDIT_LOGS.md). Additive only: no schema change, and audit
   writing is untouched.
+- Customer Profile completed the Customers module — **done** (see
+  CUSTOMER_PROFILE.md). Additive only. Note the one thing that looks like a bug
+  and is not: the purchase-history tab lists every sale status, so its rows can
+  sum to more than the lifetime-spend card, which counts completed sales only.
 - Change the owner / manager / cashier credentials before any real deployment —
   the seeded ones above are public in this repo. The owner can now do this in
   the app: **Settings → Users & Roles** for staff accounts, **My Profile** for
