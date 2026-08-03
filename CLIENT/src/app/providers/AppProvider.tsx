@@ -18,12 +18,19 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "./QueryProvider";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { SettingsSync } from "@/features/settings/components/SettingsSync";
 
 export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="system" storageKey="cex-ui-theme">
         <QueryProvider>
+          {/* Pushes the store's configured currency/locale into the global
+              formatters so ~650 existing formatCurrency call sites reflect a
+              settings change without being touched. Renders nothing, and is
+              inert for non-OWNER sessions. Must sit inside QueryProvider. */}
+          <SettingsSync />
+
           {children}
 
           {/* Global Toast Notifications via Sonner */}

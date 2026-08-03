@@ -51,6 +51,13 @@ export {
 export { SettingsErrorState, SettingsSkeleton } from "./components/SettingsStates";
 export { CriticalChangeDialog } from "./components/CriticalChangeDialog";
 
+/**
+ * Mounted once in AppProvider. Imported there by direct path rather than
+ * through this barrel, so the app shell does not pull the Store Settings page
+ * into the initial bundle.
+ */
+export { SettingsSync } from "./components/SettingsSync";
+
 // ── Validation ──────────────────────────────────────────────────────────────
 export {
   CRITICAL_FIELDS,

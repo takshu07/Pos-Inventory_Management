@@ -23,6 +23,7 @@
 
 import { useMemo } from "react";
 
+import { selectRole, useAuthStore } from "@/store/auth.store";
 import { useSettings } from "./useSettings";
 import type { FullConfiguration } from "../types";
 
@@ -38,9 +39,17 @@ const FALLBACK = {
   lowStockThreshold: 5,
 };
 
-/** The raw document, or `undefined` while loading / when not permitted. */
+/**
+ * The raw document, or `undefined` while loading / when not permitted.
+ *
+ * Gated on the OWNER role, because these hooks are used by screens a manager or
+ * cashier can reach and the endpoint 403s for them. Ungated, every such screen
+ * would issue a failing request on mount. When it returns `undefined` the hooks
+ * below fall back to the server's own defaults — see the file header.
+ */
 export function useConfiguration(): FullConfiguration | undefined {
-  return useSettings().data;
+  const role = useAuthStore(selectRole);
+  return useSettings({ enabled: role === "OWNER" }).data;
 }
 
 /**

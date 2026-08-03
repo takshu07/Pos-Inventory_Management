@@ -58,10 +58,15 @@ const SETTINGS_STALE_MS = 10 * 60_000;
  * `useStoreConfig.ts` rather than destructuring this everywhere — that keeps the
  * number of components re-rendering on an unrelated settings change small.
  */
-export function useSettings() {
+export function useSettings(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: settingsKeys.configuration(),
     queryFn: api.fetchSettings,
+    // Callers that render for non-OWNER roles must gate this: the endpoint is
+    // OWNER-only, so firing it for a cashier buys a guaranteed 403 on every
+    // mount. Defaults to enabled — the Store Settings page sits behind
+    // OwnerRoute and is only reachable by someone allowed to read it.
+    enabled: options?.enabled ?? true,
     staleTime: SETTINGS_STALE_MS,
     // A 403 means this user is not an OWNER; retrying cannot change that and
     // just delays the error state behind three failed round-trips.
