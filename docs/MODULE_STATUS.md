@@ -29,16 +29,17 @@ Last updated: 2026-08-03, after the Store Settings milestone.
 | **My Profile** | **Own details, account info, password change (both portals)** | All | [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md) |
 | **Audit Logs** | **Read-only trail: filter by user/module/entity/action/severity/period, field-level diff, session context** | OWNER | [AUDIT_LOGS.md](./AUDIT_LOGS.md) |
 | **Store Settings** | **Store identity, business rules, regional/system preferences, security policy, integrations** | OWNER | [STORE_SETTINGS.md](./STORE_SETTINGS.md) |
+| **Receipt & Invoice Settings** | **Document numbering (live on the sale path), receipt content, print options** | OWNER | [RECEIPT_INVOICE_SETTINGS.md](./RECEIPT_INVOICE_SETTINGS.md) |
 
 ---
 
 ## 2. Remaining placeholder pages
 
-Four routes still render `PlaceholderPage` (was nine; Users & Roles, My Profile,
-Audit Logs, Customer Profile and Store Settings all shipped 2026-08-03). They are
-**routed and reachable** — the nav links resolve rather than dead-ending — and
-the three remaining under Settings carry a `comingSoon: true` chip so the UI does
-not promise more than it has.
+Three routes still render `PlaceholderPage` (was nine; Users & Roles, My Profile,
+Audit Logs, Customer Profile, Store Settings and Receipt & Invoice Settings all
+shipped 2026-08-03). They are **routed and reachable** — the nav links resolve
+rather than dead-ending — and the two remaining under Settings carry a
+`comingSoon: true` chip so the UI does not promise more than it has.
 
 Grouped by what they actually need, because they are not equivalent work.
 
@@ -47,7 +48,7 @@ Grouped by what they actually need, because they are not equivalent work.
 | Screen | Route | Notes |
 |---|---|---|
 | ~~Store Settings~~ | `/admin/settings` | ✅ **BUILT 2026-08-03.** Six sections over the existing `Settings` singleton and the existing `GET/PATCH /settings`. **No schema change, no migration** — the two new blocks (`systemConfig`, `integrationConfig`) reuse the `customerConfig` / `notificationConfig` columns, which were declared but never read. Fixed a latent data-loss bug: partial `PATCH`es were overwriting whole JSON columns, silently reverting business rules to Zod defaults. See [STORE_SETTINGS.md](./STORE_SETTINGS.md). |
-| Receipt & Invoice Settings | `/admin/settings/receipt` | **Data layer is already done.** `invoiceConfig` is carried by the existing endpoints and typed in `features/settings`; this screen only needs `useSettingsForm({ blocks: ["invoiceConfig"] })` plus a section layout. Overlaps the Label Engine's template model; check before building a second one. |
+| ~~Receipt & Invoice Settings~~ | `/admin/settings/receipt` | ✅ **BUILT 2026-08-03.** Owns `invoiceConfig` on the existing endpoints — no schema change, no migration, no new endpoint. Cost ~2 kB gzipped because it reuses the shared hooks and primitives. ⚠ Also **wired invoice numbering to its settings**: `invoicePrefix` / `invoiceNumberLength` had existed forever and were read by nothing, while `InvoiceService` hardcoded `INV-` and 6 digits. Stock settings reproduce the old format byte-for-byte. See [RECEIPT_INVOICE_SETTINGS.md](./RECEIPT_INVOICE_SETTINGS.md). |
 | Barcode Settings | `/admin/settings/barcode` | Symbology defaults, label size. **Largely exists already** inside the Label Engine — this may be a link rather than a new screen. `invoiceConfig.barcodeFormat` is the settings-side field. |
 
 **The settings form pattern now exists** (`CLIENT/src/features/settings`) and the
@@ -92,11 +93,16 @@ endpoint would leave the old role live in their JWT until it expired.
 5. ~~**Store Settings**~~ — ✅ done 2026-08-03. Established the settings form
    pattern the remaining two screens build on, and fixed the partial-update
    data-loss bug in `configuration.service` on the way through.
-6. **Notifications** — model and writers exist. `integrationConfig` now carries
+6. ~~**Receipt & Invoice Settings**~~ — ✅ done 2026-08-03. Taken ahead of
+   Notifications because it was the cheapest proof that the settings
+   architecture actually generalises, and because it surfaced that invoice
+   numbering settings were inert.
+7. **Notifications** — model and writers exist. `integrationConfig` now carries
    the channel toggles (email/SMS/WhatsApp, low-stock alerts, daily summary),
    so this screen consumes settings rather than defining its own preferences.
-7. **Receipt & Barcode Settings** — resolve the Label Engine overlap first. The
-   data layer is already built; see §2.1.
+8. **Barcode Settings** — resolve the Label Engine overlap first; it may be a
+   link rather than a screen. `invoiceConfig.barcodeFormat` is the settings-side
+   field and is already editable under Receipt & Invoice.
 
 Backup & Restore is **not** in this list — the decision is not to build it
 (§2.6).
@@ -231,7 +237,10 @@ way, because that is the condition under which a new error is visible.
 | `audit.validation` | 16 | **New.** Enum guards as an injection surface, comma-list *and* repeated-param forms, custom-range rules, `limit` cap |
 | `sale.integration` | 9 | **Skipped** — needs a test database (see §3) |
 
-**Totals: 372 passing, 9 skipped, 0 failing.** (Was 305 before the Audit Logs
+| `configMerge` | 32 | **New.** Settings partial-update semantics: merge preserves siblings, arrays replace wholesale, corrupt blocks, the Zod `.partial()` defaults leak, and every cross-field rule checked post-merge |
+| `invoiceNumbering` | 10 | **New.** Invoice numbers are byte-for-byte unchanged under stock settings; configured prefix/width; prefix-scoped lookup makes a mid-day prefix change safe; width narrowing never truncates |
+
+**Totals: 376 passing, 9 skipped, 0 failing.** (Was 305 before the Audit Logs
 milestone, 256 before Users & Roles.)
 
 Database access in tests is **opt-in per file** via `useTestDatabase()`. Pure
@@ -252,8 +261,13 @@ philosophy.
 | `users/usersApi` | 15 | Endpoint routing (role change must hit the workforce tree), empty-param dropping, `isActive:false` / `email:""` survival |
 | `audit/auditApi` | 14 | **New.** Envelope level (this tree is FLAT), array filters comma-joined, empty params dropped, `totalIsExact` defaults, and an assertion that **no write functions exist** on the audit API surface |
 | `audit/format` | 25 | **New.** `null` vs `""` vs absent vs `false` all render distinctly, severity variants stay visually distinct, capped totals render with a `+` |
+| `settings/validation` | 27 | **New.** Every Store Settings rule, error-to-field mapping, critical-change detection, and that each critical field has both an explanation and a dialog label |
+| `settings/patch` | 15 | **New.** `applyPatch` mirrors the server merge exactly (siblings survive, arrays replace, `expectedVersion` never cached); per-field change counting |
+| `settings/receipt` | 15 | **New.** Prefix character/length rules, duplicate-prefix guard, and the invoice preview format — pinned against the server's generator |
+| `utils/formatters` | 12 | **New.** Configured currency/locale propagation to ~650 call sites, and fallbacks that never throw into a receipt |
+| `ui/searchBoxContract` | 3 | **New.** `SearchBox` calls `onChange` with a STRING — pins the contract that audit search violated |
 
-**Total: 150 passing, 0 failing.**
+**Total: 210 passing, 0 failing.**
 
 #### Testing policy — DECIDED 2026-08-03
 

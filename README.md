@@ -14,6 +14,7 @@ client; Express 5 + Prisma 7 + PostgreSQL (Neon) on the server.
 | [docs/AUDIT_LOGS.md](docs/AUDIT_LOGS.md) | Audit Logs — the read API over `audit_logs`, why severity is derived rather than stored, and the performance rules for the largest table in the system. |
 | [docs/CUSTOMER_PROFILE.md](docs/CUSTOMER_PROFILE.md) | Customer Profile — the per-customer view, and why spend rollups count completed sales only while the history tab shows every status. |
 | [docs/STORE_SETTINGS.md](docs/STORE_SETTINGS.md) | Store Settings — the centralized settings architecture every settings screen reuses, and ⚠ why a config block must be merged rather than assigned (the bug that silently reverted business rules to defaults). |
+| [docs/RECEIPT_INVOICE_SETTINGS.md](docs/RECEIPT_INVOICE_SETTINGS.md) | Receipt & Invoice Settings — document numbering and receipt content, and ⚠ why the invoice prefix lookup is scoped to the prefix (what makes a mid-day change safe). |
 
 ## Running it
 
