@@ -304,7 +304,9 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: Settings,
     allowedRoles: OWNER,
     items: [
-      { label: "Store Settings",    path: "/admin/settings",          icon: Store,          allowedRoles: OWNER, comingSoon: true },
+      // Built. Store identity, business rules, regional/system preferences,
+      // security policy and integrations — the OWNER-only configuration surface.
+      { label: "Store Settings",    path: "/admin/settings",          icon: Store,          allowedRoles: OWNER },
       // Built. Account administration: create accounts, assign roles,
       // activate/deactivate, reset passwords.
       { label: "Users & Roles",     path: "/admin/settings/users",    icon: UserCog,        allowedRoles: OWNER },

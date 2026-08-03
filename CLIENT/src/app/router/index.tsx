@@ -639,16 +639,21 @@ export const router = createBrowserRouter([
             },
           },
           // ── Settings ─────────────────────────────────────────────────────
-          // Store Settings and Audit Logs were already placeholders; the four
-          // below are new nav destinations from the same group. All six are
-          // OWNER-only by virtue of sitting inside OwnerRoute, so the guard is
-          // identical to every other admin screen — no permission was widened.
-          // They render PlaceholderPage until the real screens are built; the
+          // All six are OWNER-only by virtue of sitting inside OwnerRoute, so
+          // the guard is identical to every other admin screen — no permission
+          // was widened. The ones still unbuilt render PlaceholderPage; the
           // sidebar marks each "Soon" so the nav doesn't overpromise.
+          //
+          // Store Settings is a real screen as of 2026-08-03. It is the first
+          // consumer of the centralized settings architecture in
+          // @/features/settings — Receipt & Invoice and Barcode Settings below
+          // are expected to be built on the same hooks and primitives rather
+          // than growing their own form handling.
           {
             path: "admin/settings",
             async lazy() {
-              return { Component: () => <PlaceholderPage title="Store Settings" /> };
+              const { StoreSettingsPage } = await import("@/features/settings");
+              return { Component: StoreSettingsPage };
             },
           },
           // Users & Roles is the account-administration screen: create accounts,
