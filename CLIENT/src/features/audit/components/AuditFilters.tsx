@@ -42,13 +42,20 @@ export function AuditSearch({
   return (
     <SearchBox
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      // SearchBox hands the STRING, not the change event — it already unwraps
+      // `e.target.value` internally. Treating it as an event read
+      // `undefined.target`, so every keystroke cleared the query instead of
+      // setting it and audit search returned the unfiltered list. Fixed
+      // 2026-08-03; asserted by the "passes the raw string through" test.
+      onChange={onChange}
       // Says what search actually covers. It does NOT search inside the change
       // snapshots — see the note in the server's validation module — and
       // implying otherwise would make people trust an empty result.
       placeholder="Search by person or affected record ID…"
-      aria-label="Search audit entries by person or record ID"
-      aria-busy={isSearching}
+      // `loading` is the prop SearchBox actually accepts; it renders the
+      // spinner. `aria-busy` was being dropped silently — SearchBox does not
+      // spread unknown props onto the input.
+      loading={isSearching}
     />
   );
 }

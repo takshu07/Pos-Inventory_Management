@@ -16,6 +16,7 @@
  */
 
 import { apiClient } from "@/lib/api";
+import type { ApiEnvelope } from "@/lib/api";
 import type {
   AuditFilterOptions,
   AuditListParams,
@@ -54,7 +55,9 @@ function toQuery(params: AuditListParams): Record<string, string | number> {
 export async function fetchAuditLogs(
   params: AuditListParams
 ): Promise<AuditListResult> {
-  const res = await apiClient.get<any>(BASE, { params: toQuery(params) });
+  const res = (await apiClient.get(BASE, {
+    params: toQuery(params),
+  })) as unknown as ApiEnvelope<AuditLogEntry[]>;
 
   const limit = params.limit ?? 25;
   const total = res?.meta?.total ?? 0;
@@ -76,7 +79,9 @@ export async function fetchAuditLogs(
 }
 
 export async function fetchAuditLog(id: string): Promise<AuditLogDetail> {
-  const res = await apiClient.get<any>(`${BASE}/${id}`);
+  const res = (await apiClient.get(
+    `${BASE}/${id}`
+  )) as unknown as ApiEnvelope<AuditLogDetail>;
   return res.data;
 }
 
@@ -85,23 +90,25 @@ export async function fetchRelatedAuditLogs(
   id: string,
   limit = 5
 ): Promise<AuditLogEntry[]> {
-  const res = await apiClient.get<any>(`${BASE}/${id}/related`, {
+  const res = (await apiClient.get(`${BASE}/${id}/related`, {
     params: { limit },
-  });
+  })) as unknown as ApiEnvelope<AuditLogEntry[]>;
   return res.data ?? [];
 }
 
 /** Filter-bar options. Entities and actors come from real data, not a constant. */
 export async function fetchAuditFilterOptions(): Promise<AuditFilterOptions> {
-  const res = await apiClient.get<any>(`${BASE}/filters`);
+  const res = (await apiClient.get(
+    `${BASE}/filters`
+  )) as unknown as ApiEnvelope<AuditFilterOptions>;
   return res.data;
 }
 
 export async function fetchAuditSummary(
   params: AuditListParams
 ): Promise<AuditSummary> {
-  const res = await apiClient.get<any>(`${BASE}/summary`, {
+  const res = (await apiClient.get(`${BASE}/summary`, {
     params: toQuery(params),
-  });
+  })) as unknown as ApiEnvelope<AuditSummary>;
   return res.data;
 }

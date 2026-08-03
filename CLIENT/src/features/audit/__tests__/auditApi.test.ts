@@ -41,9 +41,16 @@ beforeEach(() => {
   get.mockResolvedValue({ data: [], meta: { total: 0, page: 1, totalPages: 1 } });
 });
 
-/** The params object axios was handed on the most recent call. */
+/**
+ * The params object axios was handed on the most recent call.
+ *
+ * Indexed rather than `.at(-1)`: the project targets ES2020, where `Array.at`
+ * is not in the lib. Vitest transpiles the test regardless, so `.at` ran fine
+ * and only `tsc` complained — which is exactly how it survived unnoticed.
+ */
 function lastParams(): Record<string, unknown> {
-  const call = get.mock.calls.at(-1);
+  const calls = get.mock.calls;
+  const call = calls[calls.length - 1];
   return (call?.[1] as { params?: Record<string, unknown> })?.params ?? {};
 }
 

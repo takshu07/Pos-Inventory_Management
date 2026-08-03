@@ -203,6 +203,16 @@ in either after a refactor means the refactor is wrong, not the test.
 | **No procurement export** | — | Reports and Inventory share `utils/exportRenderer.ts`; purchases / suppliers / brands do not use it yet. |
 | **`migrate dev` is unusable** | `SERVER/prisma` | The historical `_perf` migration fails shadow-DB replay. Use `prisma migrate deploy`. |
 
+**Cleared 2026-08-03 (maintenance):** the client tree had 9 standing `tsc`
+errors in `features/audit`, which masked a live bug — `AuditSearch` passed
+`SearchBox` an event-style handler, but `SearchBox` calls `onChange` with a
+plain string, so `e.target.value` was `undefined` and **audit search silently
+returned the unfiltered list**. Fixed with the `ApiEnvelope` type in
+`lib/api` (so `res.meta` is checked rather than `any`-silenced), the handler
+corrected to take the string, and `.at(-1)` replaced with index access for the
+ES2020 lib target. `npx tsc --noEmit` on CLIENT is now **clean**; keep it that
+way, because that is the condition under which a new error is visible.
+
 ---
 
 ## 4. Test coverage
