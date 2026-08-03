@@ -139,7 +139,8 @@ export const router = createBrowserRouter([
       {
         path: "customers/:customerId",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="Customer Profile" /> };
+          const { CustomerProfilePage } = await import("@/features/customers");
+          return { Component: CustomerProfilePage };
         },
       },
       // My Profile is ONE component mounted on two routes — here for the

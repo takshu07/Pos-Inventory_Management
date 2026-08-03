@@ -376,7 +376,7 @@ function CustomerTable() {
         itemsPerPage={PAGE_SIZE}
         currentPage={page}
         onPageChange={setPage}
-        onRowClick={(row) => navigate(`/sales?customerId=${row.id}`)}
+        onRowClick={(row) => navigate(`/customers/${row.id}`)}
         emptyMessage="No customers match these filters."
       />
     </Card>

@@ -9,6 +9,7 @@ import {
   CustomerAnalytics,
   CustomerTableFilters,
   CustomerTableResponse,
+  CustomerProfile,
 } from "../types";
 
 export async function fetchCustomers(filters: CustomerQueryFilters): Promise<CustomersPaginatedResponse> {
@@ -90,6 +91,16 @@ export async function getCustomerByPhone(phone: string): Promise<CustomerModel |
 
 export async function getCustomerById(id: string): Promise<CustomerModel> {
   const response = await apiClient.get<any>(`/customers/${id}`);
+  return response.data;
+}
+
+/**
+ * Full customer profile (OWNER-only): record, rollups, and the capped purchase,
+ * exchange and top-product histories in a single response. One request rather
+ * than four — the profile always renders every tab.
+ */
+export async function getCustomerProfile(id: string): Promise<CustomerProfile> {
+  const response = await apiClient.get<any>(`/customers/${id}/profile`);
   return response.data;
 }
 

@@ -6,6 +6,7 @@ import {
   getWalkInCustomer,
   getCustomerByPhone,
   getCustomerById,
+  getCustomerProfile,
   getExchangeEligibility,
   fetchCustomerTable,
   fetchCustomerAnalytics,
@@ -21,6 +22,7 @@ export const customerKeys = {
   analytics: () => [...customerKeys.all, "analytics"] as const,
   walkIn: () => [...customerKeys.all, "walk-in"] as const,
   detail: (id: string) => [...customerKeys.all, "detail", id] as const,
+  profile: (id: string) => [...customerKeys.all, "profile", id] as const,
   eligibility: (id: string) => [...customerKeys.all, "eligibility", id] as const,
 };
 
@@ -102,6 +104,21 @@ export function useCustomer(id: string | undefined) {
     queryKey: customerKeys.detail(id ?? ""),
     queryFn: () => getCustomerById(id as string),
     enabled: !!id,
+  });
+}
+
+/**
+ * Full customer profile (OWNER-only). Kept on its own cache key rather than
+ * reusing `detail`: the two endpoints return different shapes, and sharing a key
+ * would let a cashier's lightweight `/customers/:id` response satisfy — and
+ * silently blank out — the profile screen's tabs.
+ */
+export function useCustomerProfile(id: string | undefined) {
+  return useQuery({
+    queryKey: customerKeys.profile(id ?? ""),
+    queryFn: () => getCustomerProfile(id as string),
+    enabled: !!id,
+    retry: false, // 403/404 are answers, not transient failures
   });
 }
 

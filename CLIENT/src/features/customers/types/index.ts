@@ -139,6 +139,85 @@ export interface CustomerTableResponse {
   data: CustomerTableRow[];
 }
 
+// ─── Customer profile (OWNER-only) ──────────────────────────────────────────
+
+interface ProfileEmployeeRef {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
+/** One row of the profile's purchase-history tab — every status, newest first. */
+export interface CustomerPurchaseRow {
+  id: string;
+  saleNumber: string;
+  saleDate: string;
+  status: string;
+  subtotal: number;
+  discountAmount: number;
+  manualDiscountAmount: number;
+  taxAmount: number;
+  grandTotal: number;
+  paidAmount: number;
+  dueAmount: number;
+  employee: ProfileEmployeeRef | null;
+  _count: { items: number };
+}
+
+/** One row of the profile's exchange-history tab. */
+export interface CustomerExchangeRow {
+  id: string;
+  exchangeNumber: string;
+  exchangeDate: string;
+  status: string;
+  returnedValue: number;
+  issuedValue: number;
+  /** Signed: positive = customer paid extra, negative = shop refunded. */
+  priceDifference: number;
+  exchangeReason: string | null;
+  originalSale: { id: string; saleNumber: string } | null;
+  employee: ProfileEmployeeRef | null;
+  _count: { returnedItems: number; issuedItems: number };
+}
+
+/**
+ * One row of the "most purchased" rollup. Names come from SaleItem's archival
+ * snapshots, so they read as they were sold even if the product was renamed.
+ */
+export interface CustomerTopProductRow {
+  variantId: string;
+  sku: string;
+  productName: string;
+  sizeName: string;
+  colorName: string;
+  totalQuantity: number;
+  totalSpend: number;
+  lastPurchased: string;
+}
+
+/** Sale + exchange rollups shown as the profile's KPI cards. */
+export interface CustomerProfileStatistics extends CustomerStatistics {
+  totalExchanges: number;
+  totalReturnedValue: number;
+  totalIssuedValue: number;
+  /** Signed net across all exchanges; positive = customer paid extra overall. */
+  netPriceDifference: number;
+  lastExchangeDate: string | null;
+  /** Purchasing-recency, derived from the same window as the customer table. */
+  active: boolean;
+  activeWindowDays: number;
+}
+
+/** Full profile payload from `GET /customers/:id/profile`. */
+export interface CustomerProfile extends CustomerModel {
+  statistics: CustomerProfileStatistics;
+  purchases: CustomerPurchaseRow[];
+  exchanges: CustomerExchangeRow[];
+  topProducts: CustomerTopProductRow[];
+  /** Server-side cap applied to each history list — disclosed in the UI. */
+  historyLimit: number;
+}
+
 /** A single recent sale with its exchange-window status. */
 export interface ExchangeEligibilityItem {
   saleId: string;
