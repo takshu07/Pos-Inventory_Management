@@ -3,7 +3,7 @@
 What is built, what is a placeholder, and what each remaining screen needs.
 Kept current so "is X done?" has one answer rather than a grep.
 
-Last updated: 2026-08-03, after the Customer Profile milestone.
+Last updated: 2026-08-03, after the Store Settings milestone.
 
 ---
 
@@ -28,30 +28,33 @@ Last updated: 2026-08-03, after the Customer Profile milestone.
 | **Users & Roles** | **Account CRUD, role assignment, activation, password reset** | OWNER | [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md) |
 | **My Profile** | **Own details, account info, password change (both portals)** | All | [USERS_AND_PROFILE.md](./USERS_AND_PROFILE.md) |
 | **Audit Logs** | **Read-only trail: filter by user/module/entity/action/severity/period, field-level diff, session context** | OWNER | [AUDIT_LOGS.md](./AUDIT_LOGS.md) |
+| **Store Settings** | **Store identity, business rules, regional/system preferences, security policy, integrations** | OWNER | [STORE_SETTINGS.md](./STORE_SETTINGS.md) |
 
 ---
 
 ## 2. Remaining placeholder pages
 
-Five routes still render `PlaceholderPage` (was nine; Users & Roles, My Profile,
-Audit Logs and Customer Profile all shipped 2026-08-03). They are **routed and
-reachable** — the nav links resolve rather than dead-ending — and the four
-remaining under Settings carry a `comingSoon: true` chip so the UI does not
-promise more than it has.
+Four routes still render `PlaceholderPage` (was nine; Users & Roles, My Profile,
+Audit Logs, Customer Profile and Store Settings all shipped 2026-08-03). They are
+**routed and reachable** — the nav links resolve rather than dead-ending — and
+the three remaining under Settings carry a `comingSoon: true` chip so the UI does
+not promise more than it has.
 
 Grouped by what they actually need, because they are not equivalent work.
 
-### 2.1 Settings cluster — needs a settings backend surface
-
-The `Settings` model and `configuration.service` already exist and hold
-`storeConfig` (timezone, exchange window, `enforceRegisterSession`). What is
-missing is the CRUD surface and the screens.
+### 2.1 Settings cluster — pattern now established
 
 | Screen | Route | Notes |
 |---|---|---|
-| Store Settings | `/admin/settings` | Store identity, timezone, tax defaults, the register-enforcement toggle. The one that unblocks the others — it establishes the settings form pattern. |
-| Receipt & Invoice Settings | `/admin/settings/receipt` | Receipt header/footer, invoice numbering, print options. Overlaps the Label Engine's template model; check before building a second one. |
-| Barcode Settings | `/admin/settings/barcode` | Symbology defaults, label size. **Largely exists already** inside the Label Engine — this may be a link rather than a new screen. |
+| ~~Store Settings~~ | `/admin/settings` | ✅ **BUILT 2026-08-03.** Six sections over the existing `Settings` singleton and the existing `GET/PATCH /settings`. **No schema change, no migration** — the two new blocks (`systemConfig`, `integrationConfig`) reuse the `customerConfig` / `notificationConfig` columns, which were declared but never read. Fixed a latent data-loss bug: partial `PATCH`es were overwriting whole JSON columns, silently reverting business rules to Zod defaults. See [STORE_SETTINGS.md](./STORE_SETTINGS.md). |
+| Receipt & Invoice Settings | `/admin/settings/receipt` | **Data layer is already done.** `invoiceConfig` is carried by the existing endpoints and typed in `features/settings`; this screen only needs `useSettingsForm({ blocks: ["invoiceConfig"] })` plus a section layout. Overlaps the Label Engine's template model; check before building a second one. |
+| Barcode Settings | `/admin/settings/barcode` | Symbology defaults, label size. **Largely exists already** inside the Label Engine — this may be a link rather than a new screen. `invoiceConfig.barcodeFormat` is the settings-side field. |
+
+**The settings form pattern now exists** (`CLIENT/src/features/settings`) and the
+two remaining screens are expected to reuse it — `useSettingsForm`,
+`SettingsSection`/`Row`/`Toggle`, `SettingsSaveBar`, the skeleton and error
+states — rather than growing their own form handling. No new API or hook code
+should be needed. See §4.1 of [STORE_SETTINGS.md](./STORE_SETTINGS.md).
 
 ### 2.2 Users & Roles — ✅ BUILT (2026-08-03)
 
@@ -86,9 +89,14 @@ endpoint would leave the old role live in their JWT until it expired.
    because Users & Roles had started writing `ROLE_CHANGED`, `PASSWORD_RESET`
    and `EMPLOYEE_DEACTIVATED` rows that nothing could read.
 4. ~~**Customer Profile**~~ — ✅ done 2026-08-03. Completed the Customers module.
-5. **Store Settings** — establishes the settings form pattern.
-6. **Notifications** — model and writers exist.
-7. **Receipt & Barcode Settings** — resolve the Label Engine overlap first.
+5. ~~**Store Settings**~~ — ✅ done 2026-08-03. Established the settings form
+   pattern the remaining two screens build on, and fixed the partial-update
+   data-loss bug in `configuration.service` on the way through.
+6. **Notifications** — model and writers exist. `integrationConfig` now carries
+   the channel toggles (email/SMS/WhatsApp, low-stock alerts, daily summary),
+   so this screen consumes settings rather than defining its own preferences.
+7. **Receipt & Barcode Settings** — resolve the Label Engine overlap first. The
+   data layer is already built; see §2.1.
 
 Backup & Restore is **not** in this list — the decision is not to build it
 (§2.6).
