@@ -3,7 +3,8 @@
 What is built, what is a placeholder, and what each remaining screen needs.
 Kept current so "is X done?" has one answer rather than a grep.
 
-Last updated: 2026-08-03, at the **feature-complete** milestone.
+Last updated: 2026-08-05 — offline-first architecture built (§0.4), feature-complete
+milestone unchanged.
 
 ---
 
@@ -51,6 +52,46 @@ reconcile, pay, report and audit today without any of them.
 If something genuinely missing from core surfaces, it belongs in §1 as a gap,
 not in §5 — and this section's claim should be corrected rather than quietly
 stretched to cover it.
+
+### 0.4 Offline-first — BUILT 2026-08-05, NOT YET ENABLED
+
+The platform can now run a full business day with no internet, against a local
+SQLite mirror, and reconcile with Neon afterwards. Built on branch
+`feature/offline-first-sync`. Full reference: **[OFFLINE_FIRST.md](OFFLINE_FIRST.md)**.
+
+This does **not** change the §0 claim. It is infrastructure, not a new module:
+no screen was added to the POS, no business rule changed, and the same 43
+services, 26 repositories and 34 route trees run unmodified on both databases.
+
+What it consists of:
+
+| Piece | Where |
+|---|---|
+| Generated SQLite mirror of the cloud schema (55 models) | `SERVER/scripts/generate-local-schema.ts` → `prisma/local/` |
+| Datasource router — the seam that leaves all 51 `prisma` importers untouched | `SERVER/src/offline/datasource/router.ts` |
+| Change capture: 102 SQLite triggers → `sync_queue`, atomic with the write | `SERVER/src/offline/sync/changeCapture.ts` |
+| Sync engine: keyset download, batched idempotent upload, conflict rules | `SERVER/src/offline/sync/` |
+| Signed machine-to-machine sync API + replay protection | `SERVER/src/offline/api/`, `security/` |
+| SQL dialect layer so the 63 raw report queries run on both engines | `SERVER/src/offline/datasource/sqlDialect.ts` |
+| Offline UX: indicator, status screen, Sync Now, history, conflicts | `CLIENT/src/features/sync/` |
+| Four additive cloud tables (receipts, nonces, devices, conflicts) | migration `20260805090000_offline_first_sync_cloud_tables` |
+
+⚠ **`OFFLINE_MODE_ENABLED` defaults to false and MUST stay that way** until the
+operational validation below is signed off. With it unset the router resolves to
+the existing Neon client, no SQLite file is opened, no trigger is installed, and
+the server is the one that existed before this feature. A test pins the default
+(§4.4) so it cannot be flipped by accident.
+
+**Pre-production checklist — none of these are done yet:**
+
+1. Apply the cloud migration after a Neon backup, having confirmed it is
+   additive. Tooling: `npm run sync:verify-migration` (proves additive-only
+   against the live schema; refuses to apply without an explicit flag).
+2. Full-day end-to-end validation: morning download → a business day with the
+   network physically disconnected → night sync → reconcile every module.
+   Harness: `npm run sync:validate`.
+3. Stress test with realistic volumes. Harness: `npm run sync:stress`.
+4. Merge only after the above. Offline stays disabled by default regardless.
 
 ---
 
@@ -433,6 +474,8 @@ relax them to make a change pass.
 |---|---|---|
 | `SERVER/.../notification.audience.security.test.ts` (14) | The notification **audience** boundary — `audienceWhere` AND-ed into every read and every mutation | A real IDOR shipped here: `markAsRead` took a `userId` and never used it, so any authenticated caller could mark anyone's notification read, including an OWNER's security alerts. Ids are exposed in feed payloads, so they were never secret. Verified to fail if the vulnerable `update({ where: { id } })` returns. |
 | `CLIENT/.../users/accountRules.test.ts` (29) | The three client-side self-guards (§2.8) | The server's `enforceHierarchy` permits self-modification; two guards hold only by coincidence of the current role set and the third has **no server counterpart at all**. |
+| `SERVER/src/offline/__tests__/requestSignature.test.ts` (24) | The sync request signature — the ONLY credential protecting `/sync/upload` | Sync is machine-to-machine and cannot ride a staff JWT, so this HMAC is the whole boundary. Covers body tampering, path and method swap, wrong secret, stale and future-dated timestamps, and constant-time comparison. |
+| `SERVER/src/offline/__tests__/policy.test.ts` (16) | The sync **write authority** boundary | A privilege-escalation path: if a till could author an `Employee` row it could mint itself an OWNER account and sync it up. Also fails when any model is left unclassified — an unclassified table's local writes are silently never uploaded. |
 
 ⚠ The notification suite **mocks Prisma deliberately** so it needs no database.
 Integration suites here self-skip when no wipeable test database is configured
