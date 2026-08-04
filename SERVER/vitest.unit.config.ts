@@ -24,6 +24,9 @@ export default defineConfig({
       // Observability primitives (request context, error reporter). Pure
       // in-process logic with no database, so they belong on the fast path.
       "src/config/__tests__/**/*.test.ts",
+      // Request-contract schemas. Zod parsing is pure, so these need no
+      // database either.
+      "src/validation/__tests__/**/*.test.ts",
     ],
     testTimeout: 10000,
   },

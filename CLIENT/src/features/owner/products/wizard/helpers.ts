@@ -73,6 +73,13 @@ export function isValidEan13(barcode: string): boolean {
  * Preserves any existing variant that matches the same size+color (so editing
  * attributes doesn't wipe already-entered details — including price overrides).
  *
+ * Preservation stops at SKU and barcode. Those are DERIVED from the prefix
+ * inputs that sit next to the Regenerate button, so carrying them over unchanged
+ * made regeneration a no-op once every combination existed: the owner would edit
+ * the prefix, click Regenerate, and watch nothing happen. A preserved variant
+ * therefore keeps its typed details but re-derives its SKU (and its barcode, when
+ * the barcode prefix no longer matches) from the current prefixes.
+ *
  * Pricing is deliberately absent here: new variants start with
  * `priceOverride: null` and inherit state.pricing automatically. There is nothing
  * to "apply".
@@ -87,14 +94,39 @@ export function generateVariants(
     existing.map((v) => [`${v.sizeName.toLowerCase()}|${v.colorName.toLowerCase()}`, v])
   );
 
+  // An empty prefix means "no in-store prefix", which generateBarcode renders as
+  // the 200 default — so normalise both sides before comparing.
+  const wantedBarcodePrefix = (d.barcodePrefix || "200")
+    .replace(/\D/g, "")
+    .slice(0, 3)
+    .padEnd(3, "0");
+
   const result: WizardVariant[] = [];
   let n = 1;
   for (const color of attributes.colors) {
     for (const size of attributes.sizes) {
       const key = `${size.toLowerCase()}|${color.name.toLowerCase()}`;
+      const sku = generateSku({
+        prefix: d.skuPrefix,
+        productName: state.name,
+        color: color.name,
+        size,
+        sequence: n,
+      });
       const prior = byCombo.get(key);
       if (prior) {
-        result.push({ ...prior, removed: false });
+        // Re-roll the barcode only when the prefix actually changed; otherwise the
+        // random body would churn on every click and invalidate printed labels.
+        const keepBarcode =
+          prior.barcode.length === 13 && prior.barcode.startsWith(wantedBarcodePrefix);
+        // `removed` is left as-is: a combination the owner explicitly removed
+        // stays removed across a regenerate, and is restored only via the
+        // per-row Restore control.
+        result.push({
+          ...prior,
+          sku,
+          barcode: keepBarcode ? prior.barcode : generateBarcode(d.barcodePrefix),
+        });
         n += 1;
         continue;
       }
@@ -103,13 +135,7 @@ export function generateVariants(
         sizeName: size,
         colorName: color.name,
         ...(color.hex ? { colorHex: color.hex } : {}),
-        sku: generateSku({
-          prefix: d.skuPrefix,
-          productName: state.name,
-          color: color.name,
-          size,
-          sequence: n,
-        }),
+        sku,
         barcode: generateBarcode(d.barcodePrefix),
         priceOverride: null, // inherits state.pricing
         status: "ACTIVE",

@@ -134,18 +134,20 @@ export default function OwnerCategoriesPage() {
   const submitForm = (values: CategoryFormValues) => {
     setFormError(null);
 
-    const input = {
-      name: values.name,
-      description: values.description || null,
-      searchKeywords: values.searchKeywords || null,
-      imageUrl: values.imageUrl || null,
-      status: values.status,
-    };
-
     const onError = (err: unknown) =>
       setFormError(err instanceof Error ? err.message : "Could not save the category.");
 
     if (editing) {
+      // UPDATE: `null` is the server's "clear this field" sentinel, so an emptied
+      // input must be sent as null — omitting it would mean "leave unchanged".
+      const input = {
+        name: values.name,
+        description: values.description || null,
+        searchKeywords: values.searchKeywords || null,
+        imageUrl: values.imageUrl || null,
+        status: values.status,
+      };
+
       updateMutation.mutate(
         { id: editing.id, input },
         {
@@ -159,6 +161,17 @@ export default function OwnerCategoriesPage() {
         }
       );
     } else {
+      // CREATE: the create schema takes `string | undefined`, NOT null — there is
+      // nothing to clear on a row that does not exist yet. Blank optionals are
+      // omitted entirely rather than sent as null, which the server rejects.
+      const input = {
+        name: values.name,
+        status: values.status,
+        ...(values.description ? { description: values.description } : {}),
+        ...(values.searchKeywords ? { searchKeywords: values.searchKeywords } : {}),
+        ...(values.imageUrl ? { imageUrl: values.imageUrl } : {}),
+      };
+
       createMutation.mutate(input, {
         onSuccess: (created) => {
           toast.success(`“${created.name}” created.`);
