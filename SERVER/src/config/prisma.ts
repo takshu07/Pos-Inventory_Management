@@ -27,6 +27,8 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import type pg from "pg";
 
 import { PrismaClient } from "../../generated/prisma";
+import { isEdgeNode } from "../offline/config";
+import { resolvePrimaryClient } from "../offline/datasource/router";
 import { createInstrumentedPool } from "./queryInstrumentation";
 
 // =============================================================================
@@ -38,9 +40,15 @@ import { createInstrumentedPool } from "./queryInstrumentation";
 const REQUIRED_ENV_VARS = ["DATABASE_URL", "JWT_SECRET"] as const;
 
 export function validateEnvironment(): void {
-  const missing = REQUIRED_ENV_VARS.filter(
-    (key) => !process.env[key]?.trim()
-  );
+  const missing = REQUIRED_ENV_VARS.filter((key) => {
+    // An edge node has no DATABASE_URL by design — it never opens a connection
+    // to Neon, and putting production database credentials on a shop-floor till
+    // would be the single worst security decision in this architecture. It
+    // reaches the cloud only through the signed sync API.
+    if (key === "DATABASE_URL" && isEdgeNode()) return false;
+
+    return !process.env[key]?.trim();
+  });
 
   if (missing.length > 0) {
     throw new Error(
@@ -169,12 +177,51 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma: PrismaClient =
-  globalForPrisma.prisma ?? createPrismaClient();
+let cloudClient: PrismaClient | undefined = globalForPrisma.prisma;
 
-if (process.env["NODE_ENV"] !== "production") {
-  globalForPrisma.prisma = prisma;
+/**
+ * The Neon/Postgres client, created on first use.
+ *
+ * Semantics are unchanged from before the offline layer existed: one client per
+ * process, additionally parked on globalThis outside production so `tsx watch`
+ * reloads reuse the pool instead of exhausting Neon's connection limit.
+ *
+ * Exported by name so the sync engine on a CLOUD node can address the central
+ * database explicitly rather than depending on what `prisma` resolves to.
+ */
+export function getCloudClient(): PrismaClient {
+  if (cloudClient === undefined) {
+    cloudClient = createPrismaClient();
+
+    if (process.env["NODE_ENV"] !== "production") {
+      globalForPrisma.prisma = cloudClient;
+    }
+  }
+
+  return cloudClient;
 }
+
+// =============================================================================
+// OFFLINE-FIRST ROUTING
+//
+// `prisma` keeps its meaning — "the operational database for this process" —
+// so every one of its existing importers is unchanged. What it resolves to now
+// depends on the deployment role:
+//
+//   OFFLINE_MODE_ENABLED unset (the default)  →  this Neon client, created
+//                                                eagerly right here, exactly as
+//                                                before.
+//   OFFLINE_ROLE=edge                         →  the local SQLite client.
+//
+// An edge node never reaches this factory at all, which is the point: a till
+// holds no production database credentials and opens no pool to Neon. It talks
+// to the cloud only through the authenticated sync API.
+//
+// See src/offline/datasource/router.ts for why an edge node uses SQLite even
+// while it has a working internet connection.
+// =============================================================================
+
+export const prisma: PrismaClient = resolvePrimaryClient(getCloudClient);
 
 /**
  * Ends the underlying pg.Pool.

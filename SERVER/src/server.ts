@@ -20,6 +20,10 @@ import { beginShutdown } from "./controllers/health.controller";
 import { ConfigurationEngine } from "./engines/configuration.engine";
 import { printQueue } from "./engines/label/queue/printQueue";
 import { registerNotificationSubscribers } from "./events/subscribers/notification.subscriber";
+import {
+  initializeOfflineRuntime,
+  shutdownOfflineRuntime,
+} from "./offline/runtime";
 import { ensureSystemTemplates } from "./services/labelTemplate.service";
 
 // Validate required environment variables before binding to any port.
@@ -31,6 +35,12 @@ const PORT = parseInt(process.env["PORT"] ?? "3000", 10);
 let server: any;
 
 async function startServer() {
+  // 0. Offline-first runtime.
+  //    Must come first: on an edge node it opens and verifies the local SQLite
+  //    database, which every step below then reads through. A no-op unless
+  //    OFFLINE_MODE_ENABLED is set.
+  await initializeOfflineRuntime();
+
   // 1. Load Enterprise Configuration into memory
   await ConfigurationEngine.init();
 
@@ -128,6 +138,11 @@ async function gracefulShutdown(signal: string): Promise<void> {
       // the in-flight job's status write and leave it stuck in PRINTING.
       await printQueue.stop();
       logger.info("✅ Print queue stopped.");
+
+      // Stop sync work before closing databases, for the same reason as the
+      // print queue: an in-flight upload batch must be allowed to finish
+      // marking its items, or they would be re-sent on the next run.
+      await shutdownOfflineRuntime();
 
       await prisma.$disconnect();
       // Prisma does not end a pool it did not create, and this app hands it an

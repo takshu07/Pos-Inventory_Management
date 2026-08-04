@@ -1,0 +1,98 @@
+// =============================================================================
+// OFFLINE RUNTIME LIFECYCLE
+//
+// One place that starts and stops everything the offline layer owns, so
+// server.ts gains two calls rather than a dozen.
+//
+// ── Failure policy ───────────────────────────────────────────────────────────
+// Startup failures are NOT uniform, because the consequences are not uniform:
+//
+//   EDGE node, local database unusable    → FATAL. This node's only operational
+//                                           database is missing. Serving would
+//                                           mean every request 500s; better to
+//                                           fail the deploy loudly.
+//   EDGE node, cloud unreachable          → fine. That is the entire point of
+//                                           the feature. Start, serve, queue.
+//   CLOUD node, anything offline-related  → non-fatal. The cloud's job is to
+//                                           serve the API and accept uploads;
+//                                           a broken sync scheduler must never
+//                                           stop it answering requests.
+//
+// That asymmetry is deliberate: the common cause of an edge node failing to
+// start is a forgotten `npm run db:local:setup`, and that must be impossible to
+// miss.
+// =============================================================================
+
+import { logger } from "../config/logger";
+
+import { assertOfflineConfigValid, offlineConfig } from "./config";
+import {
+  startConnectivityMonitor,
+  stopConnectivityMonitor,
+} from "./datasource/connectivity";
+import { closeLocalClient, prepareLocalDatabase } from "./datasource/localClient";
+import { getDataSourceMode } from "./datasource/router";
+
+// =============================================================================
+// STARTUP
+// =============================================================================
+
+/**
+ * Brings the offline subsystem up.
+ *
+ * Called from server.ts BEFORE `app.listen()`, so a node that cannot serve
+ * never binds a port.
+ */
+export async function initializeOfflineRuntime(): Promise<void> {
+  const config = offlineConfig();
+
+  if (!config.enabled) {
+    // The default path. Nothing initializes, nothing is logged at info level,
+    // and the process is byte-for-byte the server that existed before this
+    // feature was added.
+    return;
+  }
+
+  assertOfflineConfigValid(config);
+
+  logger.info(
+    {
+      role: config.role,
+      deviceId: config.deviceId || undefined,
+      dataSource: getDataSourceMode(),
+    },
+    "offline: initializing"
+  );
+
+  if (config.role === "edge") {
+    // Fatal on purpose — see the failure policy above.
+    await prepareLocalDatabase();
+    startConnectivityMonitor();
+  }
+}
+
+// =============================================================================
+// SHUTDOWN
+// =============================================================================
+
+/**
+ * Takes the offline subsystem down.
+ *
+ * Called from the graceful-shutdown path. Ordering matters: the connectivity
+ * monitor stops first so nothing schedules new work, then the local database
+ * handle closes, checkpointing the WAL.
+ *
+ * Never throws — a shutdown that fails here must not prevent the process from
+ * exiting.
+ */
+export async function shutdownOfflineRuntime(): Promise<void> {
+  if (!offlineConfig().enabled) return;
+
+  try {
+    stopConnectivityMonitor();
+    await closeLocalClient();
+    logger.info("offline: runtime stopped");
+  } catch (err) {
+    logger.error({ err }, "offline: error during shutdown (continuing)");
+  }
+}
