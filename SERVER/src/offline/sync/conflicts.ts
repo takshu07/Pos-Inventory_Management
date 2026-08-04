@@ -185,12 +185,43 @@ function normalize(value: unknown): string {
     return JSON.stringify(value);
   }
 
-  if (typeof value === "number") {
-    // 12.50 from Postgres and 12.5 from SQLite are the same money.
-    return String(Number(value));
-  }
-
   return String(value);
+}
+
+/**
+ * True when both sides are numeric, comparing them by VALUE rather than by
+ * spelling.
+ *
+ * This is the difference between a working conflict log and an unusable one.
+ * Postgres serializes a NUMERIC as the string "12.50"; SQLite hands back the
+ * number 12.5. Compared as text they differ, so EVERY row with a price, a tax
+ * rate or a quantity would be reported as a conflict on EVERY sync — thousands
+ * of entries a day, none of them real, which is the same as having no conflict
+ * log at all.
+ *
+ * Applied only when the canonical strings already failed to match, and only
+ * when BOTH sides parse as finite numbers, so a genuine text field is never
+ * coerced.
+ */
+function numericallyEqual(left: string, right: string): boolean {
+  if (left === "" || right === "") return false;
+
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+
+  if (!Number.isFinite(leftNumber) || !Number.isFinite(rightNumber)) return false;
+
+  return leftNumber === rightNumber;
+}
+
+/** Canonical equality for one column of two rows. */
+function valuesEqual(left: unknown, right: unknown): boolean {
+  const leftText = normalize(left);
+  const rightText = normalize(right);
+
+  if (leftText === rightText) return true;
+
+  return numericallyEqual(leftText, rightText);
 }
 
 /**
@@ -208,7 +239,7 @@ export function hasMeaningfulDifference(
     if (IGNORED_COLUMNS.has(key)) continue;
     if (!(key in left)) continue;
 
-    if (normalize(left[key]) !== normalize(right[key])) return true;
+    if (!valuesEqual(left[key], right[key])) return true;
   }
 
   return false;
@@ -228,7 +259,7 @@ export function describeDifferences(
     const localValue = normalize(left[key]);
     const cloudValue = normalize(right[key]);
 
-    if (localValue !== cloudValue) {
+    if (!valuesEqual(left[key], right[key])) {
       differences[key] = { local: localValue, cloud: cloudValue };
     }
   }
