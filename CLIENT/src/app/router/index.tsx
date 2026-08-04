@@ -265,6 +265,24 @@ export const router = createBrowserRouter([
         },
       },
 
+      // ── Synchronization — operational (MANAGER + OWNER) ────────────────────
+      // Deliberately OUTSIDE OwnerRoute, for the same reason as label printing:
+      // when a till stops syncing, the person standing in the shop has to be
+      // able to see the queue and press retry. Waiting for the owner to log in
+      // is not an option when the day's takings are sitting on one machine.
+      // The backend guards /sync/queue, /sync/conflicts and /sync/retry at
+      // MANAGER independently, so this is not the boundary — it just matches it.
+      //
+      // A CASHIER is not sent here; they get the header indicator, which is the
+      // whole of what they need to know.
+      {
+        path: "sync",
+        async lazy() {
+          const { SyncStatusPage } = await import("@/features/sync/pages/SyncStatusPage");
+          return { Component: SyncStatusPage };
+        },
+      },
+
       // ── Cash Register — operational (every role in this shell) ─────────────
       // Deliberately OUTSIDE OwnerRoute. A manager who rings up a bill needs a
       // drawer exactly as much as a cashier does, and the backend scopes which

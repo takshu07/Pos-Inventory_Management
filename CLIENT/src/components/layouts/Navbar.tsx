@@ -11,6 +11,10 @@ import { useLogout, notificationsPathForRole } from "@/features/auth";
 // (Rolldown reports this as INEFFECTIVE_DYNAMIC_IMPORT). Same reason applies in
 // features/dashboard/constants.
 import { useNotificationSummary } from "@/features/notifications/hooks/useNotifications";
+// ⚠ Same rule as the notifications import above: the COMPONENT module, not the
+// feature barrel. The barrel also exports SyncStatusPage, and pulling it here
+// would drag that lazy chunk into the main bundle.
+import { SyncIndicator } from "@/features/sync/components/SyncIndicator";
 import { cn } from "@/utils/cn";
 
 /**
@@ -77,6 +81,14 @@ export function Navbar() {
 
       {/* Right Actions */}
       <div className="flex items-center gap-1">
+        {/* Synchronization state.
+            FIRST in the action row, and deliberately so: on an offline-first
+            till it is the only control that tells a cashier whether the last
+            hour of sales exists anywhere but this machine. It renders nothing
+            at all on a cloud deployment, so the manager portal is unchanged
+            unless the store is actually running an edge node. */}
+        <SyncIndicator compact className="mr-1" />
+
         {/* Theme Toggle */}
         <Button
           variant="ghost"
