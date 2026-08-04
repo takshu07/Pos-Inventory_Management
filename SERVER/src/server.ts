@@ -13,9 +13,10 @@
 import "dotenv/config";
 
 import { validateEnvironment } from "./config/prisma";
-import { prisma } from "./config/prisma";
+import { prisma, closeDatabasePool } from "./config/prisma";
 import { logger } from "./config/logger";
 import app from "./app";
+import { beginShutdown } from "./controllers/health.controller";
 import { ConfigurationEngine } from "./engines/configuration.engine";
 import { printQueue } from "./engines/label/queue/printQueue";
 import { registerNotificationSubscribers } from "./events/subscribers/notification.subscriber";
@@ -72,30 +73,75 @@ startServer().catch(err => {
 // then close the Prisma connection pool cleanly.
 // =============================================================================
 
+/** Guards against a second signal re-entering an in-progress shutdown. */
+let shutdownStarted = false;
+
+/**
+ * Time the instance keeps serving traffic after being marked NOT ready, so the
+ * load balancer's next readiness probe can take it out of rotation before the
+ * socket closes. Must exceed one probe interval — 5s covers the common
+ * 2s/3s configurations. Set DRAIN_DELAY_MS=0 in local development for an
+ * instant Ctrl+C.
+ */
+const DRAIN_DELAY_MS = Number.parseInt(
+  process.env["DRAIN_DELAY_MS"] ?? (process.env["NODE_ENV"] === "production" ? "5000" : "0"),
+  10
+);
+
 async function gracefulShutdown(signal: string): Promise<void> {
-  console.log(`\n⚠️  Received ${signal}. Starting graceful shutdown...`);
-// restart 2
+  if (shutdownStarted) {
+    logger.warn(`Received ${signal} during shutdown — already draining.`);
+    return;
+  }
+  shutdownStarted = true;
+
+  logger.info(`⚠️  Received ${signal}. Starting graceful shutdown...`);
+
+  // STEP 1 — fail readiness FIRST, while still serving.
+  // `server.close()` stops accepting new connections immediately, but the load
+  // balancer does not know that until a probe fails. Closing first means every
+  // request the LB routes here during that window is refused — which cashiers
+  // see as failed sales on every deploy. Marking not-ready and waiting one
+  // probe interval lets the LB drain us cleanly first.
+  beginShutdown();
+  logger.info("🔻 Readiness probe now failing; draining traffic…");
+
+  if (DRAIN_DELAY_MS > 0) {
+    await new Promise((resolve) => setTimeout(resolve, DRAIN_DELAY_MS));
+  }
+
+  // Force shutdown if the steps below hang. Started only now, so the drain
+  // delay does not consume the close budget.
+  const forceExit = setTimeout(() => {
+    logger.error("❌ Graceful shutdown timed out. Forcing exit.");
+    process.exit(1);
+  }, 10_000);
+  // Do not let this timer alone hold the event loop open.
+  forceExit.unref();
 
   server.close(async () => {
     logger.info("✅ HTTP server closed.");
 
-    // Stop the print worker BEFORE closing the DB pool: it finishes the label
-    // it is on, then stops claiming new ones. Disconnecting first would fail
-    // the in-flight job's status write and leave it stuck in PRINTING.
-    await printQueue.stop();
-    logger.info("✅ Print queue stopped.");
+    try {
+      // Stop the print worker BEFORE closing the DB pool: it finishes the label
+      // it is on, then stops claiming new ones. Disconnecting first would fail
+      // the in-flight job's status write and leave it stuck in PRINTING.
+      await printQueue.stop();
+      logger.info("✅ Print queue stopped.");
 
-    await prisma.$disconnect();
-    logger.info("✅ Database connection closed.");
+      await prisma.$disconnect();
+      // Prisma does not end a pool it did not create, and this app hands it an
+      // instrumented one. Without this the process would hold Neon connection
+      // slots that the incoming instance needs during a rolling deploy.
+      await closeDatabasePool();
+      logger.info("✅ Database connection closed.");
+    } catch (err) {
+      logger.error({ err }, "Error during shutdown cleanup");
+    }
 
+    clearTimeout(forceExit);
     process.exit(0);
   });
-
-  // Force shutdown after 10 seconds if graceful shutdown hangs
-  setTimeout(() => {
-    logger.error("❌ Graceful shutdown timed out. Forcing exit.");
-    process.exit(1);
-  }, 10_000);
 }
 
 process.on("SIGTERM", () => {
@@ -106,14 +152,26 @@ process.on("SIGINT", () => {
   gracefulShutdown("SIGINT").catch((err) => logger.error(err));
 });
 
-// Handle unhandled promise rejections — log and exit.
-// A process running with unhandled rejections is in an unknown state.
+// Handle unhandled promise rejections.
+//
+// The process is in an unknown state and must not keep serving, but it is
+// exited through the SAME graceful path as a deploy rather than with an
+// immediate `process.exit(1)`. The old behavior killed the process
+// mid-statement: any checkout in flight lost its response, and because a sale
+// is written in an interactive transaction, the client was left unable to tell
+// whether the sale committed. Draining lets in-flight requests answer.
 process.on("unhandledRejection", (reason: unknown) => {
-  logger.error({ reason }, "❌ Unhandled Promise Rejection");
-  process.exit(1);
+  logger.error({ reason }, "❌ Unhandled Promise Rejection — shutting down");
+  gracefulShutdown("unhandledRejection").catch(() => process.exit(1));
 });
 
 // Handle uncaught synchronous exceptions.
+//
+// This one exits IMMEDIATELY and deliberately. After an uncaught exception the
+// interpreter state is genuinely untrustworthy — unlike a rejected promise,
+// which is usually one broken operation — so running further code, including a
+// graceful shutdown that writes to the database, risks corrupting data rather
+// than protecting it. Fail fast and let the orchestrator restart us.
 process.on("uncaughtException", (error: Error) => {
   logger.error({ err: error }, "❌ Uncaught Exception");
   process.exit(1);

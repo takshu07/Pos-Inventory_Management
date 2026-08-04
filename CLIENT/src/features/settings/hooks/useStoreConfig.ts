@@ -1,14 +1,14 @@
 /**
  * Derived configuration hooks — how the rest of the app CONSUMES settings.
  *
- * Every one of these reads the same cached `GET /settings` document, so a screen
+ * Every one of these reads the same cached `GET /configuration` document, so a screen
  * that needs the currency does not fetch anything of its own and does not have
  * to be told when it changes: saving in Store Settings updates the cache and
  * these re-render.
  *
  * ⚠ WHY EVERY HOOK HAS A FALLBACK
  * These are used by screens that render before settings load, and by screens a
- * CASHIER can reach — and `GET /settings` is OWNER-only, so for a cashier the
+ * CASHIER can reach — and `GET /configuration` is OWNER-only, so for a cashier the
  * query never resolves. A hook that returned `undefined` would make every caller
  * write the same defensive branch, and the ones that forgot would render
  * "undefined" into a receipt. Each hook therefore always returns a usable value,

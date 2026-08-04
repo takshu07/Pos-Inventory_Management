@@ -17,6 +17,7 @@
 import type { NextFunction, Request, Response } from "express";
 
 import { HTTP_STATUS } from "../constants/httpStatus";
+import { setContextActor } from "../config/requestContext";
 import { AppError } from "../errors/AppError";
 import { authRepository } from "../repositories/auth.repository";
 import { verifyToken } from "../utils/jwt";
@@ -108,6 +109,12 @@ export async function authenticate(
     role: payload.role,
     tokenVersion: payload.tokenVersion,
   };
+
+  // Mirror the actor into the observability context so access logs, slow-query
+  // warnings and 500s can be filtered by WHO was affected, not just by which
+  // endpoint failed. This is logging metadata only — `req.user` above remains
+  // the sole source of truth for authorization decisions.
+  setContextActor(payload.id, payload.role);
 
   // Presence heartbeat for the Workforce module. Throttled in-process to at
   // most one write per employee per interval, and fire-and-forget — it never

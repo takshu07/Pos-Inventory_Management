@@ -4,7 +4,7 @@
  * The configuration surface for the whole business: identity, trading rules,
  * regional formatting, UI defaults, security policy, and notification channels.
  *
- * RBAC: OWNER-only. `OwnerRoute` guards the route, and `GET/PATCH /settings`
+ * RBAC: OWNER-only. `OwnerRoute` guards the route, and `GET/PATCH /configuration`
  * independently 403 for anyone else (configuration.routes.ts). The server is the
  * boundary — the route guard and the sidebar are affordances, not controls.
  *

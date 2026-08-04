@@ -96,17 +96,18 @@ export const TABLE_DENSITY_OPTIONS: SelectOption[] = [
   { value: "COMPACT", label: "Compact — more rows per screen" },
 ];
 
-/**
- * Barcode symbologies the Label Engine can render.
+/*
+ * BARCODE_FORMAT_OPTIONS was removed on 2026-08-03.
  *
- * The labels state the constraint rather than just the name: EAN-13 will not
- * encode an arbitrary SKU (it needs a valid 13-digit code with a correct check
- * digit), so choosing it without that is how labels silently fail to print.
+ * It backed a `invoiceConfig.barcodeFormat` select in Receipt & Invoice
+ * Settings that no consumer ever read, and it offered two symbologies where the
+ * Label Engine supports eight. Barcode options are now built from the server's
+ * live capabilities payload (`GET /labels/capabilities` → listSymbologies), so
+ * a newly implemented symbology appears without a client change and an
+ * unimplemented one renders disabled.
+ *
+ * See CLIENT/src/features/labels/components/BarcodeSettings.tsx.
  */
-export const BARCODE_FORMAT_OPTIONS: SelectOption[] = [
-  { value: "CODE128", label: "CODE128 — encodes any SKU" },
-  { value: "EAN13", label: "EAN-13 — requires a valid 13-digit code" },
-];
 
 /**
  * 0–23, labelled in 12-hour form.

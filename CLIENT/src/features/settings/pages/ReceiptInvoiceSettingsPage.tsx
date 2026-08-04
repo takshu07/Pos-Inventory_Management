@@ -24,17 +24,30 @@
  *     purchase numbering still derive their own formats.
  *   • receiptHeader / receiptFooter / qrCodeEnabled → stored, not yet read. The
  *     receipt renderer is the "Future Expansion" block in invoice.service.ts.
- *   • barcodeFormat → read by the Label Engine for product labels.
  *
  * The not-yet-wired fields are shown because they are real configuration that
  * persists and will be consumed by the receipt renderer — but each says so, in
  * the UI, rather than implying an effect it does not have.
+ *
+ * RETIRED: barcodeFormat (2026-08-03)
+ * -----------------------------------
+ * This page previously claimed `barcodeFormat → read by the Label Engine for
+ * product labels`. That was wrong. Nothing read it. The Label Engine resolves
+ * symbology from `PrinterSetting.barcodeSymbology`, so an owner could switch
+ * this to EAN13 and every label would carry on printing exactly as before —
+ * the precise failure the block above exists to prevent.
+ *
+ * The control is gone and the Print Options section now links to the Label
+ * Engine, which owns barcode encoding. The Zod field is retained as deprecated
+ * so existing stored documents and older clients still validate; see
+ * docs/BARCODE_SETTINGS.md §3.
  */
 
 import { useMemo, useState } from "react";
-import { FileText, Hash, Printer } from "lucide-react";
+import { Link } from "react-router";
+import { FileText, Hash, Printer, ScanBarcode } from "lucide-react";
 
-import { Input, Select } from "@/components/ui";
+import { Input } from "@/components/ui";
 import { CriticalChangeDialog } from "../components/CriticalChangeDialog";
 import {
   SettingsRow,
@@ -46,7 +59,6 @@ import { SettingsErrorState, SettingsSkeleton } from "../components/SettingsStat
 import { useSettingsForm } from "../hooks/useSettingsForm";
 import { findCriticalChanges } from "../validation";
 import { validateReceiptSettings } from "../validation/receipt";
-import { BARCODE_FORMAT_OPTIONS } from "../utils/options";
 import { countChanges } from "../utils/patch";
 import { previewInvoiceNumber } from "../utils/invoicePreview";
 
@@ -310,23 +322,27 @@ export function ReceiptInvoiceSettingsPage() {
             />
           </SettingsRow>
 
+          {/*
+            Barcode symbology used to be edited here via `invoiceConfig.barcodeFormat`.
+            It was removed on 2026-08-03 because nothing read it: the Label
+            Engine resolves symbology from `PrinterSetting.barcodeSymbology`
+            (label.service.ts → labelData.resolver.ts). Changing it here printed
+            exactly the same labels, which is worse than not offering it.
+
+            Rather than a dead control, this points at the screen that actually
+            owns the value — and offers all eight symbologies instead of two.
+          */}
           <SettingsRow
             label="Barcode symbology"
-            description="Used by the Label Engine for product labels. EAN-13 requires a valid 13-digit code; CODE128 encodes any SKU."
-            dirty={isFieldDirty("invoiceConfig", "barcodeFormat")}
-            error={errorFor("invoiceConfig.barcodeFormat")}
+            description="Configured in the Label Engine, which owns barcode encoding for every printed label."
           >
-            <Select
-              value={invoice.barcodeFormat}
-              options={BARCODE_FORMAT_OPTIONS}
-              onChange={(e) =>
-                setField(
-                  "invoiceConfig",
-                  "barcodeFormat",
-                  e.target.value as typeof invoice.barcodeFormat
-                )
-              }
-            />
+            <Link
+              to="/admin/labels?tab=barcode"
+              className="inline-flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ScanBarcode className="h-4 w-4" />
+              Open Barcode Settings
+            </Link>
           </SettingsRow>
         </SettingsSection>
       </div>

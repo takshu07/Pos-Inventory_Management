@@ -25,6 +25,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 import { ENV } from "@/config/env";
 import { useAuthStore } from "@/store/auth.store";
+import { resolveRequestId } from "./requestId";
 
 export const apiClient = axios.create({
   baseURL: ENV.VITE_API_URL,
@@ -97,9 +98,18 @@ apiClient.interceptors.response.use(
     // ── Normalize Error Shape ─────────────────────────────────────────────────
     // Extract the most useful message available. Never expose raw Axios internals.
     const body = error.response?.data as
-      | { message?: string; details?: Record<string, unknown> }
+      | { message?: string; details?: Record<string, unknown>; requestId?: string }
       | undefined;
     const message = body?.message ?? error.message ?? "An unexpected error occurred.";
+
+    // ── Correlation id ────────────────────────────────────────────────────────
+    // The server returns `X-Request-Id` on EVERY response and additionally
+    // embeds `requestId` in the body of a 500. Capturing it here is what makes
+    // a support conversation tractable: the user reads back one short id and it
+    // locates the exact server log line — stack, actor, SQL timings and all —
+    // instead of "an error happened this afternoon". The ErrorBoundary renders
+    // it; see lib/api/requestId.ts for the resolution order.
+    const requestId = resolveRequestId(error.response?.headers, body);
 
     // Log in development only — never log auth errors in production (token leaks).
     if (ENV.VITE_ENVIRONMENT === "development") {
@@ -116,6 +126,7 @@ apiClient.interceptors.response.use(
     return Promise.reject(
       Object.assign(new Error(message), {
         status,
+        ...(requestId !== undefined ? { requestId } : {}),
         ...(body?.details !== undefined ? { details: body.details } : {}),
       })
     );

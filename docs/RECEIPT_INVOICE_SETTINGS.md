@@ -10,7 +10,7 @@ tracking, no patch diffing and no version-conflict handling. All of that comes
 from `useSettingsForm`.
 
 **No schema change, no migration, no new endpoint.** `invoiceConfig` was already
-carried by `GET/PATCH /settings` and already typed in `features/settings`.
+carried by `GET/PATCH /configuration` and already typed in `features/settings`.
 
 ---
 
@@ -19,9 +19,9 @@ carried by `GET/PATCH /settings` and already typed in `features/settings`.
 | | |
 |---|---|
 | Route | `/admin/settings/receipt` |
-| Access | OWNER only (`OwnerRoute` + `requireRole("OWNER")` on `/settings`) |
+| Access | OWNER only (`OwnerRoute` + `requireRole("OWNER")` on `/configuration`) |
 | Owns | The `invoiceConfig` block, and only that block |
-| API | The existing `GET/PATCH /api/v1/settings` |
+| API | The existing `GET/PATCH /api/v1/configuration` |
 | New client code | One page, one validator, one preview util, two option lists |
 | Chunk cost | `settings` grew 35 kB → 44 kB (9.7 → 11.7 kB gzip) for a whole second screen |
 
@@ -88,7 +88,7 @@ its status **in the UI**, not just here.
 | Field | Status |
 |---|---|
 | `invoicePrefix`, `invoiceNumberLength` | **LIVE.** Read on every sale (§2). |
-| `barcodeFormat` | **LIVE.** Read by the Label Engine for product labels. |
+| ~~`barcodeFormat`~~ | ⚠ **RETIRED 2026-08-03.** This row previously said "LIVE — read by the Label Engine for product labels". **That was false; nothing read it.** The Label Engine resolves symbology from `PrinterSetting.barcodeSymbology`, so changing this control printed identical labels. The control is gone and the section now links to `/admin/labels?tab=barcode`. The Zod field is retained as deprecated for backward compatibility. See [BARCODE_SETTINGS.md §2](./BARCODE_SETTINGS.md). |
 | `exchangePrefix`, `purchasePrefix` | Stored. Exchange and purchase numbering still derive their own formats. |
 | `receiptHeader`, `receiptFooter`, `qrCodeEnabled` | Stored. Consumed when the receipt renderer is built — the "Future Expansion" block in `invoice.service.ts` names these as the fields it should read. |
 | `financialYearReset` | Stored. Pairs with `storeConfig.financialYearStart`. |
@@ -103,7 +103,7 @@ extended rather than duplicated.
 
 What it **did not** write:
 
-- No API call. `GET/PATCH /settings` already carried `invoiceConfig`.
+- No API call. `GET/PATCH /configuration` already carried `invoiceConfig`.
 - No query, mutation, or cache key. `useSettings` / `useUpdateSettings`.
 - No dirty tracking, diffing, or unsaved-changes guard. `useSettingsForm`.
 - No `expectedVersion` handling. It comes free with the hook — §9.2's requirement

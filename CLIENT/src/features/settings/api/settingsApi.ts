@@ -1,11 +1,12 @@
 /**
  * Settings — transport layer.
  *
- * ONE endpoint family backs every settings screen: `GET /settings` returns the
- * whole configuration, `PATCH /settings` accepts any subset of it. Store
- * Settings, Receipt & Invoice and Barcode Settings are three views over the same
- * document, not three resources — which is why this file has two functions and
- * no per-screen variants.
+ * ONE endpoint family backs every settings screen: `GET /configuration` returns
+ * the whole document, `PATCH /configuration` accepts any subset of it. Store
+ * Settings and Receipt & Invoice are two views over the same document, not two
+ * resources — which is why this file has two functions and no per-screen
+ * variants. (Barcode Settings is NOT one of them: it belongs to the Label
+ * Engine and uses `/owner/labels/settings` — see docs/CONFIGURATION_OWNERSHIP.md.)
  *
  * RBAC: both verbs are OWNER-only server-side (configuration.routes.ts). The
  * route guard on the client is a UX affordance; the 403 is the boundary.
@@ -21,7 +22,21 @@
 import { apiClient } from "@/lib/api";
 import type { FullConfiguration, SettingsPatch } from "../types";
 
-const BASE = "/settings";
+/**
+ * The server mounts this document at `/configuration` (`app.ts` →
+ * `configuration.routes.ts`), NOT at `/settings`.
+ *
+ * ⚠ This was `/settings` until 2026-08-03, which resolved to `/api/v1/settings`
+ * — a path the server has never mounted. Every Store Settings and Receipt &
+ * Invoice Settings read and write returned 404. Nothing caught it because the
+ * settings tests only exercised pure functions and never asserted a URL; the
+ * routing is now pinned in `__tests__/settingsApi.test.ts`.
+ *
+ * The module is named "settings" and the endpoint is named "configuration".
+ * That mismatch is the whole reason the bug was easy to write, so do not
+ * "align" this constant to the folder name.
+ */
+const BASE = "/configuration";
 
 /**
  * Reads the full configuration.

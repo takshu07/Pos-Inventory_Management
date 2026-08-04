@@ -1,8 +1,9 @@
-import { Outlet, Navigate } from "react-router";
+import { Outlet, Navigate, useLocation } from "react-router";
 import { useAuthStore, selectIsAuthenticated } from "@/store/auth.store";
 import { Sidebar } from "./Sidebar";
 import { Navbar } from "./Navbar";
 import { MobileSidebar } from "./MobileSidebar";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 /**
  * MainLayout — Authenticated Application Shell
  * Structure:
@@ -22,6 +23,7 @@ import { MobileSidebar } from "./MobileSidebar";
  */
 export function MainLayout() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const location = useLocation();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -40,10 +42,18 @@ export function MainLayout() {
         {/* Top Navigation Bar */}
         <Navbar />
 
-        {/* Scrollable Page Content */}
+        {/* Scrollable Page Content
+            Wrapped in a route-scoped ErrorBoundary so a crash in ONE screen
+            shows a contained fallback while the Navbar and Sidebar stay mounted
+            and usable. Without it, the root boundary replaces the whole app —
+            a broken report would leave an operator with nothing but a Refresh
+            button. Keying on the pathname clears the fallback on navigation,
+            so moving to a working screen recovers without a reload. */}
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 md:p-6 max-w-screen-2xl mx-auto">
-            <Outlet />
+            <ErrorBoundary variant="route" resetKey={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
       </div>

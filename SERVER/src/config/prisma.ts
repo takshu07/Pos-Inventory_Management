@@ -24,7 +24,10 @@
 // =============================================================================
 
 import { PrismaPg } from "@prisma/adapter-pg";
+import type pg from "pg";
+
 import { PrismaClient } from "../../generated/prisma";
+import { createInstrumentedPool } from "./queryInstrumentation";
 
 // =============================================================================
 // STARTUP ENVIRONMENT VALIDATION
@@ -50,6 +53,16 @@ export function validateEnvironment(): void {
 // =============================================================================
 // PRISMA CLIENT FACTORY
 // =============================================================================
+
+/**
+ * The pg.Pool backing the Prisma adapter.
+ *
+ * Held at module scope because passing an EXTERNAL pool to `PrismaPg` makes
+ * this module its owner: `prisma.$disconnect()` releases Prisma's handle but
+ * does not end a pool it did not create, so shutdown must close it explicitly.
+ * See `closeDatabasePool()`.
+ */
+let pool: pg.Pool | undefined;
 
 function createPrismaClient(): PrismaClient {
   const connectionString = process.env["DATABASE_URL"];
@@ -90,7 +103,12 @@ function createPrismaClient(): PrismaClient {
     10
   );
 
-  const adapter = new PrismaPg({
+  // The pool is created HERE rather than letting PrismaPg build it from a
+  // config object, so every statement passes through the slow-query
+  // instrumentation (see queryInstrumentation.ts). PrismaPg accepts an existing
+  // pg.Pool, so this changes nothing about how queries execute — only that they
+  // are timed. Pool options below are unchanged from the tuned values.
+  pool = createInstrumentedPool({
     connectionString,
     max: poolMax,
     idleTimeoutMillis: Number.parseInt(
@@ -118,6 +136,8 @@ function createPrismaClient(): PrismaClient {
     keepAlive: true,
     allowExitOnIdle: !isProduction,
   });
+
+  const adapter = new PrismaPg(pool);
 
   // Query logging is expensive at scale (serialization + I/O on every query).
   // Production emits only warnings and errors; development additionally logs
@@ -154,4 +174,24 @@ export const prisma: PrismaClient =
 
 if (process.env["NODE_ENV"] !== "production") {
   globalForPrisma.prisma = prisma;
+}
+
+/**
+ * Ends the underlying pg.Pool.
+ *
+ * `prisma.$disconnect()` is not sufficient on its own here: because we hand
+ * `PrismaPg` a pool we constructed, Prisma treats it as externally owned and
+ * leaves it open. Without this call, shutdown would close Prisma's handle while
+ * leaving TCP connections established against Neon until the process was killed
+ * — which, on a rolling deploy, holds connection slots the NEW instance needs.
+ *
+ * Safe to call when no pool was ever created (unit tests that never touch the
+ * database), and safe to call twice.
+ */
+export async function closeDatabasePool(): Promise<void> {
+  if (!pool) return;
+
+  const closing = pool;
+  pool = undefined;
+  await closing.end();
 }

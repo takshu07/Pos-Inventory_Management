@@ -7,10 +7,58 @@
  * - Fetching analytical and operational data.
  * - Providing mock implementations where backend analytics aren't fully implemented yet,
  *   allowing the frontend to be built independently.
+ *
+ * Still mock (clearly labelled below): sales chart trends, top products, and
+ * inventory alerts — these await aggregate endpoints.
+ * No longer mock: recent sales, today's operational stats, and **notifications**,
+ * which now read the real Notifications API so this widget and the Notification
+ * Center cannot disagree.
  */
 
 import { apiClient } from "@/lib/api/axios";
+// Both from specific modules rather than the feature barrel: the barrel also
+// exports NotificationsPage, and a value import of it here would statically
+// pull the lazy notifications chunk into the dashboard's.
+import { fetchNotifications } from "@/features/notifications/api/notificationsApi";
+import type { NotificationItem, NotificationSeverity } from "@/features/notifications/types";
 import { type SalesKPI, type ChartDataPoint, type TopProduct, type RecentSale, type InventoryAlert, type DashboardNotification } from "../types";
+
+/**
+ * How many notifications the dashboard widget shows.
+ *
+ * The widget is a fixed-height panel with no pager — it is a glance, not the
+ * Notification Center. Fetching more than fits would cost bandwidth to render
+ * nothing; the "see everything" affordance is the `/notifications` route.
+ */
+const DASHBOARD_NOTIFICATION_LIMIT = 8;
+
+/**
+ * Server severity → the widget's visual tone.
+ *
+ * The two vocabularies are NOT the same and must not be assumed interchangeable:
+ * the server's most urgent level is `CRITICAL`, while the widget's is `ERROR`.
+ * A structural cast would compile and then silently drop critical alerts into an
+ * unstyled default. Severity is derived server-side from `Notification.type`
+ * (SERVER/src/constants/notificationTaxonomy.ts) — never re-derived here.
+ */
+const SEVERITY_TO_WIDGET_TYPE: Record<NotificationSeverity, DashboardNotification["type"]> = {
+  INFO: "INFO",
+  SUCCESS: "SUCCESS",
+  WARNING: "WARNING",
+  CRITICAL: "ERROR",
+};
+
+/** Adapts a server notification to the widget's shape (`createdAt` → `timestamp`). */
+function toDashboardNotification(row: NotificationItem): DashboardNotification {
+  return {
+    id: row.id,
+    title: row.title,
+    message: row.message,
+    timestamp: row.createdAt,
+    type: SEVERITY_TO_WIDGET_TYPE[row.severity] ?? "INFO",
+    isRead: row.isRead,
+  };
+}
 
 /**
  * Fetches the Sales KPIs from the analytics engine.
@@ -145,13 +193,30 @@ export async function getInventoryAlerts(): Promise<InventoryAlert[]> {
 }
 
 /**
- * MOCK: Fetch system notifications.
+ * Real notifications for the dashboard widget.
+ *
+ * ⚠ SINGLE SOURCE OF TRUTH. This used to return three hardcoded rows, so the
+ * dashboard and the Notification Center told the user different things — the
+ * dashboard cheerfully reported a "System Update" that did not exist while a
+ * real out-of-stock alert sat unseen on the other screen. Both now read the
+ * same server data through the same feature module.
+ *
+ * It reads `/notifications/feed` (the paginated, filtered endpoint) rather than
+ * the bare unread-only path, because the widget wants the most recent activity
+ * — including things already read — not just the unread backlog. Both endpoints
+ * return 200, so pointing this at the wrong one would degrade silently; the
+ * routing is pinned by `features/notifications/__tests__/notificationsApi.test.ts`.
+ *
+ * Audience scoping is enforced server-side on every row this returns, so a
+ * cashier's dashboard cannot surface an owner's security alerts.
  */
 export async function getNotifications(): Promise<DashboardNotification[]> {
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return [
-    { id: "n1", title: "Large Sale Alert", message: "Sale RCP-103 exceeded ₹5,000", timestamp: new Date(Date.now() - 1000 * 60 * 45).toISOString(), type: "SUCCESS", isRead: false },
-    { id: "n2", title: "Inventory Critical", message: "Black Leather Jacket (L) is out of stock.", timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString(), type: "ERROR", isRead: false },
-    { id: "n3", title: "System Update", message: "POS version 1.2 is scheduled for deployment tonight.", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), type: "INFO", isRead: true },
-  ];
+  const { data } = await fetchNotifications({
+    page: 1,
+    limit: DASHBOARD_NOTIFICATION_LIMIT,
+    sortBy: "createdAt",
+    sortOrder: "desc",
+  });
+
+  return data.map(toDashboardNotification);
 }

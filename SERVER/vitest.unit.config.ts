@@ -21,6 +21,9 @@ export default defineConfig({
     include: [
       "src/engines/__tests__/**/*.test.ts",
       "src/utils/__tests__/**/*.test.ts",
+      // Observability primitives (request context, error reporter). Pure
+      // in-process logic with no database, so they belong on the fast path.
+      "src/config/__tests__/**/*.test.ts",
     ],
     testTimeout: 10000,
   },

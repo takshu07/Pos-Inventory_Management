@@ -119,13 +119,26 @@ export function useInventoryAlerts() {
 }
 
 /**
- * Hook to fetch user-targeted notifications.
+ * Hook to fetch user-targeted notifications for the dashboard widget.
+ *
+ * Reads the REAL Notifications API (see `dashboardApi.getNotifications`), so
+ * this widget and the Notification Center are one data source.
+ *
+ * ⚠ The key is nested under `notificationKeys.all` rather than the dashboard's
+ * own namespace, deliberately. Marking a notification read on the Notifications
+ * screen invalidates `notificationKeys.all`; a key outside that tree would keep
+ * serving rows the user has already dealt with until its own poll came round,
+ * which is exactly the "two screens disagree" bug replacing the mock was meant
+ * to end. It is still a distinct key — the widget's query differs from the
+ * screen's — just an invalidatable child of the same root.
  */
 export function useNotifications() {
   return useQuery({
     queryKey: DASHBOARD_QUERY_KEYS.notifications(),
     queryFn: getNotifications,
     refetchInterval: 1000 * 60, // Auto-refresh every 1 min
+    // Don't poll an unfocused tab — same rule as recent sales.
+    refetchIntervalInBackground: false,
     staleTime: 1000 * 30,
   });
 }

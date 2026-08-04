@@ -28,8 +28,13 @@ import express, { type Request, type Response, type NextFunction } from "express
 import helmet from "helmet";
 
 import { logger } from "./config/logger";
+import {
+  runWithRequestContext,
+  type RequestContext,
+} from "./config/requestContext";
 import { errorHandler } from "./middleware/error.middleware";
-import { globalLimiter } from "./middleware/rateLimit.middleware";
+import { exportLimiter, globalLimiter } from "./middleware/rateLimit.middleware";
+import { recordRequest } from "./utils/metrics";
 import authRoutes from "./routes/auth.routes";
 import brandRoutes from "./routes/brand.routes";
 import categoryRoutes from "./routes/category.routes";
@@ -114,6 +119,25 @@ app.use(
 app.use(globalLimiter);
 
 // =============================================================================
+// EXPORT RATE LIMITER
+// Applied by PATH rather than per-route because export endpoints are spread
+// across twelve routers (reports, finance, inventory x3, workforce x2,
+// register x4, categories, products). Matching here covers all of them from one
+// place — and covers any export route added later, which per-route wiring would
+// silently miss. See exportLimiter for why these need a tighter budget than the
+// global one.
+// =============================================================================
+
+const EXPORT_PATH = /\/export(\/|$)/;
+
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (EXPORT_PATH.test(req.path)) {
+    return exportLimiter(req, res, next);
+  }
+  return next();
+});
+
+// =============================================================================
 // CORS
 // Restrict cross-origin requests to known frontend origins.
 // =============================================================================
@@ -147,10 +171,24 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 // =============================================================================
-// REQUEST LOGGER
-// Structured HTTP access logging via Pino. Logs method, url, status, and
-// response time for every request. Excludes the /health endpoint to avoid
-// noise from uptime monitoring.
+// REQUEST LOGGER + OBSERVABILITY CONTEXT
+//
+// Three things happen here, in this order, for every non-health request:
+//
+//   1. A correlation id is minted and returned as `X-Request-Id`, so a user
+//      reporting a failure can be matched to the exact log lines that explain
+//      it. The client surfaces this id on its error screen.
+//   2. The rest of the request runs INSIDE an AsyncLocalStorage context
+//      (`runWithRequestContext`). Everything downstream — services, engines,
+//      repositories, the slow-query logger and the global error handler — can
+//      read that id without it being threaded through their signatures.
+//      `next()` must be called inside the callback, or the context is lost for
+//      every handler that follows.
+//   3. On finish, the request is recorded into the in-process metrics rollup
+//      exposed at `GET /health/metrics`.
+//
+// Health endpoints stay excluded: an uptime monitor hitting /health/live every
+// few seconds would otherwise dominate both the log volume and the metrics.
 // =============================================================================
 
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -161,28 +199,49 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
   const start = Date.now();
 
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    const logFn = res.statusCode >= 500
-      ? logger.error.bind(logger)
-      : res.statusCode >= 400
-        ? logger.warn.bind(logger)
-        : logger.info.bind(logger);
+  const context: RequestContext = {
+    reqId,
+    method: req.method,
+    path: req.path,
+    dbQueryCount: 0,
+    dbTimeMs: 0,
+  };
 
-    logFn(
-      {
-        reqId,
-        method: req.method,
-        url: req.originalUrl,
-        status: res.statusCode,
-        durationMs: duration,
-        ip: req.ip,
-      },
-      "HTTP request"
-    );
+  runWithRequestContext(context, () => {
+    res.on("finish", () => {
+      const duration = Date.now() - start;
+      const logFn = res.statusCode >= 500
+        ? logger.error.bind(logger)
+        : res.statusCode >= 400
+          ? logger.warn.bind(logger)
+          : logger.info.bind(logger);
+
+      logFn(
+        {
+          reqId,
+          method: req.method,
+          url: req.originalUrl,
+          status: res.statusCode,
+          durationMs: duration,
+          ip: req.ip,
+          // Actor, when the request authenticated. Lets the log be filtered by
+          // who was affected, not just by which endpoint failed.
+          ...(context.userId !== undefined && { userId: context.userId }),
+          ...(context.role !== undefined && { role: context.role }),
+          // Database cost of this request. `dbQueryCount` is the direct signal
+          // for an N+1: a list endpoint issuing one query per row shows here as
+          // a count that scales with page size.
+          dbQueryCount: context.dbQueryCount,
+          dbTimeMs: Math.round(context.dbTimeMs),
+        },
+        "HTTP request"
+      );
+
+      recordRequest(req.method, req.path, res.statusCode, duration);
+    });
+
+    next();
   });
-
-  next();
 });
 
 // =============================================================================

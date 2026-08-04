@@ -11,7 +11,7 @@
  *   5. MainLayout remains the shell for all authenticated routes.
  */
 
-import { createBrowserRouter, Outlet } from "react-router";
+import { createBrowserRouter, Navigate, Outlet } from "react-router";
 import { MainLayout } from "@/components/layouts/MainLayout";
 import { CashierLayout } from "@/components/layouts/CashierLayout";
 import {
@@ -154,10 +154,16 @@ export const router = createBrowserRouter([
           return { Component: ProfileView };
         },
       },
+      // Notifications is a real screen as of 2026-08-03. Deliberately OUTSIDE
+      // OwnerRoute: notifications are addressed to a person or a role, and the
+      // server scopes every query to the caller's audience — so every employee
+      // reaches their own. The owner-only Preferences tab is gated inside the
+      // page, not by the route.
       {
         path: "notifications",
         async lazy() {
-          return { Component: () => <PlaceholderPage title="Notifications" /> };
+          const { NotificationsPage } = await import("@/features/notifications");
+          return { Component: NotificationsPage };
         },
       },
 
@@ -686,11 +692,24 @@ export const router = createBrowserRouter([
               return { Component: ReceiptInvoiceSettingsPage };
             },
           },
+          // Barcode Settings is NOT a screen of its own, deliberately.
+          //
+          // Everything it would configure — symbology, printed size, burn
+          // quality, and when labels are produced — is owned by the Label
+          // Engine and stored on PrinterSetting, which LabelService reads on
+          // every print. A parallel screen writing to a different store would
+          // have created a second source of truth for one value; that exact bug
+          // already existed as `invoiceConfig.barcodeFormat`, which was
+          // editable in Receipt & Invoice Settings and read by nothing. It is
+          // now retired (docs/BARCODE_SETTINGS.md §3).
+          //
+          // The route is kept rather than deleted because the sidebar entry and
+          // any existing bookmark point at it; it redirects to the Label
+          // Engine's Barcode tab so the capability stays discoverable under the
+          // name owners look for.
           {
             path: "admin/settings/barcode",
-            async lazy() {
-              return { Component: () => <PlaceholderPage title="Barcode Settings" /> };
-            },
+            element: <Navigate to="/admin/labels?tab=barcode" replace />,
           },
           {
             // Audit Logs is a real screen as of 2026-08-03. OWNER-only by
@@ -767,6 +786,23 @@ export const router = createBrowserRouter([
             async lazy() {
               const { ProfileView } = await import("@/features/profile");
               return { Component: ProfileView };
+            },
+          },
+          // The SAME NotificationsPage the manager portal mounts at
+          // /notifications — same pattern as ProfileView above, and required
+          // rather than optional: the Navbar bell renders in BOTH shells, and
+          // the manager-portal route sits inside ManagerRoute, which bounces a
+          // CASHIER to /cashier/pos. Without this mount the bell would show a
+          // cashier an accurate unread count and then refuse to open it.
+          //
+          // Notifications are audience-scoped server-side, so a cashier sees
+          // their own and nobody else's; the owner-only Preferences tab is
+          // gated inside the page.
+          {
+            path: "notifications",
+            async lazy() {
+              const { NotificationsPage } = await import("@/features/notifications");
+              return { Component: NotificationsPage };
             },
           },
         ],

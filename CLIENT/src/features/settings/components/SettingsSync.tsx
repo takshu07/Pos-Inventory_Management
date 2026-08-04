@@ -13,7 +13,7 @@
  *
  * Renders nothing. Mounted once, inside the query provider.
  *
- * ⚠ RBAC: `GET /settings` is OWNER-only, so for a MANAGER or CASHIER this query
+ * ⚠ RBAC: `GET /configuration` is OWNER-only, so for a MANAGER or CASHIER this query
  * would 403. It is therefore gated on the signed-in role, and for everyone else
  * the formatters keep their defaults — which is why every default here mirrors
  * the server's Zod defaults exactly. A cashier seeing the default currency
@@ -26,7 +26,7 @@
  * widening who can read the settings document is a security decision, not a
  * formatting one.
  *
- * TODO(settings): once `GET /settings/public` exists (spec in
+ * TODO(settings): once `GET /configuration/public` exists (spec in
  * docs/STORE_SETTINGS.md §8), drop the `isOwner` gate below and read that
  * endpoint instead. The fallbacks in useStoreConfig.ts stay either way — they
  * are still the pre-load path.

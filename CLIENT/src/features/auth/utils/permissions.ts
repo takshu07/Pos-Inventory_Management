@@ -97,6 +97,27 @@ export function portalHomeForRole(role: Role | null): "/" | "/cashier/pos" | "/l
   return "/login";
 }
 
+/**
+ * Resolves the Notifications route for a role's own portal.
+ *
+ * ⚠ NOT a constant `/notifications`. The same NotificationsPage is mounted on
+ * BOTH portals — under `/` for MANAGER/OWNER and `/cashier/notifications` for
+ * CASHIER — because the Navbar bell renders in both shells. The manager-portal
+ * route sits inside `ManagerRoute`, which bounces a CASHIER to `/cashier/pos`,
+ * so sending every role to the bare path would show a cashier an accurate
+ * unread count on a bell that refuses to open.
+ *
+ * Lives here, beside `portalHomeForRole`, for the reason stated above: portal
+ * routing decisions have one source, or the guards and the links drift apart.
+ */
+export function notificationsPathForRole(
+  role: Role | null
+): "/notifications" | "/cashier/notifications" | "/login" {
+  if (canAccessManagerPortal(role)) return "/notifications";
+  if (canAccessCashierPortal(role)) return "/cashier/notifications";
+  return "/login";
+}
+
 /** Can access Owner-only features (Settings, Audit Logs, Employee role changes). */
 export function canAccessOwnerOnly(role: Role | null): boolean {
   return hasAtLeastRole(role, "OWNER");

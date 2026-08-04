@@ -1,8 +1,9 @@
-import { Outlet, Navigate } from "react-router";
+import { Outlet, Navigate, useLocation } from "react-router";
 import { useAuthStore, selectIsAuthenticated } from "@/store/auth.store";
 import { CashierSidebar } from "./CashierSidebar";
 import { Navbar } from "./Navbar";
 import { CashierMobileSidebar } from "./CashierMobileSidebar";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 /**
  * CashierLayout — Cashier Portal Shell
@@ -18,6 +19,7 @@ import { CashierMobileSidebar } from "./CashierMobileSidebar";
  */
 export function CashierLayout() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const location = useLocation();
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;
@@ -36,10 +38,15 @@ export function CashierLayout() {
         {/* Top Navigation Bar */}
         <Navbar />
 
-        {/* Scrollable Page Content */}
+        {/* Scrollable Page Content
+            Route-scoped ErrorBoundary — see MainLayout for the rationale. It
+            matters most here: a cashier whose screen crashes mid-shift must
+            still be able to reach the till, not just a full-page reload. */}
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 md:p-6 max-w-screen-2xl mx-auto">
-            <Outlet />
+            <ErrorBoundary variant="route" resetKey={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
       </div>

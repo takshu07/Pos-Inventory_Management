@@ -9,7 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest watch"
+    "test:watch": "vitest watch",
+    "verify": "npm run build && npm run test"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

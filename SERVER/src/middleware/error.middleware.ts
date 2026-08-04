@@ -25,7 +25,7 @@ import { ZodError } from "zod";
 
 import { HTTP_STATUS } from "../constants/httpStatus";
 import { AppError } from "../errors/AppError";
-import { logger } from "../config/logger";
+import { reportError } from "../config/errorReporter";
 
 // Prisma error codes we want to handle gracefully.
 // We use a discriminated union check rather than importing PrismaClientKnownRequestError
@@ -107,17 +107,23 @@ export function errorHandler(
   }
 
   // --- Programmer / Unknown Error ---
-  // Log the full error in development; in production, log to your observability
-  // platform (e.g., Sentry, Datadog) instead of stdout.
-  if (isDevelopment) {
-    logger.error({ err: error }, "[ErrorHandler] Unhandled error");
-  } else {
-    logger.error({ message: error?.message }, "[ErrorHandler] Unhandled error");
-  }
+  // Reported through the centralized reporter, which always logs the FULL error
+  // — stack included — with the request's correlation id and actor attached.
+  // Production previously logged `error.message` alone, which made a live 500
+  // undiagnosable: no stack, no request id, no way to tie a user's report to
+  // the log line. Pino's redact config strips credentials, so the stack is safe
+  // to retain. See config/errorReporter.ts.
+  const report = reportError(error, HTTP_STATUS.INTERNAL_SERVER_ERROR);
 
   res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
     success: false,
     message: "An unexpected error occurred. Please try again later.",
+    // The correlation id is returned to the CLIENT deliberately. It is an
+    // opaque random UUID that reveals nothing about the failure, and it is the
+    // only thing that lets a support conversation ("I got an error at 2:41")
+    // reach the log line that explains it. The client shows it on its error
+    // screen. The stack stays development-only — it is never sent to a browser.
+    ...(report.reqId !== undefined && { requestId: report.reqId }),
     ...(isDevelopment && { stack: error?.stack }),
   });
 }

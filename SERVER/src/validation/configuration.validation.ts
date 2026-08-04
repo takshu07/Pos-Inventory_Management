@@ -56,6 +56,19 @@ export const invoiceConfigSchema = z.object({
   invoiceNumberLength: z.number().int().min(4).max(10).default(6),
   financialYearReset: z.boolean().default(true),
   qrCodeEnabled: z.boolean().default(false),
+  /**
+   * @deprecated (2026-08-03) Not read by anything. Barcode symbology is owned by
+   * the Label Engine and stored on `PrinterSetting.barcodeSymbology`, which
+   * supports all eight registered symbologies rather than these two.
+   *
+   * RETAINED, NOT REMOVED, on purpose: every stored configuration document
+   * already contains this key, and older clients still PATCH it. Dropping it
+   * from the schema would make those requests 400 and would strip the key on
+   * the next merge. It validates and persists; it simply has no consumer.
+   * Remove only in a release that also migrates stored documents.
+   *
+   * See docs/BARCODE_SETTINGS.md §3.
+   */
   barcodeFormat: z.enum(["CODE128", "EAN13"]).default("CODE128")
 });
 

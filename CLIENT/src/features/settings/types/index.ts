@@ -35,7 +35,22 @@ export interface InvoiceConfig {
   invoiceNumberLength: number;
   financialYearReset: boolean;
   qrCodeEnabled: boolean;
-  barcodeFormat: "CODE128" | "EAN13";
+  /**
+   * @deprecated (2026-08-03) No consumer. Barcode symbology lives on
+   * `PrinterSetting.barcodeSymbology` and is edited in the Label Engine
+   * (/admin/labels?tab=barcode). Kept in the type because the server still
+   * returns it. See docs/BARCODE_SETTINGS.md §3.
+   *
+   * `readonly` is the enforcement, not the comment: legacy documents must stay
+   * READABLE, but new code must not WRITE this field. `setField("invoiceConfig",
+   * "barcodeFormat", …)` is now a compile error rather than a review catch —
+   * `useSettingsForm.setField` is typed `FullConfiguration[B][K]`, so a readonly
+   * key cannot be assigned through it.
+   *
+   * The PATCH type stays writable on purpose (see `SettingsPatch` below), so a
+   * legacy client's payload still round-trips through `applyPatch`.
+   */
+  readonly barcodeFormat: "CODE128" | "EAN13";
 }
 
 export interface PricingConfig {
@@ -99,7 +114,7 @@ export interface IntegrationConfig {
   supportPhone?: string;
 }
 
-/** The complete payload returned by GET /settings. */
+/** The complete payload returned by GET /configuration. */
 export interface FullConfiguration {
   storeName: string;
   currency: string;

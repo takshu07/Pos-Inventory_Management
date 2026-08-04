@@ -315,7 +315,11 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Backup & Restore",  path: "/admin/settings/backup",   icon: DatabaseBackup, allowedRoles: OWNER, comingSoon: true },
       // Built. Document numbering (live on the sale path) and receipt content.
       { label: "Receipt & Invoice", path: "/admin/settings/receipt",  icon: Receipt,        allowedRoles: OWNER },
-      { label: "Barcode Settings",  path: "/admin/settings/barcode",  icon: ScanBarcode,    allowedRoles: OWNER, comingSoon: true },
+      // Built. Redirects into the Label Engine's Barcode tab rather than being
+      // a screen of its own — barcode encoding is owned by that module and
+      // duplicating it would fork the source of truth. The entry stays because
+      // "Barcode Settings" is the name owners search the nav for.
+      { label: "Barcode Settings",  path: "/admin/settings/barcode",  icon: ScanBarcode,    allowedRoles: OWNER },
       // Printers and label templates. A built, owner-only screen that predates
       // the spec's Settings list; kept so its only nav entry isn't lost.
       { label: "Labels & Printers", path: "/admin/labels",            icon: Printer,        allowedRoles: OWNER },

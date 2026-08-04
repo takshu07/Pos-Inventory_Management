@@ -6,7 +6,7 @@ regional formatting, UI defaults, security policy, and notification channels.
 Route `/admin/settings`. **OWNER only.**
 
 Built 2026-08-03. Reuses the existing `Settings` singleton and the existing
-`GET/PATCH /settings` endpoints. **No schema change and no migration** — the two
+`GET/PATCH /configuration` endpoints. **No schema change and no migration** — the two
 new configuration blocks are stored in columns the schema already declared but
 nothing ever read. Every backend change is additive; no existing request shape
 or response field was removed or altered.
@@ -24,7 +24,7 @@ Settings are expected to reuse rather than reimplement.
 | Route | `/admin/settings` |
 | Access | OWNER only (`OwnerRoute` + `requireRole("OWNER")` on both verbs) |
 | Feature dir | `CLIENT/src/features/settings` (own lazy chunk, ~35 kB / 9.7 kB gzip) |
-| API | `GET /api/v1/settings`, `PATCH /api/v1/settings` |
+| API | `GET /api/v1/configuration`, `PATCH /api/v1/configuration` |
 | Storage | The `settings` singleton row (`id = "singleton"`) |
 | Migration | **None.** See §3. |
 
@@ -151,7 +151,7 @@ just the first — otherwise fixing one reveals the next on the following attemp
 
 ### 3.4 Optimistic concurrency (opt-in)
 
-`PATCH /settings` accepts an optional `expectedVersion`. When supplied and it no
+`PATCH /configuration` accepts an optional `expectedVersion`. When supplied and it no
 longer matches the stored row, the write is refused with **409
 `SETTINGS_VERSION_CONFLICT`** rather than silently overwriting a concurrent edit.
 
@@ -260,7 +260,7 @@ being touched.**
 
 ### 5.3 ⚠ The known gap: non-OWNER sessions
 
-`GET /settings` is OWNER-only, so `SettingsSync` and every hook in
+`GET /configuration` is OWNER-only, so `SettingsSync` and every hook in
 `useStoreConfig.ts` are **gated on the role** — an ungated query would fire a
 guaranteed 403 on every cashier session.
 
@@ -319,7 +319,7 @@ deliberately not bolted on here.
 
 ### 8.1 The problem
 
-`GET /settings` is OWNER-only and must stay that way — it returns security
+`GET /configuration` is OWNER-only and must stay that way — it returns security
 policy, discount ceilings, audit retention and integration wiring. But three of
 its fields are pure presentation and are needed by **every** role:
 
@@ -345,7 +345,7 @@ solved by widening access to the full document.
 Additive. Changes nothing that exists.
 
 ```
-GET /api/v1/settings/public        authenticate, NO requireRole
+GET /api/v1/configuration/public        authenticate, NO requireRole
 ```
 
 ```jsonc
@@ -369,7 +369,7 @@ GET /api/v1/settings/public        authenticate, NO requireRole
 2. **`authenticate` yes, `requireRole` no.** It is not anonymous; it is
    any-authenticated-role. Do not mount it before the auth middleware.
 3. **Read-only.** No PATCH counterpart. Writes stay OWNER-only on `/settings`.
-4. **Serve it from `ConfigurationEngine`,** like `GET /settings` does — it is a
+4. **Serve it from `ConfigurationEngine`,** like `GET /configuration` does — it is a
    memory read, not a query, so it can be called on every session boot.
 5. **`storeName` is in and nothing else from `storeConfig` is.** A cashier
    already prints it on receipts. Address, GST, phone and email are business

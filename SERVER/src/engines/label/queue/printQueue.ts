@@ -45,8 +45,28 @@ import {
   resolveTemplate,
 } from "../templates/template.engine";
 
-/** Poll interval when the queue is empty. */
-const IDLE_POLL_MS = 2000;
+/**
+ * Poll interval when the queue is empty.
+ *
+ * COST OF THIS CONSTANT (measured 2026-08-04, production-hardening phase):
+ * this poll runs forever, whether or not anything is queued — roughly 43,000
+ * round-trips a day on a completely idle store. The query itself is optimal
+ * (`EXPLAIN ANALYZE`: 0.045ms server-side, Bitmap Index Scan on
+ * `print_jobs_status_createdAt_idx`); the cost is entirely the round-trip. On
+ * the measured Neon instance that round-trip was ~980ms, so the worker was
+ * holding a pool connection roughly half the time while doing nothing, and
+ * Neon's compute could never autosuspend.
+ *
+ * The default is UNCHANGED at 2000ms so print latency behaves exactly as
+ * before. It is env-tunable so a deployment on a high-latency or
+ * autosuspending database can widen it without a code change. Raising it only
+ * delays the START of a print job — throughput once printing is governed by
+ * BUSY_POLL_MS below, which is untouched.
+ */
+const IDLE_POLL_MS = Number.parseInt(
+  process.env["PRINT_QUEUE_IDLE_POLL_MS"] ?? "2000",
+  10
+);
 /** Delay between jobs when work is available — keeps the head from thrashing. */
 const BUSY_POLL_MS = 100;
 /** A job PRINTING longer than this is presumed abandoned by a dead process. */

@@ -53,6 +53,7 @@ export {
   canAccessManagerPortal,
   canAccessCashierPortal,
   portalHomeForRole,
+  notificationsPathForRole,
   canAccessOwnerOnly,
   canVoidSale,
   canAdjustInventory,

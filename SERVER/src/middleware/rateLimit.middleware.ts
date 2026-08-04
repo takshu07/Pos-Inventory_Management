@@ -36,6 +36,41 @@ export const globalLimiter = rateLimit({
 });
 
 /**
+ * Rate limiter for report/export endpoints.
+ *
+ * Why these need their own limit
+ * ------------------------------
+ * Every other endpoint is bounded work: a page of rows, one sale, one product.
+ * An export is not — it scans a full date range, joins across sales, items and
+ * payments, and renders a PDF or CSV in memory. A handful of concurrent exports
+ * can saturate both the Neon connection pool and this process's heap, which
+ * takes down CHECKOUT along with them. The global limit of 200/min is far too
+ * loose to prevent that: 200 exports a minute would be an outage.
+ *
+ * The threshold is deliberately generous relative to human use. A manager
+ * clicking through report downloads might issue a few per minute; 30 per 5
+ * minutes across an entire store leaves ordinary work untouched while stopping
+ * a runaway loop or a scripted scrape. It is a stability guard, not a quota.
+ *
+ * NOTE ON SHARED IPs: all terminals in a store typically egress from ONE public
+ * address, so this budget is shared by the whole store, not per user. That is
+ * accounted for in the number above.
+ */
+export const exportLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 30,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message:
+      "Too many export requests. Please wait a few minutes before exporting again.",
+  },
+  // Failed exports still consumed the work, so they count too.
+  skipSuccessfulRequests: false,
+});
+
+/**
  * Strict rate limiter for the login endpoint.
  * 10 attempts per 15 minutes per IP.
  * This is the primary brute-force defense for the authentication endpoint.

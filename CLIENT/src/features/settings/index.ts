@@ -15,7 +15,7 @@
  *      any field belongs in `CRITICAL_FIELDS`.
  *   4. Reuse `SettingsSkeleton` / `SettingsErrorState` for the non-happy paths.
  *
- * Nothing new is needed in the API or hook layer — `GET/PATCH /settings` already
+ * Nothing new is needed in the API or hook layer — `GET/PATCH /configuration` already
  * carries every block.
  *
  * ⚠ BINDING CONSTRAINTS (set 2026-08-03, confirmed at review — see
@@ -37,6 +37,24 @@
  *   • PATCHES MERGE, NEVER REPLACE. Send only changed fields. Replacing a
  *     config block silently reverts every field the patch did not mention to its
  *     Zod default, throwing nothing and logging nothing.
+ *
+ * ⚠ ADDED 2026-08-03 after the Barcode Settings consolidation — see
+ * docs/CONFIGURATION_OWNERSHIP.md:
+ *
+ *   • THE PRIMITIVES ARE PRESENTATION; THE HOOKS ARE NOT. Any module may import
+ *     SettingsSection/Row/Toggle to look consistent. Only screens that own a
+ *     block of the `Settings` document may use `useSettingsForm`/`useSettings`.
+ *     Do NOT force a different data source through this layer because the UI
+ *     should match — a module with its own endpoint, concurrency model or
+ *     commit semantics keeps its own hooks and borrows only the components.
+ *     `features/labels/components/BarcodeSettings.tsx` is the reference.
+ *
+ *   • BARCODE AND LABEL CONFIGURATION DOES NOT LIVE HERE. The Label Engine is
+ *     the single authoritative owner of symbology, label size, print quality,
+ *     template overrides and printer capabilities, stored on `PrinterSetting`.
+ *     Future barcode work (QR, DataMatrix, new symbologies) extends that module.
+ *     A barcode control added to this feature is a bug: it was tried once, as
+ *     `invoiceConfig.barcodeFormat`, and silently did nothing.
  */
 
 // ── Pages ───────────────────────────────────────────────────────────────────
