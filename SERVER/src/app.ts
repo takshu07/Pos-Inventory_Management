@@ -69,6 +69,7 @@ import ownerWorkforceRoutes from "./routes/owner.workforce.routes";
 import ownerAuditRoutes from "./routes/owner.audit.routes";
 import managerWorkforceRoutes from "./routes/manager.workforce.routes";
 import healthRoutes from "./routes/health.routes";
+import syncRoutes from "./offline/api/sync.routes";
 import crypto from "crypto";
 
 const app = express();
@@ -313,6 +314,12 @@ app.use("/api/v1/manager/workforce", managerWorkforceRoutes);
 // design, and no write routes exist because entries are written by the module
 // that performed the action, never through the API.
 app.use("/api/v1/owner/audit-logs", ownerAuditRoutes);
+// Offline-first synchronization. Two authentication regimes on one tree:
+// /sync/download and /sync/upload are machine-to-machine and authenticated by
+// HMAC device signature (an edge node syncs at 2am with nobody logged in);
+// everything else is the operator surface behind the normal JWT + RBAC. Inert
+// unless OFFLINE_MODE_ENABLED is set.
+app.use("/api/v1/sync", syncRoutes);
 
 // ── Inventory ───────────────────────────────────────────────────────────────
 // Three trees, one controller. /owner/inventory is the full surface including
