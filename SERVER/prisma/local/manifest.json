@@ -1,6 +1,6 @@
 {
   "generatedFrom": "prisma/schema.prisma",
-  "sourceHash": "f3b11c141d0a02b86234b165119a54921c70bc9124d6d7df0caf1011987948e6",
+  "sourceHash": "d7bd80ade684cbc3e50167e5055209b326aabcc57846941b2225c8c5a387ca0b",
   "enums": [
     "ActionModule",
     "ActionType",

@@ -33,6 +33,7 @@ import {
 import { closeLocalClient, prepareLocalDatabase } from "./datasource/localClient";
 import { getDataSourceMode } from "./datasource/router";
 import { installChangeCapture, repairCaptureFlag } from "./sync/changeCapture";
+import { startSyncEngine, stopBackgroundSync } from "./sync/engine";
 
 // =============================================================================
 // STARTUP
@@ -80,6 +81,11 @@ export async function initializeOfflineRuntime(): Promise<void> {
     await repairCaptureFlag();
 
     startConnectivityMonitor();
+
+    // Startup recovery + background scheduling. Deliberately NOT awaited past
+    // its recovery phase: a node whose cloud is unreachable must still finish
+    // booting and open for business — that is the entire point of the feature.
+    await startSyncEngine();
   }
 }
 
@@ -101,6 +107,10 @@ export async function shutdownOfflineRuntime(): Promise<void> {
   if (!offlineConfig().enabled) return;
 
   try {
+    // Order matters: stop scheduling new work, stop probing, then close the
+    // handle. Closing first would fail an in-flight batch's bookkeeping write
+    // and leave its items stranded IN_FLIGHT for the next boot to recover.
+    stopBackgroundSync();
     stopConnectivityMonitor();
     await closeLocalClient();
     logger.info("offline: runtime stopped");

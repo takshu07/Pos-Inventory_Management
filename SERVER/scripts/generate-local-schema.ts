@@ -118,6 +118,25 @@ export interface LocalSchemaManifest {
 // the job warrants. Every assumption it makes is asserted below.
 // =============================================================================
 
+/**
+ * Models that exist ONLY on the central database and must not be mirrored.
+ *
+ * These are the cloud's half of the sync protocol — its idempotency ledger,
+ * nonce store, device registry and conflict audit. A till has no use for them,
+ * and mirroring them would be actively harmful: `sync_receipts` on the edge
+ * would look like a local table the policy registry must classify, and an
+ * operator glancing at it could mistake a till's empty ledger for the cloud
+ * having accepted nothing.
+ *
+ * The edge node's own bookkeeping is the separate set appended by SYNC_MODELS.
+ */
+const CLOUD_ONLY_MODELS = new Set([
+  "SyncReceipt",
+  "SyncNonce",
+  "SyncDevice",
+  "SyncConflictRecord",
+]);
+
 const PRISMA_SCALARS = new Set([
   "String",
   "Boolean",
@@ -652,6 +671,14 @@ function generate(source: string): { schema: string; manifest: LocalSchemaManife
         out.push(...transformGenerator(block));
         break;
       case "model": {
+        if (CLOUD_ONLY_MODELS.has(block.name)) {
+          out.push(
+            `// [local] ${block.name} omitted — cloud-side sync bookkeeping, ` +
+              `see prisma/schema.prisma`
+          );
+          break;
+        }
+
         const transformed = transformModel(block, enums);
         out.push(...transformed.lines);
         models.push(transformed.model);

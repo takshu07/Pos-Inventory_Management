@@ -2992,6 +2992,45 @@ model PrinterSetting {
   @@map("printer_settings")
 }
 
+// =============================================================================
+// OFFLINE-FIRST SYNC — CLOUD SIDE
+//
+// These four tables exist only on the CENTRAL database. They are the cloud's
+// half of the sync protocol: what it has already accepted, what it refused,
+// and which devices it is talking to. Edge nodes keep their own, different
+// bookkeeping in SQLite (sync_queue, sync_runs, …) — see prisma/local/.
+//
+// Purely additive. Nothing in the existing schema references them, and with
+// OFFLINE_MODE_ENABLED unset they simply sit empty.
+// =============================================================================
+
+/// The idempotency ledger — the table that makes "no duplicate uploads" true.
+///
+/// Every accepted queue item leaves a receipt keyed by the idempotency key the
+/// edge node generated when it captured the write. A second arrival of the same
+/// key is answered with the ORIGINAL outcome instead of being applied again.
+///
+/// This is what makes the common failure safe: an upload that succeeded but
+/// whose response was lost to a dropped connection. The till, having seen no
+/// acknowledgement, retries — and without this table it would book every sale
+/// in that batch twice.
+// [local] SyncReceipt omitted — cloud-side sync bookkeeping, see prisma/schema.prisma
+
+/// Single-use nonces for sync request replay protection.
+///
+/// Rows are pruned once past `expiresAt`; the table only ever holds one replay
+/// window's worth (minutes), so it stays small regardless of upload volume.
+// [local] SyncNonce omitted — cloud-side sync bookkeeping, see prisma/schema.prisma
+
+/// What the cloud knows about each edge node — the fleet view an owner needs to
+/// answer "is the Andheri till actually syncing?"
+// [local] SyncDevice omitted — cloud-side sync bookkeeping, see prisma/schema.prisma
+
+/// Cloud-side conflict audit. Written whenever an uploaded row lost to the
+/// cloud's copy under the CLOUD_WINS rule, so a discarded local change is
+/// always recoverable and always explainable.
+// [local] SyncConflictRecord omitted — cloud-side sync bookkeeping, see prisma/schema.prisma
+
 
 // =============================================================================
 // ▼▼▼ LOCAL-ONLY SYNC METADATA ▼▼▼
