@@ -41,8 +41,8 @@ export default function ManagerProductsPage() {
 
   const { data, isLoading, isError, refetch, isFetching } = useManagerProducts(serverParams);
   const { data: detail, isLoading: detailLoading } = useManagerProduct(detailId ?? undefined);
-  const { data: categories = [] } = useManagerCategories();
-  const { data: brands = [] } = useManagerBrands();
+  const { data: categories = [], isPending: categoriesPending } = useManagerCategories();
+  const { data: brands = [], isPending: brandsPending } = useManagerBrands();
 
   const products = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -78,6 +78,7 @@ export default function ManagerProductsPage() {
           categories={categories}
           brands={brands}
           hasActiveFilters={hasActiveFilters}
+          optionsLoading={categoriesPending || brandsPending}
         />
       </div>
 

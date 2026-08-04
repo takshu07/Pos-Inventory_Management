@@ -20,6 +20,17 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
+/** Unpaginated id+businessName list for filter/picker dropdowns. */
+export const options = asyncHandler(async (_req: Request, res: Response) => {
+  const result = await supplierService.getSupplierOptions();
+
+  return res.status(HTTP_STATUS.OK).json({
+    success: true,
+    message: "Supplier options retrieved successfully.",
+    data: result,
+  });
+});
+
 export const getById = asyncHandler(async (req: Request, res: Response) => {
   const result = await supplierService.getSupplierById(req.params["id"] as string);
 

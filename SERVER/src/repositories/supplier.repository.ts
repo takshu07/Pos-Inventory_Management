@@ -43,6 +43,15 @@ export const supplierRepository = {
     return { total, data };
   },
 
+  /** Active suppliers only, id+businessName, unpaginated — picker projection. */
+  async findOptions() {
+    return prisma.supplier.findMany({
+      where: { isActive: true },
+      select: { id: true, businessName: true },
+      orderBy: { businessName: "asc" },
+    });
+  },
+
   async findById(id: string) {
     return prisma.supplier.findUnique({ where: { id } });
   },

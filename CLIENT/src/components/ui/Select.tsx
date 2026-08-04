@@ -18,10 +18,24 @@ export interface SelectProps extends React.SelectHTMLAttributes<HTMLSelectElemen
   hint?: string;
   options: SelectOption[];
   placeholder?: string;
+  /**
+   * Set while the option list is still being fetched.
+   *
+   * Without this a picker whose options load asynchronously renders as a
+   * one-item list ("All categories") and then visibly grows — which reads as
+   * "there are no categories" rather than "still loading", and lets someone
+   * open the list before it is populated. Marking it busy appends a disabled
+   * "Loading…" row so the state is legible, and keeps the current value
+   * selectable so a filter restored from the URL is never cleared.
+   */
+  loadingOptions?: boolean;
 }
 
 export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, label, error, hint, options, placeholder, id, ...props }, ref) => {
+  (
+    { className, label, error, hint, options, placeholder, loadingOptions, id, ...props },
+    ref
+  ) => {
     // useId must be called UNCONDITIONALLY — `id ?? React.useId()` skips the
     // hook when an `id` prop is present, so a component that sometimes passes
     // one and sometimes doesn't changes its hook order between renders, which
@@ -62,6 +76,11 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
               {opt.label}
             </option>
           ))}
+          {loadingOptions && (
+            <option value="__loading__" disabled>
+              Loading…
+            </option>
+          )}
         </select>
 
         {error && <p className="text-xs text-destructive">{error}</p>}

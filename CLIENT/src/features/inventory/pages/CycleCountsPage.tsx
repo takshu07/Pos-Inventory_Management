@@ -16,8 +16,9 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui";
 import { useAuthStore } from "@/store/auth.store";
+import { useCategoryOptions } from "@/features/owner/products/hooks/useOwnerProducts";
 import { CycleCountStatusBadge, InventoryTableSkeleton } from "../components/InventoryAtoms";
-import { useCycleCounts, useStartCycleCount, useStock } from "../hooks/useInventory";
+import { useCycleCounts, useStartCycleCount } from "../hooks/useInventory";
 import { accuracyAccent, formatDateTime, formatNumber, formatPercent } from "../utils/format";
 import type { CycleCountStatus } from "../types";
 
@@ -47,16 +48,18 @@ export default function CycleCountsPage() {
     ...(status ? { status } : {}),
   });
 
-  // Category options come from the loaded stock rather than a lookup endpoint,
-  // so the list shows categories that actually have stock to count.
-  const { data: stock } = useStock({ page: 1, limit: 200 });
-  const categories = [
-    ...new Map(
-      (stock?.data ?? [])
-        .filter((r) => r.categoryId && r.categoryName)
-        .map((r) => [r.categoryId!, r.categoryName!])
-    ),
-  ].map(([id, label]) => ({ value: id, label }));
+  /**
+   * Category options come from the shared lookup, not from a page of stock rows.
+   *
+   * This previously fetched `useStock({page:1, limit:200})` purely to harvest
+   * distinct category names. That failed outright — the inventory `limit` is
+   * capped at 100, so the request 400'd and the picker was always empty — and
+   * even at a legal limit it would only have offered categories that happened to
+   * appear in the first page of stock. The lookup is cached app-wide and
+   * prefetched by the shell, so this also drops a 200-row query.
+   */
+  const { data: categoryOptions = [], isPending: categoriesPending } = useCategoryOptions();
+  const categories = categoryOptions.map((c) => ({ value: c.id, label: c.name }));
 
   const startCount = useStartCycleCount();
 
@@ -265,6 +268,7 @@ export default function CycleCountsPage() {
               options={[{ value: "", label: "Everything in stock" }, ...categories]}
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
+              loadingOptions={categoriesPending}
             />
             <span className="text-[11px] text-muted-foreground">
               Narrowing the scope keeps a count short enough to actually finish.
