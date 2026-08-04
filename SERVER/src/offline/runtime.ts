@@ -32,6 +32,7 @@ import {
 } from "./datasource/connectivity";
 import { closeLocalClient, prepareLocalDatabase } from "./datasource/localClient";
 import { getDataSourceMode } from "./datasource/router";
+import { installChangeCapture, repairCaptureFlag } from "./sync/changeCapture";
 
 // =============================================================================
 // STARTUP
@@ -67,6 +68,17 @@ export async function initializeOfflineRuntime(): Promise<void> {
   if (config.role === "edge") {
     // Fatal on purpose — see the failure policy above.
     await prepareLocalDatabase();
+
+    // Reinstalled on EVERY boot, not just the first. `db push` recreates tables
+    // and SQLite drops their triggers along with them, so a node that came up
+    // after a schema refresh would otherwise run all day capturing nothing —
+    // silently, with a perfectly healthy-looking queue of zero.
+    await installChangeCapture();
+
+    // A node found with capture disabled was interrupted mid-download. Repair
+    // it before serving, and log loudly: writes in that window went uncaptured.
+    await repairCaptureFlag();
+
     startConnectivityMonitor();
   }
 }

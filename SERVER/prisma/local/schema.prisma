@@ -3164,6 +3164,16 @@ model SyncNodeState {
 
   deviceId String
 
+  /// Read by every change-capture trigger. Cleared for the duration of a
+  /// download so that applying cloud rows locally does not queue them straight
+  /// back up as local changes (the echo loop).
+  ///
+  /// ⚠ May only be toggled INSIDE a transaction. SQLite's write lock is what
+  /// makes the suppression safe: with it held, no concurrent sale can slip
+  /// through while capture is off. Toggling it outside a transaction would
+  /// silently drop any write that landed in the gap.
+  captureEnabled Boolean @default(true)
+
   /// cloud | local — the datasource the router last resolved to.
   lastMode        String    @default("local")
   lastOnlineAt    DateTime?
