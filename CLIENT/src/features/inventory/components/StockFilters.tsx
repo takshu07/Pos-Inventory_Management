@@ -116,6 +116,7 @@ export function StockFilters({
   categories,
   brands,
   suppliers,
+  optionsLoading = false,
 }: {
   filters: InventoryFilterState;
   onChange: (patch: Partial<InventoryFilterState>) => void;
@@ -124,6 +125,8 @@ export function StockFilters({
   categories: Array<{ id: string; name: string }>;
   brands: Array<{ id: string; name: string }>;
   suppliers: Array<{ id: string; businessName: string }>;
+  /** True while the catalog lookups are in flight — see Select.loadingOptions. */
+  optionsLoading?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-end gap-2">
@@ -144,6 +147,7 @@ export function StockFilters({
         value={filters.categoryId}
         onChange={(e) => onChange({ categoryId: e.target.value })}
         aria-label="Filter by category"
+        loadingOptions={optionsLoading}
       />
 
       <Select
@@ -155,6 +159,7 @@ export function StockFilters({
         value={filters.brandId}
         onChange={(e) => onChange({ brandId: e.target.value })}
         aria-label="Filter by brand"
+        loadingOptions={optionsLoading}
       />
 
       <Select
@@ -166,6 +171,7 @@ export function StockFilters({
         value={filters.supplierId}
         onChange={(e) => onChange({ supplierId: e.target.value })}
         aria-label="Filter by supplier"
+        loadingOptions={optionsLoading}
       />
 
       <Select

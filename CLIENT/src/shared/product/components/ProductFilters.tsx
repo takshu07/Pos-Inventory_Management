@@ -41,6 +41,7 @@ export function ProductFilters({
   brands,
   showStatusFilter = false,
   hasActiveFilters = false,
+  optionsLoading = false,
 }: {
   filters: ProductFilterState;
   onChange: (patch: Partial<ProductFilterState>) => void;
@@ -49,6 +50,8 @@ export function ProductFilters({
   brands: FilterOption[];
   showStatusFilter?: boolean;
   hasActiveFilters?: boolean;
+  /** True while the category/brand lookups are in flight — see Select.loadingOptions. */
+  optionsLoading?: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -58,6 +61,7 @@ export function ProductFilters({
           options={[{ value: "", label: "All categories" }, ...categories.map((c) => ({ value: c.id, label: c.name }))]}
           value={filters.categoryId}
           onChange={(e) => onChange({ categoryId: e.target.value })}
+          loadingOptions={optionsLoading}
         />
       </div>
 
@@ -67,6 +71,7 @@ export function ProductFilters({
           options={[{ value: "", label: "All brands" }, ...brands.map((b) => ({ value: b.id, label: b.name }))]}
           value={filters.brandId}
           onChange={(e) => onChange({ brandId: e.target.value })}
+          loadingOptions={optionsLoading}
         />
       </div>
 

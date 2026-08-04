@@ -1,18 +1,24 @@
 /**
  * Stock Overview — the inventory module's main table.
  *
- * The filter dropdowns derive their options from the LOADED ROWS rather than
- * from separate lookup endpoints. That is a deliberate trade: it means the
- * lists show only categories/brands/suppliers that actually have stock (which
- * is what someone filtering inventory wants) and costs zero extra requests. A
- * dedicated lookup endpoint would list empty categories too.
+ * FILTER OPTIONS come from the shared catalog lookup endpoints, NOT from the
+ * loaded rows. Deriving them from the current page looked cheaper — no extra
+ * request, and the lists only showed things that actually have stock — but it
+ * broke the filters in two ways: an option vanished from the dropdown as soon
+ * as you paged past the rows that produced it (including the one you had
+ * selected), and a category whose items were all on some other page could not
+ * be selected at all. A filter's option list has to describe the whole
+ * catalogue, not the current page of it. The lookups are cached app-wide and
+ * prefetched by the shell, so this costs nothing on a warm cache.
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
 import { PackageSearch } from "lucide-react";
 
 import { EmptyState, ErrorState, Pagination } from "@/components/ui";
+import { useCategoryOptions, useBrandOptions } from "@/features/owner/products/hooks/useOwnerProducts";
+import { useSupplierOptions } from "@/features/procurement/hooks/useProcurement";
 import { AdjustStockDialog } from "../components/AdjustStockDialog";
 import { InventoryDrawer } from "../components/InventoryDrawer";
 import { InventoryExportMenu } from "../components/InventoryExportMenu";
@@ -49,29 +55,11 @@ export default function StockOverviewPage() {
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  /**
-   * Options derived from what is on screen, de-duplicated by id.
-   *
-   * Recomputed per page rather than accumulated, so the lists always describe
-   * the current result set instead of growing stale as the user pages around.
-   */
-  const { categories, brands, suppliers } = useMemo(() => {
-    const cat = new Map<string, string>();
-    const brd = new Map<string, string>();
-    const sup = new Map<string, string>();
-
-    for (const row of rows) {
-      if (row.categoryId && row.categoryName) cat.set(row.categoryId, row.categoryName);
-      if (row.brandId && row.brandName) brd.set(row.brandId, row.brandName);
-      if (row.supplierId && row.supplierName) sup.set(row.supplierId, row.supplierName);
-    }
-
-    return {
-      categories: [...cat].map(([id, name]) => ({ id, name })),
-      brands: [...brd].map(([id, name]) => ({ id, name })),
-      suppliers: [...sup].map(([id, businessName]) => ({ id, businessName })),
-    };
-  }, [rows]);
+  // Catalogue-wide filter options — see the note at the top of this file.
+  const { data: categories = [], isPending: categoriesPending } = useCategoryOptions();
+  const { data: brands = [], isPending: brandsPending } = useBrandOptions();
+  const { data: suppliers = [], isPending: suppliersPending } = useSupplierOptions();
+  const optionsLoading = categoriesPending || brandsPending || suppliersPending;
 
   const openDrawer = (row: StockRow) => {
     setSelected(row);
@@ -132,6 +120,7 @@ export default function StockOverviewPage() {
           categories={categories}
           brands={brands}
           suppliers={suppliers}
+          optionsLoading={optionsLoading}
         />
       </div>
 

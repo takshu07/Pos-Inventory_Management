@@ -54,6 +54,18 @@ export async function listBrands(query: ListBrandsQuery) {
   return response;
 }
 
+/**
+ * Every active brand, unpaginated — the picker projection.
+ *
+ * Dropdowns must show the WHOLE list; paging a filter dropdown silently hides
+ * options past the page size, which reads as missing data rather than as
+ * pagination. This mirrors `categoryRepository.findOptions()` and deliberately
+ * skips `withStats` — a picker needs id and name, not sales rollups.
+ */
+export async function getBrandOptions() {
+  return brandRepository.findOptions();
+}
+
 export async function getBrandById(id: string) {
   const brand = await brandRepository.findById(id);
 

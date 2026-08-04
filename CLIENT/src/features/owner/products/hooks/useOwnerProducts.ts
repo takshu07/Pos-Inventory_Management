@@ -171,9 +171,17 @@ export function useSupplierOptions() {
 // ── Category & brand options (reuse existing catalog endpoints) ────────────────
 // These power the create/edit form and filter dropdowns. We deliberately reuse
 // the existing /categories and /brands modules rather than duplicating them.
+//
+// ⚠ Use the `/options` endpoints, NOT the paginated list endpoints. The lists
+// cap at `limit=100` and page 1, so a store with more than 100 categories would
+// silently lose the rest from every dropdown. `/options` is the purpose-built
+// unpaginated id+name projection and already excludes archived/inactive rows —
+// so no `isActive` filter is passed here either. (Category has no `isActive`
+// query param at all; it uses a `status` enum, and the old `isActive=true` was
+// being stripped by Zod and doing nothing.)
 
 async function fetchOptions(path: string): Promise<FilterOption[]> {
-  const res = await apiClient.get<any>(path, { params: { isActive: "true", limit: 100 } });
+  const res = await apiClient.get<any>(path);
   const rows = res.data?.data ?? res.data ?? [];
   return rows.map((r: { id: string; name: string }) => ({ id: r.id, name: r.name }));
 }
@@ -181,7 +189,7 @@ async function fetchOptions(path: string): Promise<FilterOption[]> {
 export function useCategoryOptions() {
   return useQuery({
     queryKey: ["catalog-options", "categories"],
-    queryFn: () => fetchOptions("/categories"),
+    queryFn: () => fetchOptions("/categories/options"),
     staleTime: 1000 * 60 * 5,
   });
 }
@@ -189,7 +197,7 @@ export function useCategoryOptions() {
 export function useBrandOptions() {
   return useQuery({
     queryKey: ["catalog-options", "brands"],
-    queryFn: () => fetchOptions("/brands"),
+    queryFn: () => fetchOptions("/brands/options"),
     staleTime: 1000 * 60 * 5,
   });
 }
