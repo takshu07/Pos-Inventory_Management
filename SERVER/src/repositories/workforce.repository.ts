@@ -264,13 +264,17 @@ async function findOpenSessions(employeeIds: string[]) {
       ipAddress: string | null;
     }>
   >`
-    SELECT DISTINCT ON ("employeeId")
-      "employeeId", "loginAt", "logoutAt", "lastSeenAt", "device", "browser", "ipAddress"
-    FROM "login_history"
-    WHERE "employeeId" IN (${Prisma.join(employeeIds)})
-      AND "isSuccessful" = true
-      AND "logoutAt" IS NULL
-    ORDER BY "employeeId", "loginAt" DESC
+    SELECT "employeeId", "loginAt", "logoutAt", "lastSeenAt", "device", "browser", "ipAddress"
+    FROM (
+      SELECT
+        "employeeId", "loginAt", "logoutAt", "lastSeenAt", "device", "browser", "ipAddress",
+        ROW_NUMBER() OVER (PARTITION BY "employeeId" ORDER BY "loginAt" DESC) AS rn
+      FROM "login_history"
+      WHERE "employeeId" IN (${Prisma.join(employeeIds)})
+        AND "isSuccessful" = true
+        AND "logoutAt" IS NULL
+    ) ranked
+    WHERE rn = 1
   `;
 }
 
@@ -509,11 +513,15 @@ async function findLastActivity(employeeIds: string[]) {
       createdAt: Date;
     }>
   >`
-    SELECT DISTINCT ON ("employeeId")
-      "employeeId", "actionType", "module", "description", "createdAt"
-    FROM "employee_actions"
-    WHERE "employeeId" IN (${Prisma.join(employeeIds)})
-    ORDER BY "employeeId", "createdAt" DESC
+    SELECT "employeeId", "actionType", "module", "description", "createdAt"
+    FROM (
+      SELECT
+        "employeeId", "actionType", "module", "description", "createdAt",
+        ROW_NUMBER() OVER (PARTITION BY "employeeId" ORDER BY "createdAt" DESC) AS rn
+      FROM "employee_actions"
+      WHERE "employeeId" IN (${Prisma.join(employeeIds)})
+    ) ranked
+    WHERE rn = 1
   `;
 }
 
@@ -799,13 +807,15 @@ async function topCategoryByEmployee(
   return prisma.$queryRaw<
     Array<{ employeeId: string; categoryName: string | null; units: bigint }>
   >`
-    SELECT DISTINCT ON (t."employeeId")
-      t."employeeId", t."categoryName", t."units"
+    SELECT t."employeeId", t."categoryName", t."units"
     FROM (
       SELECT
         s."employeeId",
         c."name" AS "categoryName",
-        SUM(si."quantity")::bigint AS units
+        SUM(si."quantity")::bigint AS units,
+        ROW_NUMBER() OVER (
+          PARTITION BY s."employeeId" ORDER BY SUM(si."quantity") DESC
+        ) AS rn
       FROM "sales" s
       INNER JOIN "sale_items"       si ON si."saleId"    = s."id"
       INNER JOIN "product_variants" pv ON pv."id"        = si."variantId"
@@ -817,7 +827,7 @@ async function topCategoryByEmployee(
         AND s."saleDate" <= ${dateTo}
       GROUP BY s."employeeId", c."name"
     ) t
-    ORDER BY t."employeeId", t."units" DESC
+    WHERE t.rn = 1
   `;
 }
 
@@ -1068,7 +1078,7 @@ async function loginSecurityStats(params: {
   presenceThresholdMinutes: number;
 }) {
   const scope = params.employeeIds?.length
-    ? Prisma.sql`AND lh."employeeId" = ANY(${params.employeeIds}::text[])`
+    ? Prisma.sql`AND lh."employeeId" IN (${Prisma.join(params.employeeIds)})`
     : Prisma.empty;
 
   const cutoff = new Date(Date.now() - params.presenceThresholdMinutes * 60_000);
@@ -1133,7 +1143,7 @@ async function failedLoginAttempts(params: {
   limit: number;
 }) {
   const scope = params.employeeIds?.length
-    ? Prisma.sql`AND lh."employeeId" = ANY(${params.employeeIds}::text[])`
+    ? Prisma.sql`AND lh."employeeId" IN (${Prisma.join(params.employeeIds)})`
     : Prisma.empty;
 
   return prisma.$queryRaw<

@@ -390,15 +390,29 @@ async function findMovements(filters: {
 async function findLastMovements(variantIds: string[]) {
   if (variantIds.length === 0) return [];
 
-  // DISTINCT ON returns the newest row per variant in one index-ordered pass.
+  // ROW_NUMBER() picks the newest row per variant in one index-ordered pass.
+  //
+  // This was `SELECT DISTINCT ON (m."variantId")`, which is Postgres-only. The
+  // window-function form is equivalent, uses the same index, and runs on BOTH
+  // Postgres and SQLite — so the offline path shares this query rather than
+  // maintaining a second copy of it. Likewise `= ANY(${ids}::text[])` became
+  // `IN (…)`: SQLite cannot bind an array parameter, and Prisma.join expands to
+  // placeholders both engines accept. The empty case is handled by the guard
+  // above, which matters because Prisma.join([]) would emit `IN ()`.
   return prisma.$queryRaw<
     Array<{ variantId: string; type: MovementType; createdAt: Date; quantityChanged: number }>
   >`
-    SELECT DISTINCT ON (m."variantId")
-      m."variantId", m."type", m."createdAt", m."quantityChanged"
-    FROM "inventory_movements" m
-    WHERE m."variantId" = ANY(${variantIds}::text[])
-    ORDER BY m."variantId", m."createdAt" DESC
+    SELECT "variantId", "type", "createdAt", "quantityChanged"
+    FROM (
+      SELECT
+        m."variantId", m."type", m."createdAt", m."quantityChanged",
+        ROW_NUMBER() OVER (
+          PARTITION BY m."variantId" ORDER BY m."createdAt" DESC
+        ) AS rn
+      FROM "inventory_movements" m
+      WHERE m."variantId" IN (${Prisma.join(variantIds)})
+    ) ranked
+    WHERE rn = 1
   `;
 }
 
@@ -451,7 +465,7 @@ async function salesVelocity(variantIds: string[], dateFrom: Date, dateTo: Date)
       COALESCE(SUM(si."quantity" * si."sellingPrice"), 0)::float    AS revenue
     FROM "sale_items" si
     INNER JOIN "sales" s ON s."id" = si."saleId"
-    WHERE si."variantId" = ANY(${variantIds}::text[])
+    WHERE si."variantId" IN (${Prisma.join(variantIds)})
       AND s."status" = 'COMPLETED'
       AND s."saleDate" >= ${dateFrom}
       AND s."saleDate" <= ${dateTo}
@@ -470,7 +484,7 @@ async function lastSaleDates(variantIds: string[]) {
     SELECT si."variantId", MAX(s."saleDate") AS "lastSaleAt"
     FROM "sale_items" si
     INNER JOIN "sales" s ON s."id" = si."saleId"
-    WHERE si."variantId" = ANY(${variantIds}::text[])
+    WHERE si."variantId" IN (${Prisma.join(variantIds)})
       AND s."status" = 'COMPLETED'
     GROUP BY si."variantId"
   `;

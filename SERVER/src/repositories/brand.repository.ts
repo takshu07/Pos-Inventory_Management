@@ -1,4 +1,4 @@
-import type { Prisma } from "../../generated/prisma";
+import { Prisma } from "../../generated/prisma";
 import { prisma } from "../config/prisma";
 import type { ListBrandsQuery } from "../validation/catalog.validation";
 
@@ -36,6 +36,15 @@ export const brandRepository = {
     ]);
 
     return { total, data };
+  },
+
+  /** Active brands only, id+name, unpaginated — the picker projection. */
+  async findOptions() {
+    return prisma.brand.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
   },
 
   async findById(id: string) {
@@ -145,7 +154,7 @@ export const brandRepository = {
           WHERE p."brandId" = b."id" AND p."isActive" = TRUE
         ) AS "stockValue"
       FROM "brands" b
-      WHERE b."id" = ANY(${brandIds})
+      WHERE b."id" IN (${Prisma.join(brandIds)})
     `;
   },
 

@@ -29,6 +29,7 @@ import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
 import { PrismaClient as LocalPrismaClient } from "../../../generated/local-prisma";
 import { logger } from "../../config/logger";
 import { offlineConfig } from "../config";
+import { rawSqlBridgeExtension } from "./rawSqlBridge";
 import { scalarListBridgeExtension } from "./scalarListBridge";
 
 // =============================================================================
@@ -123,7 +124,12 @@ function buildLocalClient(databasePath: string) {
     },
   });
 
-  return base.$extends(scalarListBridgeExtension);
+  // Order is not arbitrary. Prisma applies extensions outermost-last, and these
+  // two never see the same call: the scalar-list bridge handles MODEL
+  // operations, the raw bridge handles $queryRaw/$executeRaw. Keeping them as
+  // separate extensions rather than one combined handler means each stays
+  // readable and independently testable.
+  return base.$extends(scalarListBridgeExtension).$extends(rawSqlBridgeExtension);
 }
 
 // =============================================================================
