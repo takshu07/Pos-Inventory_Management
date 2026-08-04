@@ -73,6 +73,15 @@ out/
 *.sqlite3
 *.db-journal
 
+# Offline-first: generated local (SQLite) client and the edge node's database.
+# prisma/local/schema.prisma and manifest.json ARE committed — they are the
+# reviewable contract between the two databases and CI diffs them for drift.
+/generated/local-prisma
+/data/
+*.db-wal
+*.db-shm
+scratch/localtest/
+
 # Uploads / user generated content
 uploads/
 public/uploads/

@@ -1,0 +1,6874 @@
+{
+  "generatedFrom": "prisma/schema.prisma",
+  "sourceHash": "f3b11c141d0a02b86234b165119a54921c70bc9124d6d7df0caf1011987948e6",
+  "enums": [
+    "ActionModule",
+    "ActionType",
+    "AdjustmentReason",
+    "AdjustmentStatus",
+    "ApprovalStatus",
+    "AssetStatus",
+    "AssetVisibility",
+    "AttendanceSource",
+    "AttendanceStatus",
+    "BarcodeSymbology",
+    "CashTransactionType",
+    "CategoryStatus",
+    "CycleCountStatus",
+    "DiscountHistoryAction",
+    "DiscountRuleScope",
+    "DiscountRuleType",
+    "DiscountStatus",
+    "DiscountType",
+    "EmployeeNoteCategory",
+    "EmployeeRole",
+    "EmploymentStatus",
+    "ExchangeStatus",
+    "Gender",
+    "LabelTemplateKind",
+    "LeaveStatus",
+    "LeaveType",
+    "MovementType",
+    "PaymentMethod",
+    "PaymentStatus",
+    "PayoutCategory",
+    "PrintJobItemStatus",
+    "PrintJobStatus",
+    "PrintOutputMode",
+    "PrintSourceModule",
+    "PrinterConnectionType",
+    "PrinterDriverType",
+    "PrinterStatus",
+    "ProductStatus",
+    "PurchaseStatus",
+    "ReferenceType",
+    "RegisterActivityType",
+    "RegisterStatus",
+    "ReservationStatus",
+    "ReservationType",
+    "ReturnCondition",
+    "SalaryAdjustmentType",
+    "SalaryPaymentStatus",
+    "SaleStatus",
+    "SupplierPaymentStatus"
+  ],
+  "models": [
+    {
+      "name": "Size",
+      "table": "sizes",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sortOrder",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Color",
+      "table": "colors",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "hexCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Category",
+      "table": "categories",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "imageUrl",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "displayOrder",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "CategoryStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "searchKeywords",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "parentId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "path",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "level",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "archivedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Brand",
+      "table": "brands",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "logoUrl",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Employee",
+      "table": "employees",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeCode",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "firstName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "lastName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "email",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "phone",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "password",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "role",
+          "type": "EmployeeRole",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "gender",
+          "type": "Gender",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "address",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "salary",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "joiningDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "dateOfBirth",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "lastLogin",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "refreshTokenVersion",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "photoUrl",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employmentStatus",
+          "type": "EmploymentStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "emergencyContactName",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "emergencyContactPhone",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "emergencyContactRelation",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "shiftId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exitDate",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "assignedRegister",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "monthlyTarget",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Shift",
+      "table": "shifts",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "code",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "startMinute",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "endMinute",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "breakMinutes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "graceMinutes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "expectedMinutes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "workingDays",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": true,
+          "isEnum": false
+        },
+        {
+          "name": "colorHex",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Attendance",
+      "table": "attendance",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "date",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "clockInAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "clockOutAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "shiftId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "shiftStartMinute",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "shiftEndMinute",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "AttendanceStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "source",
+          "type": "AttendanceSource",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "workedMinutes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "lateMinutes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "earlyExitMinutes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "overtimeMinutes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "breakMinutes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "breakStartedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "markedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "LeaveRequest",
+      "table": "leave_requests",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "LeaveType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "status",
+          "type": "LeaveStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "startDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "endDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalDays",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reviewedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reviewedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reviewerNotes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "EmployeeNote",
+      "table": "employee_notes",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "authorId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "category",
+          "type": "EmployeeNoteCategory",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "body",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isPinned",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Supplier",
+      "table": "suppliers",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "businessName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "contactPerson",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "phone",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "email",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "address",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Product",
+      "table": "products",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "categoryId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "brandId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "imageUrls",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": true,
+          "isEnum": false
+        },
+        {
+          "name": "searchKeywords",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "ProductStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "gender",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "season",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "collectionName",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "fabricMaterial",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sleeveType",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "neckType",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "fit",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "pattern",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "occasion",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "hsnCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "gstRate",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "ProductVariant",
+      "table": "product_variants",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "productId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sizeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "colorId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sku",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "barcode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "costPrice",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sellingPrice",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "mrp",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "currentStock",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reorderLevel",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "maximumStock",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "weight",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "imageUrl",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "lengthCm",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "widthCm",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "heightCm",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "warehouse",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "rack",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "shelf",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "bin",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "shelfLocation",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "discountAllowed",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "maxDiscountPct",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "defaultDiscountType",
+          "type": "DiscountRuleType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "defaultDiscountValue",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isManualPricing",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "appliedRuleId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "priceComputedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "supplierId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "supplierSku",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "leadTimeDays",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "InventoryMovement",
+      "table": "inventory_movements",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "MovementType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "quantityChanged",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "stockBefore",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "stockAfter",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceNumber",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "relatedPurchaseId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "relatedSaleId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "relatedExchangeId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "InventoryReservation",
+      "table": "inventory_reservations",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "ReservationType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "status",
+          "type": "ReservationStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "heldFor",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "expiresAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "releasedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "releasedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "StockAdjustment",
+      "table": "stock_adjustments",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "quantityChange",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "stockAtRequest",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "AdjustmentReason",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "AdjustmentStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "requestedById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reviewedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reviewedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reviewNotes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "movementId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "CycleCount",
+      "table": "cycle_counts",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reference",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "CycleCountStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "categoryId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "brandId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "supplierId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "startedById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "completedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "startedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "completedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalItems",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "countedItems",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "varianceItems",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "netVariance",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "CycleCountItem",
+      "table": "cycle_count_items",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "cycleCountId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "expectedQuantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "countedQuantity",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variance",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "countedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "countedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "DamagedStock",
+      "table": "damaged_stock",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "movementId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isWrittenOff",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "writtenOffAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reportedById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reportedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "InventorySnapshot",
+      "table": "inventory_snapshots",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "snapshotDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "stockValue",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "retailValue",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "averageCost",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Purchase",
+      "table": "purchases",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "purchaseNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "supplierInvoiceNumber",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "supplierId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "purchaseDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "subtotal",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "discountAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "taxAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "PurchaseStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paidAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "dueAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paymentStatus",
+          "type": "SupplierPaymentStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "receivedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "dueDate",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "PurchaseItem",
+      "table": "purchase_items",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "purchaseId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "costPrice",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sellingPriceAtPurchase",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalPrice",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "receivedQuantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Customer",
+      "table": "customers",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerCode",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isWalkIn",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "phone",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "email",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "gender",
+          "type": "Gender",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "dateOfBirth",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "anniversary",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "rewardPoints",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCredit",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "CustomerAddress",
+      "table": "customer_addresses",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "addressLine1",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "addressLine2",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "city",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "state",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "pincode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isDefault",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Sale",
+      "table": "sales",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "saleNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "idempotencyKey",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "saleDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "subtotal",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "discountAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "manualDiscountAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "manualDiscountReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "taxAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "roundOffAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "grandTotal",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paidAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "dueAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "couponId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "SaleStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "SaleItem",
+      "table": "sale_items",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "saleId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "productName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sizeName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "colorName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sku",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "barcode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sellingPrice",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "mrp",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "taxRate",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "taxAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "discountAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "costAtSale",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalPrice",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Payment",
+      "table": "payments",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "saleId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "method",
+          "type": "PaymentMethod",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "amount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "transactionRef",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "PaymentStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "paidAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Invoice",
+      "table": "invoices",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "saleId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "invoiceNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "invoiceDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerName",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerPhone",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerAddress",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "invoiceData",
+          "type": "Json",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "pdfUrl",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Exchange",
+      "table": "exchanges",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "originalSaleId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "returnedValue",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "issuedValue",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "priceDifference",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "ExchangeStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "ExchangeReturnItem",
+      "table": "exchange_return_items",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "condition",
+          "type": "ReturnCondition",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "priceAtSale",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalValue",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "ExchangeIssuedItem",
+      "table": "exchange_issued_items",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "quantity",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sellingPrice",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalValue",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "ExpenseCategory",
+      "table": "expense_categories",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "code",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "displayOrder",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isRecurring",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Expense",
+      "table": "expenses",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "expenseCode",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "categoryId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "amount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "vendorName",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paymentMethod",
+          "type": "PaymentMethod",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "referenceNumber",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "expenseDate",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "approvalStatus",
+          "type": "ApprovalStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "approvedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "approvedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "rejectionReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "receiptAssetId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "CashRegister",
+      "table": "cash_registers",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "RegisterStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "openedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "closedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sessionNumber",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "openingBalance",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "closingBalance",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "expectedBalance",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "countedCash",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "difference",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "discrepancyReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "denominations",
+          "type": "Json",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "cashSales",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "upiSales",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "cardSales",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "otherSales",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "splitSales",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "refundTotal",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeTotal",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "discountTotal",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "cashDropTotal",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "cashPayoutTotal",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "transactionCount",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "durationMinutes",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "openedById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "closedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reconciledById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reconciledAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reconcileNotes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "CashDrop",
+      "table": "cash_drops",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "dropNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "amount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "destination",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceNumber",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "witnessedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "CashPayout",
+      "table": "cash_payouts",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "payoutNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "category",
+          "type": "PayoutCategory",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "amount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "payeeName",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "receiptAssetId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "approvalStatus",
+          "type": "ApprovalStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "approvedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "approvedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "rejectionReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "expenseId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "RegisterActivity",
+      "table": "register_activities",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "RegisterActivityType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "amount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "balanceAfter",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceType",
+          "type": "ReferenceType",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "referenceId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "SupplierPayment",
+      "table": "supplier_payments",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paymentNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "supplierId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "purchaseId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "amount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paymentMethod",
+          "type": "PaymentMethod",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "referenceNumber",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paidAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "SalaryPayment",
+      "table": "salary_payments",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paymentNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "periodYear",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "periodMonth",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "baseSalary",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalBonus",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalOvertime",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalIncentive",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalAdvance",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalDeduction",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "netPayable",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paidAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "dueAmount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "SalaryPaymentStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "paymentMethod",
+          "type": "PaymentMethod",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "paidAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceNumber",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notes",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "paidById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "SalaryAdjustment",
+      "table": "salary_adjustments",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "salaryPaymentId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "SalaryAdjustmentType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "amount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "CashTransaction",
+      "table": "cash_transactions",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "registerId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "CashTransactionType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "amount",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceType",
+          "type": "ReferenceType",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "DiscountRule",
+      "table": "discount_rules",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "scope",
+          "type": "DiscountRuleScope",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "type",
+          "type": "DiscountRuleType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "value",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "productId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "categoryId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "brandId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "priority",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "startDate",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "endDate",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isEnabled",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "DiscountHistory",
+      "table": "discount_history",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "ruleId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "ruleName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "action",
+          "type": "DiscountHistoryAction",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "oldData",
+          "type": "Json",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "newData",
+          "type": "Json",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Coupon",
+      "table": "coupons",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "code",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "DiscountType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "value",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "minimumPurchase",
+          "type": "Decimal",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "usageLimit",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "usageCount",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "expiryDate",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "table": "settings",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "version",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "currency",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "timeZone",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "invoiceConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "pricingConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "promotionConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "inventoryConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "customerConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "securityConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reportingConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "notificationConfig",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Notification",
+      "table": "notifications",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "type",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "title",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "message",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isRead",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceType",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "targetUserId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "targetRole",
+          "type": "EmployeeRole",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Asset",
+      "table": "assets",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "originalName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storedName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storagePath",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "provider",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "contentType",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sizeBytes",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "checksum",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "visibility",
+          "type": "AssetVisibility",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "status",
+          "type": "AssetStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "ownerModule",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "ownerEntityId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "uploadedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Promotion",
+      "table": "promotions",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "priority",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isExclusive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "conditions",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "actions",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "startDate",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "endDate",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "AuditLog",
+      "table": "audit_logs",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "action",
+          "type": "ActionType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "module",
+          "type": "ActionModule",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "tableName",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "recordId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "oldData",
+          "type": "Json",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "newData",
+          "type": "Json",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "EmployeeAction",
+      "table": "employee_actions",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "actionType",
+          "type": "ActionType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "module",
+          "type": "ActionModule",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "referenceType",
+          "type": "ReferenceType",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "referenceId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "LoginHistory",
+      "table": "login_history",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "employeeId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "loginAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "logoutAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "device",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "browser",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "ipAddress",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isSuccessful",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "userAgent",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "operatingSystem",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "terminatedById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "lastSeenAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "durationMinutes",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "endReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "failureReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "LabelTemplate",
+      "table": "label_templates",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "code",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "description",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "kind",
+          "type": "LabelTemplateKind",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "widthMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "heightMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "marginTopMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "marginRightMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "marginBottomMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "marginLeftMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "elements",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "barcodeSymbology",
+          "type": "BarcodeSymbology",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "rotation",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isSystem",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "usageCount",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdById",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "Printer",
+      "table": "printers",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "name",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "code",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "connection",
+          "type": "PrinterConnectionType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "driver",
+          "type": "PrinterDriverType",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "status",
+          "type": "PrinterStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "host",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "port",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "devicePath",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "vendorId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "productId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "endpointUrl",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "location",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "dpi",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "defaultWidthMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "defaultHeightMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "darkness",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "printSpeed",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isDefault",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "isActive",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "lastSeenAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "lastErrorAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "lastErrorText",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "PrintJob",
+      "table": "print_jobs",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "jobNumber",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "printerId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "templateId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "requestedById",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "status",
+          "type": "PrintJobStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "source",
+          "type": "PrintSourceModule",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "output",
+          "type": "PrintOutputMode",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "reason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalLabels",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "totalCopies",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "options",
+          "type": "Json",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "attempts",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "maxAttempts",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "claimedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "claimedBy",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "startedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "completedAt",
+          "type": "DateTime",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "durationMs",
+          "type": "Int",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "failureReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "reprintOfId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "PrintJobItem",
+      "table": "print_job_items",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "jobId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "variantId",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "copies",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "templateId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "barcodeValue",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "barcodeSymbology",
+          "type": "BarcodeSymbology",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "status",
+          "type": "PrintJobItemStatus",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "failureReason",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "sortOrder",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    },
+    {
+      "name": "PrinterSetting",
+      "table": "printer_settings",
+      "primaryKey": "id",
+      "columns": [
+        {
+          "name": "id",
+          "type": "String",
+          "isOptional": false,
+          "isId": true,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCode",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "terminalId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "defaultPrinterId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "defaultTemplateId",
+          "type": "String",
+          "isOptional": true,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "defaultCopies",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "defaultWidthMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "defaultHeightMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "marginTopMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "marginRightMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "marginBottomMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "marginLeftMm",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "orientation",
+          "type": "String",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "darkness",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "printSpeed",
+          "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "barcodeSymbology",
+          "type": "BarcodeSymbology",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "showPreviewBeforePrint",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "printAfterProductCreate",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "printAfterPurchase",
+          "type": "Boolean",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "outputMode",
+          "type": "PrintOutputMode",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": true
+        },
+        {
+          "name": "createdAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "updatedAt",
+          "type": "DateTime",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        }
+      ]
+    }
+  ],
+  "scalarListFields": {
+    "Shift": [
+      "workingDays"
+    ],
+    "Product": [
+      "imageUrls"
+    ]
+  }
+}

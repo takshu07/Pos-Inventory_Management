@@ -1,0 +1,3179 @@
+// ===========================================================================
+// GENERATED FILE — DO NOT EDIT
+//
+// Produced by scripts/generate-local-schema.ts from prisma/schema.prisma.
+// Edit the Postgres schema and re-run `npm run db:local:generate`.
+//
+// This is the OFFLINE MIRROR: the same models, relations and constraints as
+// the cloud database, expressed for SQLite. Business rules are identical by
+// construction because both sides are generated from one source.
+// ===========================================================================
+
+// =============================================================================
+// GENERATOR & DATASOURCE
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../../generated/local-prisma"
+}
+
+datasource db {
+  provider   = "sqlite"
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum EmployeeRole {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MovementType {
+  PURCHASE
+  SALE
+  EXCHANGE_IN
+  EXCHANGE_OUT
+  SUPPLIER_RETURN
+  MANUAL_ADJUSTMENT
+  DAMAGED
+  LOST
+  OPENING_STOCK
+}
+
+/// Discount arithmetic shared by Coupon and the catalog pricing engine.
+enum DiscountType {
+  PERCENTAGE
+  FLAT
+}
+
+// ── Catalog pricing (DiscountRule) ──────────────────────────────────────────
+// These drive the CATALOG pricing layer: what a single item's shelf price is.
+// They are deliberately separate from `Promotion`, which is the BASKET layer
+// (min-spend offers, BOGO, coupons) evaluated at checkout. See
+// engines/catalogPricing.engine.ts for the resolution ladder.
+
+/// What a DiscountRule targets. BRAND is declared now so the resolution ladder,
+/// validation union and UI selector are complete; the engine's brand branch is
+/// not implemented yet and rejects BRAND rules at the service layer.
+enum DiscountRuleScope {
+  PRODUCT
+  CATEGORY
+  BRAND
+}
+
+/// PERCENTAGE and FLAT are implemented. BOGO/BUNDLE/TIERED are declared so that
+/// adding them later needs no migration — the engine throws NOT_IMPLEMENTED.
+enum DiscountRuleType {
+  PERCENTAGE
+  FLAT
+  BOGO
+  BUNDLE
+  TIERED
+}
+
+/// NEVER stored. Derived at query time from (isEnabled, startDate, endDate) so
+/// discounts activate and expire on a clock with no cron job. Modelled as an
+/// enum purely so the API response and the client share one vocabulary.
+enum DiscountStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  EXPIRED
+  DISABLED
+}
+
+/// Append-only audit trail actions for DiscountHistory.
+enum DiscountHistoryAction {
+  CREATED
+  UPDATED
+  ENABLED
+  DISABLED
+  DELETED
+}
+
+enum PurchaseStatus {
+  DRAFT
+  ORDERED
+  RECEIVED
+  CANCELLED
+  PARTIAL
+}
+
+enum SaleStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+  EXCHANGED
+  PARTIAL
+  REFUNDED
+}
+
+enum ExchangeStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum ReturnCondition {
+  GOOD
+  DAMAGED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  CREDIT
+  GIFT_CARD
+  OTHER
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  REFUNDED
+  FAILED
+}
+
+enum ActionModule {
+  PRODUCT
+  VARIANT
+  CATEGORY
+  BRAND
+  SUPPLIER
+  PURCHASE
+  SALE
+  EXCHANGE
+  INVENTORY
+  CUSTOMER
+  EMPLOYEE
+  DISCOUNT
+  COUPON
+  EXPENSE
+  SETTINGS
+  AUTH
+  ASSET
+  // Label Management & Printing Engine. Every print/preview/PDF/template/
+  // printer/settings action is audited under this module.
+  LABEL
+  PRINTER
+  // ── Finance, Cash Register & Reporting ─────────────────────────────────────
+  // FINANCE is the money-movement module (revenue, P&L, cash flow). CASH_REGISTER
+  // is the drawer/shift module. They are separate so a drawer discrepancy can be
+  // audited without wading through every expense approval, and vice versa.
+  FINANCE
+  CASH_REGISTER
+  SUPPLIER_PAYMENT
+  SALARY
+  REPORT
+}
+
+enum ActionType {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  LOGOUT
+  SALE_COMPLETE
+  PURCHASE_RECEIVE
+  EXCHANGE_COMPLETE
+  INVENTORY_ADJUST
+  PRINT_INVOICE
+  // ── Label Engine audit actions ─────────────────────────────────────────────
+  // The spec requires each of these to be independently recorded so the audit
+  // trail distinguishes "looked at a label" from "consumed physical media".
+  LABEL_PREVIEW_GENERATED
+  LABEL_PDF_GENERATED
+  LABEL_PRINT_STARTED
+  LABEL_PRINT_COMPLETED
+  LABEL_PRINT_FAILED
+  LABEL_REPRINTED
+  PRINTER_CHANGED
+  LABEL_TEMPLATE_CHANGED
+  PRINTER_SETTINGS_CHANGED
+  // ── Workforce Management audit actions ─────────────────────────────────────
+  // The Workforce module reuses AuditLog/EmployeeAction rather than keeping its
+  // own activity table; these values are what make that reuse expressive enough
+  // to render a timeline and a security trail.
+  PASSWORD_RESET
+  ROLE_CHANGED
+  PERMISSION_CHANGED
+  EMPLOYEE_DEACTIVATED
+  EMPLOYEE_REACTIVATED
+  CLOCK_IN
+  CLOCK_OUT
+  ATTENDANCE_ADJUSTED
+  SHIFT_ASSIGNED
+  LEAVE_REQUESTED
+  LEAVE_REVIEWED
+  // ── Cash Register audit actions ────────────────────────────────────────────
+  // Each drawer event is its own action rather than a generic UPDATE, because
+  // "who took cash out of the till" is the question an audit actually asks, and
+  // answering it must not require parsing a JSON diff.
+  REGISTER_OPENED
+  REGISTER_CLOSED
+  REGISTER_RECONCILED
+  CASH_DROP_RECORDED
+  CASH_PAYOUT_RECORDED
+  // ── Finance audit actions ──────────────────────────────────────────────────
+  EXPENSE_APPROVED
+  EXPENSE_REJECTED
+  SUPPLIER_PAYMENT_RECORDED
+  SALARY_PAID
+  SALARY_ADJUSTED
+  // ── Reporting ──────────────────────────────────────────────────────────────
+  // Exporting a financial report moves data OUT of the system, so it is an
+  // audited event in its own right.
+  REPORT_EXPORTED
+}
+
+/// Identifies the entity type that an EmployeeAction record refers to.
+/// Used together with referenceId to pinpoint the exact affected record.
+enum ReferenceType {
+  PRODUCT
+  PRODUCT_VARIANT
+  CATEGORY
+  BRAND
+  SUPPLIER
+  PURCHASE
+  SALE
+  EXCHANGE
+  CUSTOMER
+  INVENTORY
+  DISCOUNT
+  COUPON
+  EXPENSE
+  SETTINGS
+  CASH_TRANSACTION
+  ASSET
+  LABEL_TEMPLATE
+  PRINTER
+  PRINT_JOB
+  // Workforce entities — lets an EmployeeAction point at the exact attendance
+  // row, shift or leave request it concerns.
+  EMPLOYEE
+  ATTENDANCE
+  SHIFT
+  LEAVE_REQUEST
+  // Finance & Cash Register entities.
+  CASH_REGISTER
+  CASH_DROP
+  CASH_PAYOUT
+  SUPPLIER_PAYMENT
+  SALARY_PAYMENT
+  SALARY_ADJUSTMENT
+}
+
+enum CashTransactionType {
+  CASH_IN
+  CASH_OUT
+}
+
+enum RegisterStatus {
+  OPEN
+  CLOSED
+  /// Closed and signed off by an owner/manager after review. A RECONCILED
+  /// session is frozen: the shift summary it produced can never change, which
+  /// is what makes yesterday's cash position a fact rather than a live query.
+  RECONCILED
+}
+
+// =============================================================================
+// FINANCE & CASH REGISTER ENUMS
+// =============================================================================
+
+/// What a cash payout was spent on. An enum rather than free text so the expense
+/// report can group by category in SQL instead of parsing prose typed by a
+/// cashier at 9pm.
+enum PayoutCategory {
+  TEA
+  COURIER
+  PACKAGING
+  CLEANING
+  TRANSPORT
+  STATIONERY
+  MAINTENANCE
+  UTILITIES
+  STAFF_WELFARE
+  MISCELLANEOUS
+}
+
+/// Every discrete thing that happened during a shift, in one timeline.
+///
+/// This exists because a shift summary alone cannot answer "when did the drawer
+/// go wrong". Sales, refunds, drops and payouts each already live in their own
+/// table; RegisterActivity is the ordered, denormalised narrative that ties them
+/// to one session so the timeline is ONE indexed read rather than a five-way
+/// union sorted in application memory.
+enum RegisterActivityType {
+  OPENED
+  SALE
+  REFUND
+  EXCHANGE
+  CASH_DROP
+  CASH_PAYOUT
+  EXPENSE
+  ADJUSTMENT
+  NOTE
+  CLOSED
+  RECONCILED
+}
+
+/// Shared approval lifecycle for expenses and payouts.
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Settlement state of a supplier bill (a Purchase).
+/// DERIVED from paidAmount vs totalAmount by the finance engine and STORED, so
+/// the outstanding-payables query is an indexed filter rather than a full scan
+/// with arithmetic. OVERDUE additionally depends on the clock, so it is
+/// recomputed whenever a bill is read or a payment lands.
+enum SupplierPaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+/// Settlement state of one employee's salary for one pay period.
+enum SalaryPaymentStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+/// A line item that moves an employee's net payable up or down.
+/// ADVANCE is negative at settlement time (already handed over), BONUS and
+/// OVERTIME positive, DEDUCTION negative. Storing the type rather than a signed
+/// amount alone is what lets the payslip itemise instead of showing one net figure.
+enum SalaryAdjustmentType {
+  ADVANCE
+  BONUS
+  OVERTIME
+  INCENTIVE
+  DEDUCTION
+  REIMBURSEMENT
+}
+
+// =============================================================================
+// LOOKUP TABLES
+// =============================================================================
+
+model Size {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants ProductVariant[]
+
+  @@index([sortOrder])
+  @@map("sizes")
+}
+
+model Color {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  hexCode   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variants ProductVariant[]
+
+  @@map("colors")
+}
+
+// =============================================================================
+// CATEGORY & BRAND
+// =============================================================================
+
+/// Lifecycle of a master-catalog category.
+/// ARCHIVED is a soft, reversible retirement — the row and its product links
+/// survive, it simply leaves the active catalog. Deletion is separate and is
+/// blocked while products remain attached (see category.service safe delete).
+enum CategoryStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+model Category {
+  id           String  @id @default(cuid())
+  name         String  @unique
+  description  String?
+  imageUrl     String?
+  displayOrder Int     @default(0)
+
+  /// Legacy boolean kept in lockstep with `status` (ACTIVE <-> true) so the
+  /// existing Product/POS/pricing queries that filter on isActive keep working
+  /// untouched. `status` is the source of truth; the service writes both.
+  isActive Boolean @default(true)
+
+  /// Phase 1 lifecycle. Replaces the isActive boolean as the modelling primitive
+  /// without breaking the readers listed above.
+  status CategoryStatus @default(ACTIVE)
+
+  /// Free-text synonyms powering search ("tees, tshirt, half sleeve"). Indexed
+  /// with the same trigram strategy as Product.searchKeywords.
+  searchKeywords String?
+
+  // ── Hierarchy (Phase 3 — schema-ready, intentionally not yet exposed) ───────
+  // Adjacency list + a denormalised `path`/`level` so a subtree can be fetched
+  // in ONE indexed query instead of a recursive walk. Nothing in Phase 1/2 sets
+  // these; they exist so nesting ships as a feature, not a migration.
+  parentId String?
+  /// Materialised ancestor path, e.g. "/men/shirts". Root categories: "/<slug>".
+  path     String?
+  /// Depth from root. 0 for a root category.
+  level    Int     @default(0)
+
+  // ── Audit attribution (Phase 1 "Created By" column) ────────────────────────
+  createdById String?
+  updatedById String?
+
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products      Product[]
+  discountRules DiscountRule[]
+
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryHierarchy")
+
+  createdBy Employee? @relation("CategoryCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy Employee? @relation("CategoryUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  @@index([name])
+  @@index([displayOrder])
+  @@index([status])
+  @@index([parentId])
+  @@index([path])
+  @@index([createdAt])
+  // [local] trigram index omitted (Postgres-only): @@index([searchKeywords(ops: raw("gin_trgm_ops"))], type: Gin, map: "categories_searchkeywords_trgm_idx")
+  // [local] trigram index omitted (Postgres-only): @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "categories_name_trgm_idx")
+  @@map("categories")
+}
+
+model Brand {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  logoUrl     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  products      Product[]
+  discountRules DiscountRule[]
+
+  @@index([name])
+  @@map("brands")
+}
+
+// =============================================================================
+// EMPLOYEE
+// =============================================================================
+
+/// Employment lifecycle, distinct from `isActive` (which is a login switch).
+/// A SUSPENDED employee still exists in the roster and keeps their history;
+/// TERMINATED is the retired state. Kept separate from `isActive` so HR status
+/// and system access can diverge (e.g. on notice period but still logging in).
+enum EmploymentStatus {
+  ACTIVE
+  PROBATION
+  ON_LEAVE
+  SUSPENDED
+  TERMINATED
+}
+
+model Employee {
+  id                  String       @id @default(cuid())
+  employeeCode        String       @unique
+  firstName           String
+  lastName            String
+  email               String?      @unique
+  phone               String       @unique
+  password            String
+  role                EmployeeRole
+  gender              Gender?
+  address             String?
+  salary              Decimal?
+  joiningDate         DateTime
+  dateOfBirth         DateTime?
+  isActive            Boolean      @default(true)
+  lastLogin           DateTime?
+  // Incremented on every password change or explicit "logout all devices" action.
+  // Access tokens carry this version; a mismatch means the token is invalidated
+  // without storing individual refresh tokens in the database.
+  refreshTokenVersion Int          @default(0)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  // ── Workforce Management extensions ────────────────────────────────────────
+  // Added by the Workforce module. Every field is nullable/defaulted so existing
+  // rows and every existing query keep working untouched.
+
+  /// Profile photo. Stored as an Asset id or URL — the Asset engine owns bytes.
+  photoUrl String?
+
+  /// HR-facing employment lifecycle. See EmploymentStatus.
+  employmentStatus EmploymentStatus @default(ACTIVE)
+
+  /// Emergency contact (drawer Overview tab).
+  emergencyContactName     String?
+  emergencyContactPhone    String?
+  emergencyContactRelation String?
+
+  /// Assigned working shift. Nullable = no shift assigned; attendance then
+  /// records hours without late/early evaluation.
+  shiftId String?
+
+  /// Multi-store readiness. NULL = the single default store. Every workforce
+  /// query already filters on this column so adding stores later is data, not
+  /// a migration + rewrite.
+  storeCode String?
+
+  /// Denormalised termination date, for tenure reporting after TERMINATED.
+  exitDate DateTime?
+
+  /// The till this employee normally works. A free-text code rather than a FK
+  /// to CashRegister: a CashRegister row is one OPENING SESSION of a till, not
+  /// the till itself, so a FK would bind an employee to a single shift's drawer
+  /// rather than to the physical counter.
+  assignedRegister String?
+
+  /// Monthly revenue target — the denominator of Target Achievement and the
+  /// revenue term of the performance score. NULL means "no target set" and MUST
+  /// render as such: showing 0% would read as total failure rather than as an
+  /// unconfigured value.
+  monthlyTarget Decimal?
+
+  purchases          Purchase[]
+  sales              Sale[]
+  inventoryMovements InventoryMovement[]
+  expenses           Expense[]
+  exchanges          Exchange[]
+  auditLogs          AuditLog[]
+  employeeActions    EmployeeAction[]
+  loginHistory       LoginHistory[]
+  openedRegisters    CashRegister[]      @relation("OpenedRegisters")
+  closedRegisters    CashRegister[]      @relation("ClosedRegisters")
+  cashTransactions   CashTransaction[]
+  assetsUploaded     Asset[]
+  categoriesCreated  Category[]          @relation("CategoryCreatedBy")
+  categoriesUpdated  Category[]          @relation("CategoryUpdatedBy")
+  labelTemplates     LabelTemplate[]     @relation("LabelTemplateCreatedBy")
+  printJobs          PrintJob[]          @relation("PrintJobRequestedBy")
+
+  shift            Shift?             @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  attendance       Attendance[]
+  attendanceMarked Attendance[]       @relation("AttendanceMarkedBy")
+  leaveRequests    LeaveRequest[]     @relation("LeaveRequestedBy")
+  leavesReviewed   LeaveRequest[]     @relation("LeaveReviewedBy")
+  notes            EmployeeNote[]     @relation("NoteSubject")
+  notesAuthored    EmployeeNote[]     @relation("NoteAuthor")
+
+  // ── Finance, Cash Register & Payroll ───────────────────────────────────────
+  reconciledRegisters CashRegister[]     @relation("ReconciledRegisters")
+  cashDrops           CashDrop[]         @relation("CashDropBy")
+  cashDropsWitnessed  CashDrop[]         @relation("CashDropWitness")
+  cashPayouts         CashPayout[]       @relation("CashPayoutBy")
+  cashPayoutsApproved CashPayout[]       @relation("CashPayoutApprover")
+  registerActivities  RegisterActivity[] @relation("RegisterActivityBy")
+  expensesApproved    Expense[]          @relation("ExpenseApprover")
+  supplierPayments    SupplierPayment[]  @relation("SupplierPaymentBy")
+  salaryPayments      SalaryPayment[]    @relation("SalaryOf")
+  salariesCreated     SalaryPayment[]    @relation("SalaryCreatedBy")
+  salariesPaid        SalaryPayment[]    @relation("SalaryPaidBy")
+  salaryAdjustments   SalaryAdjustment[] @relation("SalaryAdjustmentBy")
+
+  // ── Inventory module ───────────────────────────────────────────────────────
+  reservationsCreated  InventoryReservation[] @relation("ReservationCreatedBy")
+  reservationsReleased InventoryReservation[] @relation("ReservationReleasedBy")
+  adjustmentsRequested StockAdjustment[]      @relation("AdjustmentRequestedBy")
+  adjustmentsReviewed  StockAdjustment[]      @relation("AdjustmentReviewedBy")
+  cycleCountsStarted   CycleCount[]           @relation("CycleCountStartedBy")
+  cycleCountsCompleted CycleCount[]           @relation("CycleCountCompletedBy")
+  cycleCountItems      CycleCountItem[]       @relation("CycleCountItemCountedBy")
+  damageReports        DamagedStock[]         @relation("DamageReportedBy")
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  // Workforce roster hot path: active staff of a given role within a store.
+  @@index([role, isActive], map: "employees_role_isactive_idx")
+  @@index([employmentStatus])
+  @@index([storeCode])
+  @@index([shiftId])
+  @@map("employees")
+}
+
+// =============================================================================
+// WORKFORCE — SHIFTS, ATTENDANCE, LEAVE
+//
+// These three models are the only NEW workforce tables. Everything else the
+// Workforce module shows (activity, login history, sales performance) is read
+// from EmployeeAction, LoginHistory, AuditLog and Sale — no duplication.
+//
+// Design rules encoded here:
+//   1. Attendance is one row per employee per calendar day. The unique
+//      constraint makes clock-in idempotent and makes "did X work today?" a
+//      single indexed lookup rather than a scan over punch events.
+//   2. Late/early/overtime are DERIVED at write time from the Shift snapshot
+//      and stored, because the shift definition can change later and history
+//      must not silently rewrite itself.
+//   3. Shift is a first-class table so shift SCHEDULING (rosters, rotations)
+//      can be added later as rows referencing it, with no redesign.
+// =============================================================================
+
+/// A named working window, e.g. "Morning 09:00–18:00".
+/// Times are stored as minutes-from-midnight integers in the store timezone
+/// rather than DateTime, because a shift is a recurring wall-clock rule, not an
+/// instant. This sidesteps every DST/date-arithmetic bug in comparisons.
+model Shift {
+  id   String @id @default(cuid())
+  name String @unique
+  code String @unique
+
+  /// Minutes from midnight. 540 = 09:00. An overnight shift is expressed as
+  /// endMinute <= startMinute (e.g. 22:00→06:00) and handled by the engine.
+  startMinute Int
+  endMinute   Int
+
+  /// Unpaid break minutes deducted from worked hours.
+  breakMinutes Int @default(0)
+
+  /// Minutes after startMinute before an arrival counts as LATE.
+  graceMinutes Int @default(10)
+
+  /// Expected paid hours — drives the attendance percentage denominator.
+  /// Derived from start/end/break at creation, stored so history is stable.
+  expectedMinutes Int @default(480)
+
+  /// Days of week this shift runs. 0=Sunday … 6=Saturday.
+  workingDays String @default("[1,2,3,4,5,6]")  // [local] JSON-encoded Int[]
+
+  colorHex String?
+  isActive Boolean @default(true)
+
+  /// Multi-store readiness — NULL = applies to the default store.
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employees  Employee[]
+  attendance Attendance[]
+
+  @@index([isActive])
+  @@index([storeCode])
+  @@map("shifts")
+}
+
+/// Why an attendance day is marked the way it is. Derived by the engine on
+/// clock-out (or by the absence sweeper), never typed by hand.
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  HALF_DAY
+  ABSENT
+  ON_LEAVE
+  HOLIDAY
+  WEEK_OFF
+}
+
+/// How the attendance record was produced. BIOMETRIC and GEO_FENCE are declared
+/// now so a future biometric/geofenced clock-in is a new source value plus a
+/// driver — not a schema migration.
+enum AttendanceSource {
+  SYSTEM
+  MANUAL
+  LOGIN_DERIVED
+  BIOMETRIC
+  GEO_FENCE
+}
+
+/// One row per employee per working day.
+model Attendance {
+  id         String @id @default(cuid())
+  employeeId String
+
+  /// The calendar day this record belongs to, normalised to UTC midnight of the
+  /// store-local date. Together with employeeId it is UNIQUE — that constraint
+  /// is what makes clock-in idempotent and the daily rollups cheap.
+  date DateTime
+
+  clockInAt  DateTime?
+  clockOutAt DateTime?
+
+  /// Snapshot of the shift that applied on this day. Kept even if the employee
+  /// is later moved to another shift, so history stays truthful.
+  shiftId          String?
+  shiftStartMinute Int?
+  shiftEndMinute   Int?
+
+  status AttendanceStatus @default(PRESENT)
+  source AttendanceSource @default(SYSTEM)
+
+  /// DERIVED at clock-out and stored. Recomputing these from the shift table
+  /// later would rewrite history when a shift definition changes.
+  workedMinutes    Int @default(0)
+  lateMinutes      Int @default(0)
+  earlyExitMinutes Int @default(0)
+  overtimeMinutes  Int @default(0)
+
+  /// ── Break tracking ────────────────────────────────────────────────────────
+  /// Actual break taken, as opposed to the shift's nominal `breakMinutes`
+  /// allowance. `breakStartedAt` is non-null only while a break is OPEN, which
+  /// is what makes "on break" a derived state rather than a stored flag that
+  /// can desync. On break-end the elapsed minutes are added to breakMinutes and
+  /// breakStartedAt is cleared.
+  breakMinutes   Int       @default(0)
+  breakStartedAt DateTime?
+
+  notes String?
+
+  /// Set when an OWNER manually created or corrected the record.
+  markedById String?
+
+  /// Multi-store readiness.
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift    Shift?    @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  markedBy Employee? @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: SetNull)
+
+  /// One attendance row per employee per day — the module's core invariant.
+  @@unique([employeeId, date])
+  /// The two hot reads: one employee's history newest-first, and "everyone on
+  /// date D" for the daily attendance board.
+  @@index([employeeId, date(sort: Desc)], map: "attendance_employeeid_date_idx")
+  @@index([date, status], map: "attendance_date_status_idx")
+  @@index([status])
+  @@index([storeCode])
+  @@map("attendance")
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  PAID
+  UNPAID
+  COMP_OFF
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// Leave requests. Present now so the Attendance module can mark ON_LEAVE days
+/// from an authoritative source; the request/approval UI is a later phase that
+/// needs no schema change.
+model LeaveRequest {
+  id         String @id @default(cuid())
+  employeeId String
+
+  type      LeaveType
+  status    LeaveStatus @default(PENDING)
+  startDate DateTime
+  endDate   DateTime
+  /// Whole days requested, precomputed so reports never re-walk the range.
+  totalDays Int         @default(1)
+
+  reason         String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  reviewerNotes  String?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee   Employee  @relation("LeaveRequestedBy", fields: [employeeId], references: [id], onDelete: Cascade)
+  reviewedBy Employee? @relation("LeaveReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([employeeId, startDate(sort: Desc)], map: "leave_requests_employeeid_startdate_idx")
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("leave_requests")
+}
+
+/// Internal HR notes about an employee ("Excellent performer", "Written
+/// warning"). OWNER-ONLY at every layer: the service refuses to read or write
+/// these for any other role, so a manager cannot see notes written about them
+/// or about their peers. There is deliberately no "visibility" column — a
+/// per-note flag would invite a bug that leaks one; the whole table is private.
+enum EmployeeNoteCategory {
+  GENERAL
+  PRAISE
+  TRAINING
+  PROMOTION
+  WARNING
+}
+
+model EmployeeNote {
+  id String @id @default(cuid())
+
+  /// Who the note is ABOUT.
+  employeeId String
+  /// Who WROTE it. Always an OWNER at write time; kept as a FK so a later
+  /// ownership transfer still shows who authored the note.
+  authorId String
+
+  category EmployeeNoteCategory @default(GENERAL)
+  body     String
+
+  /// Pins a note to the top of the drawer tab — used for the one thing about
+  /// this employee a reader must not miss.
+  isPinned Boolean @default(false)
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation("NoteSubject", fields: [employeeId], references: [id], onDelete: Cascade)
+  author   Employee @relation("NoteAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  /// The drawer's Notes tab: one employee's notes, pinned first then newest.
+  @@index([employeeId, isPinned, createdAt(sort: Desc)], map: "employee_notes_employeeid_pinned_createdat_idx")
+  @@index([category])
+  @@map("employee_notes")
+}
+
+// =============================================================================
+// SUPPLIER
+// =============================================================================
+
+model Supplier {
+  id            String   @id @default(cuid())
+  businessName  String
+  contactPerson String?
+  phone         String   @unique
+  email         String?
+  address       String?
+  notes         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  purchases Purchase[]
+  variants  ProductVariant[]
+  payments  SupplierPayment[]
+
+  @@index([businessName])
+  @@index([phone])
+  @@map("suppliers")
+}
+
+// =============================================================================
+// PRODUCT & PRODUCT VARIANT
+// =============================================================================
+
+// Lifecycle status for a catalog item. DRAFT products are created by the wizard
+// but not yet sellable; ACTIVE are live; INACTIVE are temporarily hidden;
+// ARCHIVED are retired but retained for history. `isActive` is kept in sync
+// (ACTIVE => true, everything else => false) so existing queries that filter on
+// isActive continue to work unchanged.
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+model Product {
+  id             String        @id @default(cuid())
+  name           String
+  description    String?
+  categoryId     String
+  brandId        String?
+  imageUrls String @default("[]")  // [local] JSON-encoded String[]
+  // Free-text synonyms for cashier search (e.g. "polo collar tee").
+  // Stored as String — full-text indexing (GIN/tsvector) must be added via
+  // raw SQL migration when needed. A standard B-tree index on this field
+  // is useless for partial-text search, so no @@index here.
+  searchKeywords String?
+  status         ProductStatus @default(ACTIVE)
+  isActive       Boolean       @default(true)
+
+  // ── Clothing-retail attributes (product-level, not per-variant) ────────────
+  // Optional descriptive traits captured once for the whole product. Variants
+  // differ only by size/color; these traits describe the garment itself.
+  gender         String?
+  season         String?
+  collectionName String? // "collection" is reserved-ish; stored as collectionName
+  fabricMaterial String?
+  sleeveType     String?
+  neckType       String?
+  fit            String?
+  pattern        String?
+  occasion       String?
+  hsnCode        String?
+  gstRate        Decimal?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  category      Category         @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  brand         Brand?           @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  variants      ProductVariant[]
+  discountRules DiscountRule[]
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status])
+  // Trigram GIN indexes for cashier partial-text product search.
+  // [local] trigram index omitted (Postgres-only): @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
+  // [local] trigram index omitted (Postgres-only): @@index([searchKeywords(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_searchkeywords_trgm_idx")
+  @@map("products")
+}
+
+model ProductVariant {
+  id           String   @id @default(cuid())
+  productId    String
+  sizeId       String
+  colorId      String
+  sku          String   @unique
+  barcode      String?  @unique
+  // Cached value for display convenience — the authoritative cost history
+  // is in PurchaseItem.costPrice. Updated by the application on each purchase.
+  costPrice    Decimal
+  // DERIVED — DO NOT WRITE DIRECTLY.
+  // sellingPrice is a cache of the catalog pricing engine's output
+  // (mrp − effective discount). The ONLY writer is
+  // services/effectivePrice.service.ts. Every other path (owner pricing edit,
+  // variant create/update, wizard create, purchase receipt) must go through it.
+  // Reads are safe everywhere; the value is kept fresh on every price-affecting
+  // mutation, and checkout re-resolves live so an expired rule can never charge
+  // a stale price. Follows the same cache pattern already used by costPrice.
+  sellingPrice Decimal
+  mrp          Decimal
+  // Never edit currentStock directly — always go through InventoryMovement.
+  currentStock Int      @default(0)
+  reorderLevel Int? // Low-stock alert threshold
+  maximumStock Int? // Overstock alert threshold
+  weight       Decimal?
+  imageUrl     String?
+  isActive     Boolean  @default(true)
+
+  // ── Physical dimensions (cm) ───────────────────────────────────────────────
+  lengthCm Decimal?
+  widthCm  Decimal?
+  heightCm Decimal?
+
+  // ── Storage location ───────────────────────────────────────────────────────
+  warehouse     String?
+  rack          String?
+  shelf         String?
+  bin           String?
+  shelfLocation String? // free-text convenience label ("A-12-3")
+
+  // ── Pricing rules ──────────────────────────────────────────────────────────
+  discountAllowed Boolean  @default(true)
+  maxDiscountPct  Decimal?
+
+  // ── Default (base) discount — the bottom rung of the pricing ladder ────────
+  // Applied when no DiscountRule targets this variant's product/category/brand.
+  // sellingPrice = mrp − (this discount), computed by the pricing engine.
+  defaultDiscountType  DiscountRuleType @default(PERCENTAGE)
+  defaultDiscountValue Decimal          @default(0)
+  // When true the owner typed an explicit selling price and the engine
+  // back-solved defaultDiscount* from it, rather than deriving price from
+  // discount. Both directions keep mrp/discount/sellingPrice consistent.
+  isManualPricing      Boolean          @default(false)
+  // Diagnostics for the derived cache: which rule last won (null = the variant
+  // default won, or no discount), and when sellingPrice was last recomputed.
+  appliedRuleId        String?
+  priceComputedAt      DateTime?
+
+  // ── Supplier link (per variant; nullable) ─────────────────────────────────
+  supplierId   String?
+  supplierSku  String?
+  leadTimeDays Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product  Product   @relation(fields: [productId], references: [id], onDelete: Restrict)
+  size     Size      @relation(fields: [sizeId], references: [id], onDelete: Restrict)
+  color    Color     @relation(fields: [colorId], references: [id], onDelete: Restrict)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  inventoryMovements  InventoryMovement[]
+  purchaseItems       PurchaseItem[]
+  saleItems           SaleItem[]
+  exchangeReturnItems ExchangeReturnItem[]
+  exchangeIssuedItems ExchangeIssuedItem[]
+  printJobItems       PrintJobItem[]
+  reservations        InventoryReservation[]
+  stockAdjustments    StockAdjustment[]
+  cycleCountItems     CycleCountItem[]
+  damagedStock        DamagedStock[]
+  inventorySnapshots  InventorySnapshot[]
+
+  @@unique([productId, sizeId, colorId])
+  // sku and barcode have @unique above — PostgreSQL automatically creates
+  // a unique index for them. Explicit @@index would be redundant.
+  @@index([productId])
+  @@index([isActive])
+  // Trigram GIN indexes for partial sku/barcode search (exact lookups still use
+  // the unique b-tree indexes created by @unique).
+  // [local] trigram index omitted (Postgres-only): @@index([sku(ops: raw("gin_trgm_ops"))], type: Gin, map: "product_variants_sku_trgm_idx")
+  // [local] trigram index omitted (Postgres-only): @@index([barcode(ops: raw("gin_trgm_ops"))], type: Gin, map: "product_variants_barcode_trgm_idx")
+  @@map("product_variants")
+}
+
+// =============================================================================
+// INVENTORY MOVEMENT
+// =============================================================================
+
+model InventoryMovement {
+  id                String       @id @default(cuid())
+  variantId         String
+  type              MovementType
+  quantityChanged   Int
+  stockBefore       Int
+  stockAfter        Int
+  reason            String?
+  // Human-readable reference for UI display (e.g. "PO-2024-0012", "INV-00150").
+  // Avoids a join when showing stock history to a manager.
+  referenceNumber   String?
+  employeeId        String
+  relatedPurchaseId String?
+  relatedSaleId     String?
+  relatedExchangeId String?
+  createdAt         DateTime     @default(now())
+
+  variant         ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  relatedPurchase Purchase?      @relation(fields: [relatedPurchaseId], references: [id], onDelete: Restrict)
+  relatedSale     Sale?          @relation(fields: [relatedSaleId], references: [id], onDelete: Restrict)
+  relatedExchange Exchange?      @relation(fields: [relatedExchangeId], references: [id], onDelete: Restrict)
+
+  /// Back-links from the records that CAUSED this movement. Both optional:
+  /// most movements (a sale, a purchase receipt) have neither.
+  stockAdjustment StockAdjustment?
+  damagedStock    DamagedStock?
+
+  @@index([variantId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([relatedPurchaseId])
+  @@index([relatedSaleId])
+  @@index([relatedExchangeId])
+  @@map("inventory_movements")
+}
+
+// =============================================================================
+// INVENTORY — RESERVATIONS, ADJUSTMENTS, COUNTS, DAMAGE, SNAPSHOTS
+//
+// Additive to the existing ledger. The invariant that already holds — that
+// ProductVariant.currentStock is written ONLY by executeMovement() — is
+// preserved: nothing below writes stock directly. Reservations sit BESIDE
+// stock rather than inside it, so `currentStock` continues to mean "physically
+// present", which is what a cycle counter walking the floor actually counts.
+// =============================================================================
+
+/// Why a quantity is being held back from sale.
+enum ReservationType {
+  /// Held for an in-progress exchange (goods promised to a customer).
+  EXCHANGE
+  /// Held for a named customer (a hold / layaway).
+  CUSTOMER_HOLD
+  /// Held for a future or online order awaiting fulfilment.
+  ORDER
+  /// Held by staff for any other reason; requires a note.
+  OTHER
+}
+
+enum ReservationStatus {
+  ACTIVE
+  /// The goods were handed over — the reservation converted into a sale.
+  FULFILLED
+  /// Released back to available stock, manually or by expiry.
+  RELEASED
+  EXPIRED
+}
+
+/// A quantity of a variant held back from sale without leaving the shelf.
+///
+/// Availability is DERIVED: available = currentStock − Σ(ACTIVE reservations).
+/// It is never stored, because a stored copy is a second source of truth that
+/// drifts the moment a reservation expires without anything recalculating it.
+model InventoryReservation {
+  id        String @id @default(cuid())
+  variantId String
+
+  quantity Int
+  type     ReservationType
+  status   ReservationStatus @default(ACTIVE)
+
+  /// Who or what the stock is held for. Free-text so a hold can name a walk-in
+  /// customer who has no Customer record yet.
+  heldFor   String?
+  /// Set when the hold is for a known customer.
+  customerId String?
+  /// Set when the hold belongs to an exchange in progress.
+  exchangeId String?
+
+  reason String?
+
+  /// ACTIVE reservations past this instant are treated as expired by the
+  /// availability query, so a forgotten hold cannot sterilise stock forever.
+  expiresAt DateTime?
+
+  createdById String
+  releasedById String?
+  releasedAt   DateTime?
+
+  /// Multi-store readiness — NULL = the single default store.
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  createdBy  Employee       @relation("ReservationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  releasedBy Employee?      @relation("ReservationReleasedBy", fields: [releasedById], references: [id], onDelete: SetNull)
+  customer   Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  /// THE availability query: active holds for a set of variants. Partial index
+  /// because released and fulfilled rows are history and never sum into
+  /// availability, yet will eventually outnumber active ones many times over.
+  @@index([variantId, status], map: "inventory_reservations_variant_status_idx")
+  @@index([status, expiresAt], map: "inventory_reservations_expiry_idx")
+  @@index([customerId])
+  @@index([exchangeId])
+  @@map("inventory_reservations")
+}
+
+/// Why stock was manually corrected. Stored as an enum rather than free text so
+/// the Adjustment Report can group by reason without parsing prose.
+enum AdjustmentReason {
+  DAMAGE
+  LOST
+  THEFT
+  MISCOUNT
+  SUPPLIER_ERROR
+  SYSTEM_CORRECTION
+  EXPIRED
+  OTHER
+}
+
+enum AdjustmentStatus {
+  /// A manager raised it; it changes no stock until an owner approves.
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// A manual stock correction, with approval.
+///
+/// The APPROVAL is the point of this table. A manager may request a correction
+/// but not perform one, so the request must exist as a durable record before it
+/// touches stock. Only on approval is executeMovement() called — which is why
+/// `movementId` is nullable: a pending or rejected adjustment never moved
+/// anything, and pretending otherwise would corrupt the ledger.
+model StockAdjustment {
+  id        String @id @default(cuid())
+  variantId String
+
+  /// Signed delta. Negative removes stock.
+  quantityChange Int
+  /// Snapshot at request time, so a stale request is detectable on approval.
+  stockAtRequest Int
+
+  reason AdjustmentReason
+  /// Required by validation when reason is OTHER.
+  notes  String?
+
+  status AdjustmentStatus @default(PENDING)
+
+  requestedById String
+  reviewedById  String?
+  reviewedAt    DateTime?
+  reviewNotes   String?
+
+  /// The ledger entry this adjustment produced. NULL until approved — the
+  /// ledger is only written when stock actually moves.
+  movementId String? @unique
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variant     ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  requestedBy Employee           @relation("AdjustmentRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy  Employee?          @relation("AdjustmentReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  movement    InventoryMovement? @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  /// The approval queue: pending first, newest first.
+  @@index([status, createdAt(sort: Desc)], map: "stock_adjustments_status_createdat_idx")
+  @@index([variantId])
+  @@index([requestedById])
+  @@map("stock_adjustments")
+}
+
+enum CycleCountStatus {
+  IN_PROGRESS
+  /// Counted and posted — variances became adjustments.
+  COMPLETED
+  CANCELLED
+}
+
+/// A stock-take session.
+///
+/// Scoped by category/brand/supplier rather than counting everything, because a
+/// full count of a retail catalogue is a day's work nobody does; partial counts
+/// that actually happen are worth more than a complete one that does not.
+model CycleCount {
+  id          String @id @default(cuid())
+  /// Human reference, e.g. "CC-2026-0007".
+  reference   String @unique
+  name        String?
+
+  status CycleCountStatus @default(IN_PROGRESS)
+
+  /// Scope filters captured at start, so the session is reproducible.
+  categoryId String?
+  brandId    String?
+  supplierId String?
+
+  startedById  String
+  completedById String?
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  /// Rollups written at completion so the list does not aggregate items on read.
+  totalItems     Int @default(0)
+  countedItems   Int @default(0)
+  varianceItems  Int @default(0)
+  /// Net units of variance, signed. Separate from the absolute count above
+  /// because +5 and −5 cancelling to 0 hides two real errors.
+  netVariance    Int @default(0)
+
+  notes String?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  startedBy   Employee         @relation("CycleCountStartedBy", fields: [startedById], references: [id], onDelete: Restrict)
+  completedBy Employee?        @relation("CycleCountCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  items       CycleCountItem[]
+
+  @@index([status, startedAt(sort: Desc)], map: "cycle_counts_status_startedat_idx")
+  @@map("cycle_counts")
+}
+
+/// One variant within a count session.
+model CycleCountItem {
+  id           String @id @default(cuid())
+  cycleCountId String
+  variantId    String
+
+  /// System stock at the moment the line was added — NOT read at completion.
+  /// Freezing it is what makes the variance attributable to the count rather
+  /// than to sales that happened while counting.
+  expectedQuantity Int
+  /// NULL until physically counted, which is what distinguishes "not yet
+  /// counted" from "counted as zero" — two very different findings.
+  countedQuantity  Int?
+
+  /// counted − expected, stored at count time.
+  variance Int?
+
+  notes String?
+
+  countedById String?
+  countedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cycleCount CycleCount     @relation(fields: [cycleCountId], references: [id], onDelete: Cascade)
+  variant    ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  countedBy  Employee?      @relation("CycleCountItemCountedBy", fields: [countedById], references: [id], onDelete: SetNull)
+
+  /// One line per variant per session — makes scanning the same barcode twice
+  /// an update rather than a duplicate line.
+  @@unique([cycleCountId, variantId])
+  @@index([variantId])
+  @@map("cycle_count_items")
+}
+
+/// Damaged goods, recorded separately from the stock deduction.
+///
+/// Per the agreed model, damage DEDUCTS from currentStock (it is not sellable)
+/// via a DAMAGED movement, and ALSO writes a row here carrying the reason and
+/// reporter. Without this table, "damaged stock" could only be reconstructed by
+/// parsing movement reason strings.
+model DamagedStock {
+  id        String @id @default(cuid())
+  variantId String
+
+  quantity Int
+  reason   String
+
+  /// The DAMAGED ledger entry that removed the goods from sellable stock.
+  movementId String? @unique
+
+  /// Whether the loss has been written off / disposed of, for reconciliation.
+  isWrittenOff Boolean   @default(false)
+  writtenOffAt DateTime?
+
+  reportedById String
+  reportedAt   DateTime @default(now())
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  variant    ProductVariant     @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  reportedBy Employee           @relation("DamageReportedBy", fields: [reportedById], references: [id], onDelete: Restrict)
+  movement   InventoryMovement? @relation(fields: [movementId], references: [id], onDelete: SetNull)
+
+  @@index([variantId])
+  @@index([reportedAt(sort: Desc)], map: "damaged_stock_reportedat_idx")
+  @@map("damaged_stock")
+}
+
+/// A point-in-time record of inventory value, for trend charts and audit.
+///
+/// Valuation is otherwise only knowable for RIGHT NOW: cost prices are a
+/// moving average that gets overwritten on each purchase, so yesterday's
+/// inventory value is NOT recoverable by replaying the ledger. Snapshotting is
+/// the only honest way to draw a value-over-time chart.
+model InventorySnapshot {
+  id String @id @default(cuid())
+
+  /// UTC midnight of the store-local day. With variantId this is UNIQUE, which
+  /// makes the daily job idempotent.
+  snapshotDate DateTime
+
+  /// NULL = a whole-inventory rollup row for that day. Non-null = per-variant.
+  /// Both live here so the trend chart reads one table.
+  variantId String?
+
+  quantity      Int
+  /// quantity × costPrice at snapshot time.
+  stockValue    Decimal
+  /// quantity × sellingPrice at snapshot time.
+  retailValue   Decimal
+  /// Moving-average cost used, kept so the row is self-explaining later.
+  averageCost   Decimal?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  /// Idempotency for the daily job, and the primary read path for trends.
+  @@unique([snapshotDate, variantId])
+  @@index([snapshotDate(sort: Desc)], map: "inventory_snapshots_date_idx")
+  @@map("inventory_snapshots")
+}
+
+// =============================================================================
+// PURCHASE & PURCHASE ITEMS
+// =============================================================================
+
+model Purchase {
+  id                    String         @id @default(cuid())
+  purchaseNumber        String         @unique
+  supplierInvoiceNumber String?
+  supplierId            String
+  employeeId            String
+  purchaseDate          DateTime       @default(now())
+  subtotal              Decimal
+  discountAmount        Decimal        @default(0)
+  taxAmount             Decimal        @default(0)
+  totalAmount           Decimal
+  notes                 String?
+  status                PurchaseStatus @default(DRAFT)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  // ── Payables (Finance module) ──────────────────────────────────────────────
+  // A Purchase IS the supplier bill; these columns make it a settleable one.
+  // paidAmount/dueAmount are maintained transactionally by the finance service
+  // alongside every SupplierPayment insert, so "outstanding payables" is a SUM
+  // over an indexed column rather than a correlated subquery per supplier.
+  paidAmount    Decimal               @default(0)
+  dueAmount     Decimal               @default(0)
+  paymentStatus SupplierPaymentStatus @default(UNPAID)
+  /// Set when the LAST outstanding line is received. A PARTIAL purchase leaves
+  /// this null — it marks completion of the goods receipt, not the first one.
+  receivedAt    DateTime?
+  /// When payment is contractually due. NULL = no agreed term, which is treated
+  /// as "not overdue" rather than "overdue immediately".
+  dueDate       DateTime?
+
+  supplier           Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  employee           Employee            @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  items              PurchaseItem[]
+  inventoryMovements InventoryMovement[]
+  payments           SupplierPayment[]
+
+  @@index([purchaseNumber])
+  @@index([supplierInvoiceNumber])
+  @@index([supplierId])
+  @@index([purchaseDate])
+  @@index([status])
+  @@index([createdAt])
+  /// The payables queue: unsettled bills by due date.
+  @@index([paymentStatus, dueDate], map: "purchases_paymentstatus_duedate_idx")
+  @@index([supplierId, paymentStatus], map: "purchases_supplier_paymentstatus_idx")
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id                     String  @id @default(cuid())
+  purchaseId             String
+  variantId              String
+  quantity               Int
+  // Authoritative cost at time of this purchase — the source of truth for
+  // margin calculations. Never reconstructible from lastPurchasePrice alone.
+  costPrice              Decimal
+  // Selling price at time of purchase — lets owner review planned margin
+  // per purchase without querying ProductVariant (which changes over time).
+  sellingPriceAtPurchase Decimal
+  totalPrice             Decimal
+  /// Units actually booked into stock so far. Partial receipts increment this;
+  /// `quantity - receivedQuantity` is what remains outstanding on the line.
+  /// Stock is NEVER derived from `quantity` — only from what was received.
+  receivedQuantity       Int     @default(0)
+
+  purchase Purchase       @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseId])
+  @@index([variantId])
+  /// Outstanding-lines lookup for the goods-receipt screen.
+  @@index([purchaseId, receivedQuantity], map: "purchase_items_purchase_received_idx")
+  @@map("purchase_items")
+}
+
+// =============================================================================
+// CUSTOMER & ADDRESSES
+// =============================================================================
+
+model Customer {
+  id           String    @id @default(cuid())
+  customerCode String    @unique
+  isWalkIn     Boolean   @default(false)
+  name         String
+  phone        String    @unique
+  email        String?
+  gender       Gender?
+  dateOfBirth  DateTime?
+  anniversary  DateTime?
+  rewardPoints Int       @default(0)
+  storeCredit  Decimal   @default(0)
+  notes        String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  addresses CustomerAddress[]
+  sales     Sale[]
+  exchanges Exchange[]
+  /// Stock held for this customer (holds / layaway).
+  reservations InventoryReservation[]
+
+  @@index([phone])
+  @@index([name])
+  @@index([customerCode])
+  // Trigram GIN indexes accelerate `contains` (ILIKE '%term%') search which a
+  // B-tree cannot serve. Ops name must match the migration exactly.
+  // [local] trigram index omitted (Postgres-only): @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_name_trgm_idx")
+  // [local] trigram index omitted (Postgres-only): @@index([phone(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_phone_trgm_idx")
+  // [local] trigram index omitted (Postgres-only): @@index([email(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_email_trgm_idx")
+  // [local] trigram index omitted (Postgres-only): @@index([customerCode(ops: raw("gin_trgm_ops"))], type: Gin, map: "customers_customercode_trgm_idx")
+  @@map("customers")
+}
+
+model CustomerAddress {
+  id           String   @id @default(cuid())
+  customerId   String
+  type         String // Home, Office, Other
+  addressLine1 String
+  addressLine2 String?
+  city         String?
+  state        String?
+  pincode      String?
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_addresses")
+}
+
+// =============================================================================
+// SALE & SALE ITEMS
+// =============================================================================
+
+model Sale {
+  id                   String     @id @default(cuid())
+  saleNumber           String     @unique
+  idempotencyKey       String?    @unique
+  customerId           String
+  employeeId           String
+  saleDate             DateTime   @default(now())
+  subtotal             Decimal
+  // discountAmount = automatic promotions applied by the system (Owner-created Discounts/Coupons)
+  discountAmount       Decimal    @default(0)
+  // manualDiscountAmount = discretionary discount applied by the Owner at billing time.
+  // Authorization (Owner-only) is enforced in backend middleware, not here.
+  // When applied, the backend must create AuditLog + EmployeeAction records.
+  manualDiscountAmount Decimal    @default(0)
+  // Reason the Owner provided for the manual discount — stored for the audit trail.
+  manualDiscountReason String?
+  taxAmount            Decimal    @default(0)
+  // Round-off applied to reach a whole-rupee payable total (Indian retail
+  // convention). SIGNED: negative when the total was rounded DOWN (customer
+  // pays less), positive when rounded UP. Stored so the invoice reconciles —
+  // subtotal − discount + tax + roundOffAmount == grandTotal exactly — and so
+  // finance can audit the adjustment rather than find a total that does not
+  // add up. Always in the range (−0.50, +0.50].
+  roundOffAmount       Decimal    @default(0)
+  // The final PAYABLE amount, already rounded. This is what the customer pays
+  // and what payments are validated against.
+  grandTotal           Decimal
+  paidAmount           Decimal    @default(0)
+  dueAmount            Decimal    @default(0)
+  couponId             String?
+  notes                String?
+  status               SaleStatus @default(DRAFT)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  coupon   Coupon?  @relation(fields: [couponId], references: [id], onDelete: Restrict)
+
+  items              SaleItem[]
+  payments           Payment[]
+  exchanges          Exchange[]
+  inventoryMovements InventoryMovement[]
+  invoice            Invoice?
+
+  @@index([saleNumber])
+  @@index([customerId])
+  @@index([employeeId])
+  @@index([saleDate])
+  @@index([status])
+  @@index([createdAt])
+  // Composite indexes for the two hottest access patterns:
+  //  - analytics: filter status=COMPLETED within a saleDate window
+  //  - sales history: a single employee's sales, newest first
+  @@index([status, saleDate(sort: Desc)], map: "sales_status_saledate_idx")
+  @@index([employeeId, saleDate(sort: Desc)], map: "sales_employeeid_saledate_idx")
+  @@map("sales")
+}
+
+model SaleItem {
+  id        String @id @default(cuid())
+  saleId    String
+  variantId String
+
+  // --- ARCHIVAL SNAPSHOTS ---
+  // We snapshot these text fields so that if a Product or Variant is renamed
+  // or deleted in the future, the historical receipt still renders perfectly.
+  productName String
+  sizeName    String
+  colorName   String
+  sku         String
+  barcode     String?
+
+  // --- QUANTITY & FINANCIALS ---
+  quantity     Int
+  sellingPrice Decimal
+  // MRP at the moment of sale. Nullable because rows created before this column
+  // existed have no MRP to recover. Snapshotting it lets a receipt (and a
+  // rehydrated held bill) render the strike-through "was ₹1000, now ₹700"
+  // correctly forever, even after the product's MRP or discounts change.
+  mrp          Decimal?
+
+  // Item-level tax calculations for strict accounting
+  taxRate   Decimal @default(0) // e.g. 5.00 for 5%
+  taxAmount Decimal @default(0)
+
+  discountAmount Decimal @default(0)
+
+  // costAtSale = ProductVariant.costPrice at the exact moment of the sale.
+  // Crucial for historical gross profit calculation.
+  costAtSale Decimal
+
+  // (sellingPrice * quantity) - discountAmount + taxAmount
+  totalPrice Decimal
+
+  sale    Sale           @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@index([variantId])
+  @@map("sale_items")
+}
+
+// =============================================================================
+// PAYMENT
+// =============================================================================
+
+model Payment {
+  id             String        @id @default(cuid())
+  saleId         String? // Made optional to support exchange payments without a new sale
+  exchangeId     String? // Links payment to an exchange
+  method         PaymentMethod
+  amount         Decimal
+  transactionRef String?
+  status         PaymentStatus @default(PAID)
+  paidAt         DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  sale     Sale?     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  exchange Exchange? @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+
+  @@index([saleId])
+  @@index([exchangeId])
+  @@index([method])
+  @@index([status])
+  // Analytics payment-method breakdown filters payments by (saleId, status).
+  @@index([saleId, status], map: "payments_saleid_status_idx")
+  @@map("payments")
+}
+
+// =============================================================================
+// INVOICE
+// =============================================================================
+
+model Invoice {
+  id              String   @id @default(cuid())
+  saleId          String   @unique
+  invoiceNumber   String   @unique
+  invoiceDate     DateTime @default(now())
+  customerName    String?
+  customerPhone   String?
+  customerAddress String?
+  invoiceData     Json?
+  pdfUrl          String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sale Sale @relation(fields: [saleId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+// =============================================================================
+// EXCHANGE
+// Garments shops do exchanges, not traditional refunds.
+// Returned items → EXCHANGE_IN movement (stock increases)
+// Issued items   → EXCHANGE_OUT movement (stock decreases)
+// =============================================================================
+
+model Exchange {
+  id              String         @id @default(cuid())
+  exchangeNumber  String         @unique
+  originalSaleId  String
+  customerId      String
+  employeeId      String
+  exchangeDate    DateTime       @default(now())
+  returnedValue   Decimal
+  issuedValue     Decimal
+  // Positive = customer pays extra. Negative = shop refunds the difference.
+  priceDifference Decimal
+  // Primary business reason for the exchange (e.g. "Wrong Size", "Damaged Item").
+  // Used for exchange reports and trend analysis. Keep it concise and consistent.
+  exchangeReason  String?
+  // Free-form comments from the employee — separate from exchangeReason so that
+  // structured reporting does not rely on parsing unstructured text.
+  notes           String?
+  status          ExchangeStatus @default(PENDING)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  originalSale Sale     @relation(fields: [originalSaleId], references: [id], onDelete: Restrict)
+  customer     Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  returnedItems      ExchangeReturnItem[]
+  issuedItems        ExchangeIssuedItem[]
+  inventoryMovements InventoryMovement[]
+  payments           Payment[]
+
+  @@index([exchangeNumber])
+  @@index([originalSaleId])
+  @@index([exchangeDate])
+  @@index([employeeId])
+  @@index([createdAt])
+  @@map("exchanges")
+}
+
+model ExchangeReturnItem {
+  id          String          @id @default(cuid())
+  exchangeId  String
+  variantId   String
+  quantity    Int
+  condition   ReturnCondition @default(GOOD)
+  priceAtSale Decimal
+  totalValue  Decimal
+
+  exchange Exchange       @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([exchangeId])
+  @@index([variantId])
+  @@map("exchange_return_items")
+}
+
+model ExchangeIssuedItem {
+  id           String  @id @default(cuid())
+  exchangeId   String
+  variantId    String
+  quantity     Int
+  sellingPrice Decimal
+  totalValue   Decimal
+
+  exchange Exchange       @relation(fields: [exchangeId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+
+  @@index([exchangeId])
+  @@index([variantId])
+  @@map("exchange_issued_items")
+}
+
+// =============================================================================
+// EXPENSES
+// =============================================================================
+
+model ExpenseCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+
+  /// Stable machine key ("RENT", "ELECTRICITY"). Lets the seeder and the
+  /// payout→expense bridge resolve a category without matching on display text
+  /// that an owner is free to rename.
+  code String? @unique
+
+  /// Ordering in pickers and on the expense-breakdown chart.
+  displayOrder Int @default(0)
+
+  /// Expenses in this category are recurring overheads (rent, internet) rather
+  /// than variable spend. Drives the fixed-vs-variable split on the P&L.
+  isRecurring Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  expenses Expense[]
+
+  @@index([displayOrder])
+  @@map("expense_categories")
+}
+
+model Expense {
+  id              String        @id @default(cuid())
+  expenseCode     String        @unique
+  categoryId      String
+  title           String
+  amount          Decimal
+  vendorName      String?
+  paymentMethod   PaymentMethod @default(CASH)
+  referenceNumber String?
+  description     String?
+  notes           String?
+  employeeId      String
+  expenseDate     DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // ── Approval workflow ──────────────────────────────────────────────────────
+  // Default APPROVED preserves every existing row's meaning: expenses recorded
+  // before this workflow existed were, in effect, approved on entry. Making the
+  // default PENDING would retroactively invalidate the historical P&L.
+  approvalStatus  ApprovalStatus @default(APPROVED)
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  /// Uploaded bill/receipt (an Asset id).
+  receiptAssetId String?
+
+  /// The drawer this was paid from, when paid in cash during an open shift.
+  registerId String?
+
+  /// Multi-store readiness.
+  storeCode String?
+
+  category   ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  employee   Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  approvedBy Employee?       @relation("ExpenseApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  register   CashRegister?   @relation(fields: [registerId], references: [id], onDelete: SetNull)
+
+  /// The drawer-side twin, when this expense originated as a cash payout.
+  payout CashPayout?
+
+  @@index([expenseCode])
+  @@index([categoryId])
+  @@index([expenseDate])
+  @@index([paymentMethod])
+  @@index([approvalStatus])
+  @@index([registerId])
+  /// The P&L hot path: approved expenses inside a date window.
+  @@index([approvalStatus, expenseDate(sort: Desc)], map: "expenses_approval_date_idx")
+  @@map("expenses")
+}
+
+// =============================================================================
+// CASH MANAGEMENT (DRAWER / REGISTER)
+//
+// A CashRegister row is ONE SHIFT SESSION of one physical till — not the till
+// itself. `registerNumber` names the physical counter ("REG-01"); the row is the
+// period between one open and one close. That distinction is the module's core
+// modelling decision: it is what lets two cashiers work the same counter on
+// consecutive shifts and each be accountable for only their own drawer.
+//
+// The closing rollups (cashSales, upiSales, …) are SNAPSHOTS written at close,
+// not views over the sales table. A shift summary must never change after the
+// fact — if it were recomputed on read, a late refund posted against a sale from
+// a closed shift would silently rewrite a reconciliation an owner already signed.
+// =============================================================================
+
+model CashRegister {
+  id       String         @id @default(cuid())
+  status   RegisterStatus @default(OPEN)
+  openedAt DateTime       @default(now())
+  closedAt DateTime?
+
+  /// The physical till this session belongs to, e.g. "REG-01". Free text rather
+  /// than a FK for the reason documented on Employee.assignedRegister: there is
+  /// no "till" entity, only sessions of one.
+  registerNumber String @default("REG-01")
+
+  /// Human handle for the session itself ("SH-20260730-0003"), so a shift can be
+  /// referenced in conversation and on a printed summary.
+  sessionNumber String? @unique
+
+  // ── Cash positions ─────────────────────────────────────────────────────────
+  // `openingBalance` / `closingBalance` / `expectedBalance` are the original
+  // column names and remain the source of truth for every existing reader.
+  // `countedCash` is the NEW, distinct concept the spec requires: what the
+  // cashier physically counted, as opposed to what the system finally recorded.
+  // They are equal today (the service writes both), but they are separate
+  // columns because a supervisor override at close would make them diverge, and
+  // a schema that cannot express that divergence cannot audit it.
+  openingBalance  Decimal
+  closingBalance  Decimal?
+  expectedBalance Decimal?
+  countedCash     Decimal?
+  difference      Decimal? // positive = over (excess), negative = short
+
+  /// MANDATORY when |difference| > 0 — enforced at the validation layer. A
+  /// discrepancy without a stated reason is the single most common way cash
+  /// shrinkage becomes untraceable.
+  discrepancyReason String?
+
+  /// Denomination breakdown of the physical count, e.g. {"500": 4, "200": 3}.
+  /// JSON because the note/coin set is a jurisdiction detail, not a schema one.
+  denominations Json?
+
+  // ── Shift rollups, frozen at close ─────────────────────────────────────────
+  cashSales        Decimal @default(0)
+  upiSales         Decimal @default(0)
+  cardSales        Decimal @default(0)
+  otherSales       Decimal @default(0)
+  /// Gross value of bills settled with more than one tender. Deliberately NOT a
+  /// sum of the columns above — a split bill's cash leg already counts in
+  /// cashSales; this is the count-adjacent metric "how much business was split".
+  splitSales       Decimal @default(0)
+  refundTotal      Decimal @default(0)
+  exchangeTotal    Decimal @default(0)
+  discountTotal    Decimal @default(0)
+  cashDropTotal    Decimal @default(0)
+  cashPayoutTotal  Decimal @default(0)
+  transactionCount Int     @default(0)
+  /// Wall-clock shift length, written at close so history never subtracts.
+  durationMinutes  Int?
+
+  openedById String
+  closedById String?
+  notes      String?
+
+  /// Owner/manager sign-off. Set together with status = RECONCILED.
+  reconciledById String?
+  reconciledAt   DateTime?
+  reconcileNotes String?
+
+  /// Multi-store readiness — NULL = the single default store.
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  openedBy     Employee          @relation("OpenedRegisters", fields: [openedById], references: [id], onDelete: Restrict)
+  closedBy     Employee?         @relation("ClosedRegisters", fields: [closedById], references: [id], onDelete: Restrict)
+  reconciledBy Employee?         @relation("ReconciledRegisters", fields: [reconciledById], references: [id], onDelete: SetNull)
+  transactions CashTransaction[]
+  drops        CashDrop[]
+  payouts      CashPayout[]
+  activities   RegisterActivity[]
+  expenses     Expense[]
+  salaryPayments SalaryPayment[]
+  supplierPayments SupplierPayment[]
+
+  @@index([status])
+  @@index([openedAt])
+  /// THE open-session lookup: "is this till already open?". Partial in spirit —
+  /// there is at most one OPEN row per registerNumber, enforced by the service.
+  @@index([registerNumber, status], map: "cash_registers_number_status_idx")
+  /// Register history, newest first, filterable by employee.
+  @@index([openedById, openedAt(sort: Desc)], map: "cash_registers_employee_openedat_idx")
+  @@index([storeCode])
+  @@map("cash_registers")
+}
+
+/// Cash physically removed from the drawer and moved to a safe/bank.
+///
+/// A drop REDUCES the expected drawer balance but is NOT an expense — the money
+/// still belongs to the business. Conflating the two (as a single "cash out"
+/// row would) makes the P&L wrong by the amount of every safe drop.
+model CashDrop {
+  id         String @id @default(cuid())
+  registerId String
+
+  /// Human handle, e.g. "DROP-20260730-0002".
+  dropNumber String @unique
+
+  amount Decimal
+  reason String
+
+  /// Where the money went — safe, bank deposit slip, etc.
+  destination String?
+  /// Bank deposit slip / envelope number.
+  referenceNumber String?
+
+  employeeId String
+  /// Supervisor who witnessed the drop, when the store requires dual control.
+  witnessedById String?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+
+  register    CashRegister @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  employee    Employee     @relation("CashDropBy", fields: [employeeId], references: [id], onDelete: Restrict)
+  witnessedBy Employee?    @relation("CashDropWitness", fields: [witnessedById], references: [id], onDelete: SetNull)
+
+  @@index([registerId])
+  @@index([employeeId])
+  @@index([createdAt(sort: Desc)], map: "cash_drops_createdat_idx")
+  @@map("cash_drops")
+}
+
+/// A business expense paid in cash straight out of the drawer.
+///
+/// Unlike a drop this DOES hit the P&L, so every payout also materialises an
+/// Expense row (linked below). The payout is the drawer-side record; the Expense
+/// is the accounting-side record. One event, two ledgers, joined — rather than
+/// one row that has to pretend to be both.
+model CashPayout {
+  id         String @id @default(cuid())
+  registerId String
+
+  payoutNumber String @unique
+
+  category PayoutCategory
+  amount   Decimal
+  reason   String
+
+  /// Who was paid.
+  payeeName String?
+
+  /// Uploaded bill/receipt. An Asset id — the Asset engine owns the bytes.
+  receiptAssetId String?
+
+  /// Payouts above the configured threshold require approval before they are
+  /// accepted; below it they are auto-approved at creation. Either way the
+  /// approver is recorded, so "who authorised this" always has an answer.
+  approvalStatus ApprovalStatus @default(APPROVED)
+  approvedById   String?
+  approvedAt     DateTime?
+  rejectionReason String?
+
+  employeeId String
+
+  /// The accounting-side twin of this payout. Nullable only for the instant
+  /// between the two inserts inside one transaction.
+  expenseId String? @unique
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  register   CashRegister @relation(fields: [registerId], references: [id], onDelete: Restrict)
+  employee   Employee     @relation("CashPayoutBy", fields: [employeeId], references: [id], onDelete: Restrict)
+  approvedBy Employee?    @relation("CashPayoutApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  expense    Expense?     @relation(fields: [expenseId], references: [id], onDelete: SetNull)
+
+  @@index([registerId])
+  @@index([category])
+  @@index([approvalStatus])
+  @@index([createdAt(sort: Desc)], map: "cash_payouts_createdat_idx")
+  @@map("cash_payouts")
+}
+
+/// The ordered narrative of one shift. See RegisterActivityType.
+model RegisterActivity {
+  id         String @id @default(cuid())
+  registerId String
+
+  type        RegisterActivityType
+  description String
+
+  /// Signed cash impact of this event on the drawer. ZERO for non-cash events
+  /// (a card sale is part of the shift's story but not of its drawer balance),
+  /// which is precisely why it is stored per-activity rather than inferred
+  /// from the type.
+  amount Decimal @default(0)
+
+  /// Running expected drawer balance AFTER this event. Storing it turns "when
+  /// did the drawer diverge" into a scan of one column instead of a replay.
+  balanceAfter Decimal?
+
+  referenceType ReferenceType?
+  referenceId   String?
+
+  employeeId String
+
+  createdAt DateTime @default(now())
+
+  register CashRegister @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  employee Employee     @relation("RegisterActivityBy", fields: [employeeId], references: [id], onDelete: Restrict)
+
+  /// The timeline read: one session, oldest first.
+  @@index([registerId, createdAt], map: "register_activities_register_createdat_idx")
+  @@index([type])
+  @@map("register_activities")
+}
+
+// =============================================================================
+// SUPPLIER PAYMENTS & SALARY
+// =============================================================================
+
+/// One payment against a supplier — optionally against a specific Purchase bill.
+///
+/// `purchaseId` is nullable because an on-account payment ("₹50,000 towards the
+/// running balance") is a real thing suppliers do, and forcing it onto an
+/// arbitrary bill would corrupt that bill's settlement history.
+model SupplierPayment {
+  id            String @id @default(cuid())
+  paymentNumber String @unique
+
+  supplierId String
+  purchaseId String?
+
+  amount        Decimal
+  paymentMethod PaymentMethod @default(CASH)
+
+  referenceNumber String?
+  notes           String?
+
+  paidAt DateTime @default(now())
+
+  /// Set when the payment was made in cash from an open drawer, so the shift's
+  /// expected balance accounts for it.
+  registerId String?
+
+  createdById String
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  supplier  Supplier      @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchase  Purchase?     @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  createdBy Employee      @relation("SupplierPaymentBy", fields: [createdById], references: [id], onDelete: Restrict)
+  register  CashRegister? @relation(fields: [registerId], references: [id], onDelete: SetNull)
+
+  @@index([supplierId, paidAt(sort: Desc)], map: "supplier_payments_supplier_paidat_idx")
+  @@index([purchaseId])
+  @@index([paidAt(sort: Desc)], map: "supplier_payments_paidat_idx")
+  @@map("supplier_payments")
+}
+
+/// One employee's salary for one pay period.
+///
+/// The period is stored as (year, month) integers rather than a date range
+/// because payroll is a calendar-month concept, and a range invites two rows
+/// for the same month that overlap by a day. The unique constraint on
+/// (employeeId, periodYear, periodMonth) is what makes payroll idempotent.
+model SalaryPayment {
+  id            String @id @default(cuid())
+  paymentNumber String @unique
+
+  employeeId String
+
+  periodYear  Int
+  periodMonth Int // 1–12
+
+  /// Snapshot of Employee.salary when the period was generated. Frozen so a
+  /// later raise does not retroactively rewrite last quarter's payroll.
+  baseSalary Decimal
+
+  /// Rollups of the adjustments below, maintained by the service in the same
+  /// transaction that writes them.
+  totalBonus      Decimal @default(0)
+  totalOvertime   Decimal @default(0)
+  totalIncentive  Decimal @default(0)
+  totalAdvance    Decimal @default(0)
+  totalDeduction  Decimal @default(0)
+
+  /// base + bonus + overtime + incentive − advance − deduction.
+  netPayable Decimal
+  paidAmount Decimal @default(0)
+  /// netPayable − paidAmount, stored so the outstanding-salaries KPI is a SUM
+  /// of one indexed column rather than a subtraction across every row.
+  dueAmount  Decimal
+
+  status SalaryPaymentStatus @default(PENDING)
+
+  paymentMethod PaymentMethod @default(CASH)
+  paidAt        DateTime?
+  referenceNumber String?
+  notes           String?
+
+  /// Set when paid in cash from an open drawer.
+  registerId String?
+
+  createdById String
+  paidById    String?
+
+  storeCode String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee    Employee           @relation("SalaryOf", fields: [employeeId], references: [id], onDelete: Restrict)
+  createdBy   Employee           @relation("SalaryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  paidBy      Employee?          @relation("SalaryPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  register    CashRegister?      @relation(fields: [registerId], references: [id], onDelete: SetNull)
+  adjustments SalaryAdjustment[]
+
+  /// One salary row per employee per month — the module's core invariant.
+  @@unique([employeeId, periodYear, periodMonth])
+  @@index([status])
+  @@index([periodYear, periodMonth], map: "salary_payments_period_idx")
+  @@index([paidAt(sort: Desc)], map: "salary_payments_paidat_idx")
+  @@map("salary_payments")
+}
+
+/// An itemised line on a salary payment. See SalaryAdjustmentType.
+model SalaryAdjustment {
+  id              String @id @default(cuid())
+  salaryPaymentId String
+
+  type   SalaryAdjustmentType
+  /// Always POSITIVE. Direction is carried by `type`, not by the sign, so a
+  /// deduction can never be entered as a negative bonus.
+  amount Decimal
+  reason String
+
+  /// Set when an advance was handed over in cash from the drawer.
+  registerId String?
+
+  createdById String
+
+  createdAt DateTime @default(now())
+
+  salaryPayment SalaryPayment @relation(fields: [salaryPaymentId], references: [id], onDelete: Cascade)
+  createdBy     Employee      @relation("SalaryAdjustmentBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([salaryPaymentId])
+  @@index([type])
+  @@map("salary_adjustments")
+}
+
+/// The drawer's double-entry ledger. EVERY rupee that enters or leaves a till
+/// is one row here — a cash sale, a drop, a payout, a cash refund.
+///
+/// This table, not the sales table, is what `expectedCash` is computed from.
+/// Deriving expected cash from sales instead would silently ignore drops and
+/// payouts, which is exactly the class of bug that makes a drawer "short".
+model CashTransaction {
+  id            String              @id @default(cuid())
+  registerId    String
+  type          CashTransactionType
+  amount        Decimal
+  reason        String
+  referenceId   String?
+  referenceType ReferenceType?
+  employeeId    String
+  createdAt     DateTime            @default(now())
+
+  register CashRegister @relation(fields: [registerId], references: [id], onDelete: Cascade)
+  employee Employee     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([registerId])
+  @@index([type])
+  @@index([createdAt])
+  /// The expected-cash aggregate: one register's movements grouped by direction.
+  @@index([registerId, type], map: "cash_transactions_register_type_idx")
+  @@map("cash_transactions")
+}
+
+// =============================================================================
+// DISCOUNTS & COUPONS
+// =============================================================================
+
+/// A catalog pricing rule: "Nike Polo is 30% off", "T-Shirts are 40% off".
+///
+/// Resolution is a strict ladder — highest tier wins OUTRIGHT, never stacked:
+///   PRODUCT rule → CATEGORY rule → BRAND rule → variant default → no discount
+/// Ties break deterministically on (priority, larger discount, createdAt DESC,
+/// id ASC). See engines/catalogPricing.engine.ts.
+///
+/// Exactly one of productId/categoryId/brandId is set, matching `scope` — this
+/// is enforced by a CHECK constraint (discount_rules_scope_target_ck) added in
+/// the migration, because Prisma cannot express it.
+///
+/// Status (Draft/Scheduled/Active/Expired/Disabled) is NOT a column. It is
+/// derived from (isEnabled, startDate, endDate) at query time so rules activate
+/// and expire on a clock with no cron job.
+model DiscountRule {
+  id          String            @id @default(cuid())
+  name        String
+  description String?
+  scope       DiscountRuleScope
+  type        DiscountRuleType
+  value       Decimal
+
+  // Exactly one is non-null, matching `scope`.
+  productId  String?
+  categoryId String?
+  brandId    String?
+
+  /// Tie-breaker WITHIN a scope tier. Does not let a category rule outrank a
+  /// product rule — the tier always dominates.
+  priority Int @default(0)
+
+  /// Stored as UTC instants. The controller converts the owner's date input
+  /// using the store timezone (Settings.timeZone) before persisting.
+  startDate DateTime?
+  endDate   DateTime?
+
+  /// Owner's on/off switch. Combined with the dates to derive status.
+  isEnabled Boolean @default(true)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product  Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  brand    Brand?    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  history DiscountHistory[]
+
+  // The engine's hot query: enabled rules within a date window.
+  @@index([isEnabled, startDate, endDate], map: "discount_rules_active_lookup_idx")
+  @@index([scope, isEnabled])
+  @@index([productId])
+  @@index([categoryId])
+  @@index([brandId])
+  @@map("discount_rules")
+}
+
+/// Append-only audit of every change to a DiscountRule, for the Discount
+/// History screen. Separate from AuditLog because the owner needs a
+/// discount-specific timeline that survives rule deletion (ruleId is retained
+/// as a plain string, with the relation set null on delete).
+model DiscountHistory {
+  id       String                @id @default(cuid())
+  ruleId   String?
+  ruleName String // snapshot — survives deletion of the rule
+  action   DiscountHistoryAction
+  oldData  Json?
+  newData  Json?
+
+  employeeId String?
+  createdAt  DateTime @default(now())
+
+  rule DiscountRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+
+  @@index([ruleId])
+  @@index([createdAt])
+  @@map("discount_history")
+}
+
+model Coupon {
+  id              String       @id @default(cuid())
+  code            String       @unique
+  type            DiscountType
+  value           Decimal
+  minimumPurchase Decimal?
+  usageLimit      Int?
+  usageCount      Int          @default(0)
+  expiryDate      DateTime?
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  sales Sale[]
+
+  @@index([code])
+  @@index([isActive])
+  @@map("coupons")
+}
+
+// =============================================================================
+// SETTINGS
+// Single-row configuration table. Application layer enforces one row only.
+// =============================================================================
+
+/// Singleton settings table.
+/// The PK is a fixed constant string "singleton" — enforced at DB level.
+/// Application layer must always upsert with id = "singleton".
+/// This guarantees exactly one row without a separate UNIQUE constraint hack.
+model Settings {
+  id      String @id @default("singleton")
+  version Int    @default(1)
+
+  // Top-level indexing properties
+  storeName String @default("Default Store")
+  currency  String @default("INR")
+  timeZone  String @default("Asia/Kolkata")
+
+  // Modular JSON Configuration Blocks (Strongly typed in application layer)
+  storeConfig        Json @default(dbgenerated("'{}'"))
+  invoiceConfig      Json @default(dbgenerated("'{}'"))
+  pricingConfig      Json @default(dbgenerated("'{}'"))
+  promotionConfig    Json @default(dbgenerated("'{}'"))
+  exchangeConfig     Json @default(dbgenerated("'{}'"))
+  inventoryConfig    Json @default(dbgenerated("'{}'"))
+  customerConfig     Json @default(dbgenerated("'{}'"))
+  securityConfig     Json @default(dbgenerated("'{}'"))
+  reportingConfig    Json @default(dbgenerated("'{}'"))
+  notificationConfig Json @default(dbgenerated("'{}'"))
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("settings")
+}
+
+// ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+model Notification {
+  id      String  @id @default(cuid())
+  type    String // e.g., "LOW_STOCK", "SALE_COMPLETED"
+  title   String
+  message String
+  isRead  Boolean @default(false)
+
+  referenceId   String?
+  referenceType String?
+
+  // Audience
+  targetUserId String?
+  targetRole   EmployeeRole?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([targetUserId, isRead])
+  @@index([targetRole, isRead])
+  @@map("notifications")
+}
+
+// ============================================================================
+// ASSETS & DOCUMENTS
+// ============================================================================
+
+enum AssetStatus {
+  ACTIVE
+  SOFT_DELETED
+}
+
+enum AssetVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+model Asset {
+  id           String          @id @default(cuid())
+  originalName String
+  storedName   String          @unique
+  storagePath  String
+  provider     String          @default("LOCAL") // e.g. LOCAL, S3, R2
+  contentType  String
+  sizeBytes    Int
+  checksum     String?
+  visibility   AssetVisibility @default(PRIVATE)
+  status       AssetStatus     @default(ACTIVE)
+
+  ownerModule   String
+  ownerEntityId String?
+
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  uploadedBy Employee? @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([ownerModule, ownerEntityId])
+  @@index([status])
+  @@index([uploadedById])
+  @@map("assets")
+}
+
+// =============================================================================
+// PROMOTIONS
+// =============================================================================
+
+model Promotion {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+
+  // 0 is lowest priority. Higher numbers execute first.
+  priority Int @default(0)
+
+  // If true, no other promotions can be stacked if this one applies.
+  isExclusive Boolean @default(false)
+
+  // Stored as JSON to allow absolute extensibility (Buy X Get Y, Min Spend, etc.)
+  conditions Json
+  actions    Json
+
+  startDate DateTime?
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive])
+  @@index([startDate, endDate])
+  @@index([priority])
+  @@map("promotions")
+}
+
+// =============================================================================
+// MONITORING — AuditLog, EmployeeAction, LoginHistory
+// These replace scattered createdBy/updatedBy fields.
+// =============================================================================
+
+/// Complete record of every create/update/delete on important tables.
+/// oldData and newData capture JSON snapshots for full change history.
+model AuditLog {
+  id         String       @id @default(cuid())
+  employeeId String
+  action     ActionType
+  module     ActionModule
+  tableName  String
+  recordId   String
+  oldData    Json?
+  newData    Json?
+  createdAt  DateTime     @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId])
+  @@index([module])
+  @@index([tableName, recordId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+/// High-level employee activity log for the Owner dashboard.
+/// Less granular than AuditLog — one row per meaningful business action.
+model EmployeeAction {
+  id            String         @id @default(cuid())
+  employeeId    String
+  actionType    ActionType
+  module        ActionModule
+  description   String?
+  // referenceType + referenceId together identify the affected record.
+  // referenceType = strongly-typed entity name from the ReferenceType enum.
+  // referenceId   = cuid of the specific record in that entity's table.
+  // Example: referenceType=SALE + referenceId="clx..." pinpoints one sale.
+  referenceType ReferenceType?
+  referenceId   String?
+  createdAt     DateTime       @default(now())
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId])
+  @@index([actionType])
+  @@index([module])
+  @@index([createdAt])
+  @@map("employee_actions")
+}
+
+/// Records every login attempt and session for security monitoring.
+///
+/// This table is ALSO the presence source of truth for the Workforce module:
+/// a row with logoutAt = null and a recent lastSeenAt means "online". Presence
+/// is therefore derived from real sessions rather than stored as a mutable
+/// boolean on Employee that can desync when a process dies.
+model LoginHistory {
+  id           String    @id @default(cuid())
+  employeeId   String
+  loginAt      DateTime  @default(now())
+  logoutAt     DateTime?
+  device       String?
+  browser      String?
+  ipAddress    String?
+  isSuccessful Boolean   @default(true)
+
+  // ── Workforce session tracking ─────────────────────────────────────────────
+
+  /// Raw UA string, kept so device/browser parsing can be improved later
+  /// without losing the original evidence.
+  userAgent String?
+
+  /// Parsed OS name ("Windows", "macOS", "Android"). Derived from userAgent by
+  /// the same parser that fills device/browser — stored rather than parsed on
+  /// read so the security table can filter and group by it in SQL.
+  operatingSystem String?
+
+  /// Who force-terminated this session, when an OWNER ended it from the
+  /// security dashboard. NULL for self-service logouts and expiries; together
+  /// with endReason = "TERMINATED" it is the audit trail for the action.
+  terminatedById String?
+
+  /// Heartbeat of the last authenticated request on this session. Presence is
+  /// (logoutAt IS NULL AND lastSeenAt > now() - threshold).
+  lastSeenAt DateTime?
+
+  /// Wall-clock session length, written at logout. Stored rather than computed
+  /// so the history table never has to subtract across millions of rows.
+  durationMinutes Int?
+
+  /// How the session ended: MANUAL (user logged out), EXPIRED (token/idle),
+  /// FORCED (password reset / deactivation). NULL while still active.
+  endReason String?
+
+  /// Reason a login attempt failed (isSuccessful = false), e.g.
+  /// "INVALID_CREDENTIALS", "INACTIVE_ACCOUNT". Powers the security view.
+  failureReason String?
+
+  storeCode String?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId])
+  @@index([loginAt])
+  @@index([isSuccessful])
+  /// One employee's session history, newest first — the Login History tab.
+  @@index([employeeId, loginAt(sort: Desc)], map: "login_history_employeeid_loginat_idx")
+  /// The presence query: currently-open sessions.
+  @@index([logoutAt, lastSeenAt], map: "login_history_presence_idx")
+  @@map("login_history")
+}
+
+// =============================================================================
+// LABEL MANAGEMENT & PRINTING ENGINE
+//
+// The Label Engine is the single source of truth for every printable product
+// label in the system. Product, Purchase, Inventory, Sales and Search all
+// enqueue work here; none of them ever talks to a printer directly.
+//
+// Design rules encoded in this schema:
+//   1. Rendered labels are NEVER stored. We persist the *intent* to print
+//      (job + items + the template/printer/options that applied) and the
+//      *outcome*. Pixels and PDF bytes are regenerated on demand from
+//      ProductVariant data, so a price change is never frozen into history.
+//   2. Barcode IMAGES are never stored — only barcode values. Images are
+//      generated at preview/print time by the Barcode Engine.
+//   3. Printer configuration lives here, never inside Product tables.
+//   4. Templates are data, not code. New label formats are added as rows
+//      (or as registry-provided system templates) without touching modules.
+// =============================================================================
+
+/// What a template is for. Drives filtering in the template picker and lets
+/// modules request the right kind of label without hardcoding a template id.
+enum LabelTemplateKind {
+  PRODUCT
+  BARCODE_ONLY
+  PRICE_TAG
+  SALE_TAG
+  CLEARANCE_TAG
+  SHELF_LABEL
+  WAREHOUSE_LABEL
+  QR_LABEL
+  RFID_TAG
+  CUSTOM
+}
+
+/// Barcode symbologies the Barcode Engine can render. Adding a future standard
+/// (QR, DataMatrix, RFID EPC) is an enum + registry entry — no schema redesign.
+enum BarcodeSymbology {
+  EAN13
+  CODE128
+  CODE39
+  UPC
+  ITF14
+  QR
+  DATA_MATRIX
+  NONE
+}
+
+/// How the server reaches a physical printer.
+enum PrinterConnectionType {
+  NETWORK
+  USB
+  BLUETOOTH
+  CLOUD
+  VIRTUAL
+}
+
+/// The command dialect a printer speaks. Selecting a driver never requires a
+/// frontend change — the UI only ever sends a printerId.
+enum PrinterDriverType {
+  ESC_POS
+  TSPL
+  ZPL
+  DYMO
+  PDF
+  PREVIEW
+  NULL
+}
+
+enum PrinterStatus {
+  ONLINE
+  OFFLINE
+  ERROR
+  UNKNOWN
+}
+
+/// Print job lifecycle. QUEUED is accepted-but-not-yet-claimed; PENDING marks
+/// a job explicitly held (e.g. printer offline, awaiting retry).
+enum PrintJobStatus {
+  QUEUED
+  PENDING
+  PRINTING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PrintJobItemStatus {
+  PENDING
+  PRINTING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+/// Which module asked for the print. Powers reprint-from-source and the
+/// history filters, and lets analytics attribute label usage per workflow.
+enum PrintSourceModule {
+  PRODUCT
+  PURCHASE
+  INVENTORY
+  SALE
+  SEARCH
+  BATCH
+  MANUAL
+}
+
+/// Output target resolved at print time by the PrinterService. The rest of the
+/// application never knows which mode is active.
+enum PrintOutputMode {
+  PREVIEW
+  PDF
+  THERMAL
+}
+
+/// A label layout definition. Templates are DATA — the Template Engine renders
+/// any template row through the same layout pipeline for both PDF and thermal,
+/// so a new format never requires modifying existing code.
+model LabelTemplate {
+  id          String            @id @default(cuid())
+  /// Stable machine key (e.g. "default-clothing"). System templates are seeded
+  /// from the registry with a fixed code so modules can request them by name.
+  code        String            @unique
+  name        String
+  description String?
+  kind        LabelTemplateKind @default(PRODUCT)
+
+  /// Physical label dimensions in millimetres — the contract with the media.
+  widthMm  Decimal
+  heightMm Decimal
+
+  /// Margins in millimetres.
+  marginTopMm    Decimal @default(1)
+  marginRightMm  Decimal @default(1)
+  marginBottomMm Decimal @default(1)
+  marginLeftMm   Decimal @default(1)
+
+  /// Which fields render, in what order, at what size/position. Validated by
+  /// the application layer (labelTemplate.validation.ts). Stored as JSON so
+  /// new element types need no migration.
+  elements Json @default(dbgenerated("'[]'"))
+
+  /// Default symbology for this template's barcode element.
+  barcodeSymbology BarcodeSymbology @default(EAN13)
+
+  /// Print orientation in degrees (0/90/180/270).
+  rotation Int @default(0)
+
+  /// System templates ship with the product and cannot be deleted or renamed
+  /// by users — only cloned. Guarantees every install has working defaults.
+  isSystem  Boolean @default(false)
+  isActive  Boolean @default(true)
+  /// Optional per-store scoping for the future multi-store requirement.
+  storeCode String?
+
+  /// Denormalised usage counter for the template picker's most-used sort.
+  usageCount Int @default(0)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy Employee?       @relation("LabelTemplateCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  printJobs PrintJob[]
+  jobItems  PrintJobItem[]
+  settings  PrinterSetting[]
+
+  @@index([kind])
+  @@index([isActive])
+  @@index([isSystem])
+  @@index([storeCode])
+  @@map("label_templates")
+}
+
+/// A physical or virtual printer. Adding a manufacturer is a new driver in the
+/// registry plus a row here — no schema or frontend change.
+model Printer {
+  id         String                @id @default(cuid())
+  name       String
+  /// Machine key used by integrations/scripts to address a printer by name.
+  code       String                @unique
+  connection PrinterConnectionType @default(NETWORK)
+  driver     PrinterDriverType     @default(ESC_POS)
+  status     PrinterStatus         @default(UNKNOWN)
+
+  /// Transport coordinates. Which are populated depends on `connection`:
+  ///   NETWORK -> host + port     USB -> devicePath/vendorId/productId
+  ///   CLOUD   -> endpointUrl     VIRTUAL/PDF -> none
+  host        String?
+  port        Int?
+  devicePath  String?
+  vendorId    String?
+  productId   String?
+  endpointUrl String?
+
+  /// Human-facing placement, e.g. "Counter 1", "Stock Room".
+  location String?
+
+  /// Media + quality defaults for this device. Job-level options override.
+  dpi             Int     @default(203)
+  defaultWidthMm  Decimal @default(50)
+  defaultHeightMm Decimal @default(25)
+  darkness        Int     @default(8)
+  printSpeed      Int     @default(4)
+  /// Exactly one printer may be the system default — enforced in the service
+  /// layer (a partial unique index is not expressible in the Prisma schema).
+  isDefault       Boolean @default(false)
+  isActive        Boolean @default(true)
+
+  /// Result of the last reachability probe. Cheap status without a live poll.
+  lastSeenAt    DateTime?
+  lastErrorAt   DateTime?
+  lastErrorText String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  printJobs PrintJob[]
+  settings  PrinterSetting[]
+
+  @@index([isActive])
+  @@index([isDefault])
+  @@index([status])
+  @@map("printers")
+}
+
+/// A unit of print work. NOTHING prints immediately — every request becomes a
+/// job, so an offline printer can never lose a request.
+model PrintJob {
+  id String @id @default(cuid())
+
+  /// Short human-readable handle shown in the UI ("PJ-000241").
+  jobNumber String @unique
+
+  printerId     String?
+  templateId    String
+  requestedById String
+
+  status PrintJobStatus    @default(QUEUED)
+  source PrintSourceModule @default(MANUAL)
+  output PrintOutputMode   @default(THERMAL)
+
+  /// Free-text business justification ("Damaged labels replaced", "Reprint").
+  reason String?
+
+  /// Totals denormalised so history tables never fan out to items.
+  totalLabels Int @default(0)
+  totalCopies Int @default(0)
+
+  /// Effective print options for THIS job, resolved from PrinterSetting plus
+  /// per-request overrides at enqueue time. Frozen so a later settings change
+  /// never rewrites what a past job actually did.
+  options Json @default(dbgenerated("'{}'"))
+
+  /// Retry bookkeeping — the queue worker owns these.
+  attempts    Int @default(0)
+  maxAttempts Int @default(3)
+
+  /// Set when a worker claims the job; lets a restarted process reclaim jobs
+  /// abandoned mid-flight.
+  claimedAt DateTime?
+  claimedBy String?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  /// Wall-clock milliseconds from start to terminal state (history Duration).
+  durationMs  Int?
+
+  failureReason String?
+
+  /// If this job is a reprint, the job it was cloned from.
+  reprintOfId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  printer     Printer?       @relation(fields: [printerId], references: [id], onDelete: SetNull)
+  template    LabelTemplate  @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  requestedBy Employee       @relation("PrintJobRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  reprintOf   PrintJob?      @relation("PrintJobReprint", fields: [reprintOfId], references: [id], onDelete: SetNull)
+  reprints    PrintJob[]     @relation("PrintJobReprint")
+  items       PrintJobItem[]
+
+  /// The queue worker hot path: oldest claimable job.
+  @@index([status, createdAt])
+  @@index([printerId, status])
+  @@index([requestedById])
+  @@index([source])
+  @@index([createdAt])
+  @@map("print_jobs")
+}
+
+/// One product variant within a job. Copies are stored as a count rather than
+/// duplicated rows — a 40-label receipt is one row, not forty.
+model PrintJobItem {
+  id        String @id @default(cuid())
+  jobId     String
+  variantId String
+
+  copies Int @default(1)
+
+  /// Per-item template override (null = inherit the job template).
+  templateId String?
+
+  /// The barcode VALUE captured at enqueue time. The image is never stored;
+  /// it is regenerated by the Barcode Engine at render time.
+  barcodeValue     String?
+  barcodeSymbology BarcodeSymbology @default(EAN13)
+
+  status        PrintJobItemStatus @default(PENDING)
+  failureReason String?
+
+  /// Ordering within the job so reprints reproduce the original sequence.
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  job      PrintJob       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  variant  ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
+  template LabelTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([jobId])
+  @@index([variantId])
+  @@index([status])
+  @@map("print_job_items")
+}
+
+/// Label/printing configuration. Singleton by default (id="singleton"), but the
+/// optional scope columns let a future multi-store or per-terminal deployment
+/// add rows without a redesign.
+model PrinterSetting {
+  id String @id @default("singleton")
+
+  /// Reserved for future per-store / per-terminal scoping. NULL = global.
+  storeCode  String?
+  terminalId String?
+
+  defaultPrinterId  String?
+  defaultTemplateId String?
+
+  defaultCopies   Int     @default(1)
+  defaultWidthMm  Decimal @default(50)
+  defaultHeightMm Decimal @default(25)
+  marginTopMm     Decimal @default(1)
+  marginRightMm   Decimal @default(1)
+  marginBottomMm  Decimal @default(1)
+  marginLeftMm    Decimal @default(1)
+
+  /// "portrait" | "landscape" — validated in the application layer.
+  orientation String @default("portrait")
+  darkness    Int    @default(8)
+  printSpeed  Int    @default(4)
+
+  barcodeSymbology BarcodeSymbology @default(EAN13)
+
+  /// Workflow toggles.
+  showPreviewBeforePrint  Boolean @default(true)
+  printAfterProductCreate Boolean @default(false)
+  printAfterPurchase      Boolean @default(true)
+
+  /// PREVIEW | PDF | THERMAL. The output mode the PrinterService resolves to
+  /// when a request does not specify one. This is the ONLY place the
+  /// development/testing/production distinction lives.
+  outputMode PrintOutputMode @default(PDF)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  defaultPrinter  Printer?       @relation(fields: [defaultPrinterId], references: [id], onDelete: SetNull)
+  defaultTemplate LabelTemplate? @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
+
+  @@unique([storeCode, terminalId])
+  @@map("printer_settings")
+}
+
+
+// =============================================================================
+// ▼▼▼ LOCAL-ONLY SYNC METADATA ▼▼▼
+//
+// Appended by scripts/generate-local-schema.ts. These tables do not exist in
+// the cloud database and are never themselves synchronized.
+// =============================================================================
+
+/// The durable outbound log. One row per local write to a tracked table,
+/// written by a SQLite trigger inside the SAME transaction as the write itself
+/// — so a sale and its queue entry commit together or not at all. This is what
+/// makes "never lose a transaction" a property of the database rather than a
+/// promise made by application code.
+model SyncQueueItem {
+  /// Monotonic local sequence. Also the upload ORDER: replaying in ascending
+  /// id reproduces the exact order the operations happened on the till, which
+  /// is what keeps dependent rows (a Sale before its SaleItems) valid.
+  id Int @id @default(autoincrement())
+
+  /// Prisma model name, e.g. "Sale".
+  entity    String
+  /// Physical table name, e.g. "sales".
+  tableName String
+  /// Primary key of the affected row.
+  entityId  String
+  /// CREATE | UPDATE | DELETE
+  operation String
+
+  /// JSON snapshot of the row AFTER the change (NEW.*). Null for DELETE.
+  payload    String?
+  /// JSON snapshot BEFORE the change (OLD.*). Null for CREATE. Used by the
+  /// conflict log and by compensating rollback.
+  beforeData String?
+
+  /// PENDING | IN_FLIGHT | SYNCED | FAILED | CONFLICT | SUPERSEDED
+  status   String @default("PENDING")
+  attempts Int    @default(0)
+
+  lastError   String?
+  lastAttempt DateTime?
+
+  /// Groups the items of one upload batch so an interrupted upload can be
+  /// resumed (or rolled back to PENDING) as a unit.
+  batchId String?
+
+  /// Stable, deterministic dedupe key: "<deviceId>:<id>". The cloud stores it
+  /// and rejects a second arrival, which is what makes uploads idempotent
+  /// across a retry that actually succeeded but whose response was lost.
+  idempotencyKey String @unique
+
+  /// When the write happened on the till (local clock).
+  localTimestamp DateTime  @default(now())
+  syncedAt       DateTime?
+
+  @@index([status, id])
+  @@index([entity, entityId])
+  @@index([batchId])
+  @@map("sync_queue")
+}
+
+/// Per-entity download cursor for incremental pulls. Storing a high-water mark
+/// per entity (rather than one global timestamp) means a failed Products pull
+/// does not force Customers to be re-downloaded from scratch.
+model SyncCursor {
+  /// Prisma model name.
+  entity String @id
+
+  /// Highest updatedAt successfully pulled for this entity.
+  lastPulledAt DateTime?
+  /// Tie-breaker for rows sharing lastPulledAt — pagination is keyset-based
+  /// on (updatedAt, id), so an id is needed to resume mid-timestamp.
+  lastPulledId String?
+
+  lastSuccessAt DateTime?
+  rowsPulled    Int       @default(0)
+
+  @@map("sync_cursors")
+}
+
+/// One row per sync session — the history the owner sees, and the record that
+/// makes a partial sync diagnosable after the fact.
+model SyncRun {
+  id String @id
+
+  /// DOWNLOAD | UPLOAD | FULL
+  direction String
+  /// MANUAL | SCHEDULED | AUTO | STARTUP
+  trigger   String
+  /// RUNNING | SUCCESS | PARTIAL | FAILED | INTERRUPTED
+  status    String @default("RUNNING")
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  durationMs Int?
+
+  itemsTotal     Int @default(0)
+  itemsSucceeded Int @default(0)
+  itemsFailed    Int @default(0)
+  itemsConflicted Int @default(0)
+  bytesTransferred Int @default(0)
+
+  error String?
+  /// Free-form JSON detail (per-entity counts, etc.).
+  detail String?
+
+  conflicts SyncConflict[]
+
+  @@index([startedAt])
+  @@index([status])
+  @@map("sync_runs")
+}
+
+/// An auditable record of every conflict and how it was resolved. Required by
+/// the "conflicts must be logged and auditable" rule — a resolution that
+/// silently discarded data would otherwise be invisible.
+model SyncConflict {
+  id String @id
+
+  runId String?
+  run   SyncRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  entity   String
+  entityId String
+
+  /// CLOUD_WINS | LOCAL_WINS | MANUAL
+  resolution String
+  /// Why the resolver chose that side.
+  reason     String
+
+  localData String?
+  cloudData String?
+
+  detectedAt DateTime  @default(now())
+  reviewedAt DateTime?
+  reviewedBy String?
+
+  @@index([entity, entityId])
+  @@index([detectedAt])
+  @@map("sync_conflicts")
+}
+
+/// Append-only audit trail of sync lifecycle events. Separate from SyncRun so
+/// that a crash mid-run still leaves a breadcrumb trail.
+model SyncEvent {
+  id String @id
+
+  runId String?
+  /// RUN_STARTED | BATCH_SENT | BATCH_ACKED | ITEM_FAILED | CONFLICT |
+  /// MODE_CHANGED | RUN_FINISHED | INTEGRITY_CHECK
+  type  String
+  /// INFO | WARN | ERROR
+  level String @default("INFO")
+
+  entity  String?
+  message String
+  detail  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type])
+  @@map("sync_events")
+}
+
+/// Single-row table holding this node's identity and mode state, so a restart
+/// resumes in the mode it was actually in rather than optimistically assuming
+/// the network is back.
+model SyncNodeState {
+  id String @id @default("singleton")
+
+  deviceId String
+
+  /// cloud | local — the datasource the router last resolved to.
+  lastMode        String    @default("local")
+  lastOnlineAt    DateTime?
+  lastDownloadAt  DateTime?
+  lastUploadAt    DateTime?
+  /// Set while a run holds the sync lock; cleared on completion. A value left
+  /// behind after a restart means the previous run was interrupted.
+  activeRunId     String?
+
+  updatedAt DateTime @updatedAt
+
+  @@map("sync_node_state")
+}
