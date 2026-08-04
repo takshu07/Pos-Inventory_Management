@@ -435,7 +435,76 @@ something is normalizing a column differently on the two sides — check
 
 ---
 
-## 14. Tests
+## 14. Pre-production validation
+
+Three harnesses, in the order they must be run. **None of them has been run
+against a real environment yet** — that is the remaining work before Offline
+Mode may be enabled (`MODULE_STATUS §0.4`).
+
+### 14.1 Migration verification — `npm run sync:verify-migration`
+
+Read-only by default. Proves, before anything is applied:
+
+- every statement in the migration is a bare `CREATE` (allowlist; anything
+  unrecognized fails);
+- it creates exactly the four expected tables and no others;
+- no earlier migration is half-applied;
+- the four tables do not already exist;
+- **what the live database actually needs** is only those four tables — which is
+  how schema drift is caught before it becomes a failed deploy;
+- prints live row counts for the tables holding money, so the backup decision is
+  made on real numbers.
+
+It does **not** take the backup. Neon backups need credentials this process does
+not have, and a script claiming a backup it never took is worse than none:
+
+```bash
+neonctl branches create --name pre-offline-sync-$(date +%Y%m%d)
+npm run sync:verify-migration -- --apply --i-have-taken-a-backup
+```
+
+⚠ `--apply` alone refuses. The backup flag is a deliberate speed bump.
+
+### 14.2 End-to-end validation — `npm run sync:validate`
+
+Drives a real business day through the real code paths:
+
+1. **Morning** — download master data from the cloud.
+2. **Day** — the HTTP listener is **closed at the socket** and a full day of
+   trade is rung up against SQLite only. The transport fails the way it fails
+   when a shop's router dies, not because a mock was told to.
+3. **Night** — the listener reopens and the queue drains.
+4. **Reconcile** — sales, sale items, payments, inventory movements, customers,
+   attendance, expenses, audit and the idempotency ledger are compared across
+   both databases.
+
+It also re-uploads the entire day a second time and asserts the cloud row counts
+do not move — the duplicate-prevention proof.
+
+```bash
+# Against a Neon branch, NOT production:
+neonctl branches create --name sync-validation
+DATABASE_URL=<branch-url> npm run sync:validate -- --transactions 200
+```
+
+⚠ This **writes**. It refuses to run unless the URL looks like a
+test/staging/branch database, or `--i-accept-writes-to-this-database` is passed.
+It also stops before writing anything if the migration has not been applied.
+
+It runs in one process, which works only because `cloudApply` and `cloudServe`
+address the cloud through `getCloudClient()` rather than the routed `prisma`
+export. The process is an edge node whose routed writes go to SQLite, while
+simultaneously serving the cloud half against Postgres. The data path is
+identical to two machines; only the wire is shorter.
+
+### 14.3 Stress and recovery — `npm run sync:stress`
+
+See §14.3 output for throughput, queue drain rate, conflict handling and
+recovery from an interrupted sync.
+
+---
+
+## 15. Tests
 
 ```bash
 cd SERVER && npx vitest run src/offline/__tests__/   # 101 tests
@@ -457,7 +526,7 @@ A failure in either after a refactor means the refactor is wrong.
 
 ---
 
-## 15. Known limits
+## 16. Known limits
 
 - **File assets do not sync.** An `Asset` row points at a file on that machine's
   disk; syncing the row without the bytes would give the cloud a broken link.

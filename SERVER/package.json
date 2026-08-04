@@ -21,6 +21,7 @@
     "db:local:setup": "npm run db:local:schema && npm run db:local:generate && npm run db:local:push",
     "db:local:studio": "prisma studio --config prisma/local/prisma.config.ts",
     "sync:verify-migration": "tsx scripts/verify-sync-migration.ts",
+    "sync:validate": "tsx scripts/validate-sync-e2e.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:coverage": "vitest run --coverage",
