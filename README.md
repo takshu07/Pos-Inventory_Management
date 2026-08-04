@@ -34,6 +34,7 @@ core and enhancement — in **[MODULE_STATUS.md §0 and §5](docs/MODULE_STATUS.
 | [docs/BARCODE_SETTINGS.md](docs/BARCODE_SETTINGS.md) | Barcode Settings — why barcode configuration is a tab in the Label Engine rather than a settings screen, and the setting that was read by nothing. |
 | [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | Notifications — the derived category/severity taxonomy, ⚠ the audience boundary that is this module's **only** access control, and why channel delivery stays a documented TODO. |
 | [docs/CONFIGURATION_OWNERSHIP.md](docs/CONFIGURATION_OWNERSHIP.md) | ⚠ **Read before adding any configuration field or settings screen.** Which module owns which setting, and the rules for adding new ones. |
+| [docs/OFFLINE_FIRST.md](docs/OFFLINE_FIRST.md) | Offline-first operation — the local SQLite mirror, trigger-based change capture, the sync protocol and its conflict rules, recovery procedures and troubleshooting. ⚠ Read §1 before touching the datasource: an edge node uses SQLite **all day**, online or not, and the reason matters. |
 
 ## Running it
 
@@ -44,6 +45,26 @@ cd SERVER && npm run dev
 # Client
 cd CLIENT && npm run dev
 ```
+
+### Offline-first mode (optional)
+
+The POS can run a full business day with no internet, against a local SQLite
+mirror, and reconcile with Neon afterwards. It is **off by default** — with
+`OFFLINE_MODE_ENABLED` unset the server behaves exactly as it always has.
+
+```bash
+cd SERVER
+npm run db:local:setup   # generate the SQLite mirror from prisma/schema.prisma
+
+OFFLINE_MODE_ENABLED=true OFFLINE_ROLE=edge \
+OFFLINE_DEVICE_ID=store-01-till-01 \
+SYNC_CLOUD_URL=https://cloud.example.com \
+SYNC_DEVICE_SECRET=<32+ chars> npm run dev
+```
+
+The cloud side needs `npx prisma migrate deploy` once — the migration adds four
+new tables and touches nothing existing. Full details, including the conflict
+rules and recovery procedures, in **[docs/OFFLINE_FIRST.md](docs/OFFLINE_FIRST.md)**.
 
 ## Migrations
 
