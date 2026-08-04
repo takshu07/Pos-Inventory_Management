@@ -316,6 +316,12 @@ sales as duplicates.
 
 ## 10. Deployment
 
+> **Status: implementation-complete, awaiting deployment validation** (2026-08-05).
+> No feature work remains. The gate is the four operational steps in
+> [MODULE_STATUS §0.4](MODULE_STATUS.md) — Neon backup branch, apply the
+> migration there, run `sync:validate` against it, run `sync:stress` on the real
+> till hardware. Offline Mode stays disabled until those pass.
+
 ### Cloud node
 
 ```bash

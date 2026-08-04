@@ -3,8 +3,8 @@
 What is built, what is a placeholder, and what each remaining screen needs.
 Kept current so "is X done?" has one answer rather than a grep.
 
-Last updated: 2026-08-05 — offline-first architecture built (§0.4), feature-complete
-milestone unchanged.
+Last updated: 2026-08-05 — offline-first implementation-complete (§0.4), awaiting
+deployment validation. Feature-complete milestone unchanged.
 
 ---
 
@@ -53,7 +53,7 @@ If something genuinely missing from core surfaces, it belongs in §1 as a gap,
 not in §5 — and this section's claim should be corrected rather than quietly
 stretched to cover it.
 
-### 0.4 Offline-first — BUILT 2026-08-05, NOT YET ENABLED
+### 0.4 Offline-first — IMPLEMENTATION-COMPLETE 2026-08-05, NOT YET ENABLED
 
 The platform can now run a full business day with no internet, against a local
 SQLite mirror, and reconcile with Neon afterwards. Built on branch
@@ -82,16 +82,43 @@ the existing Neon client, no SQLite file is opened, no trigger is installed, and
 the server is the one that existed before this feature. A test pins the default
 (§4.4) so it cannot be flipped by accident.
 
-**Pre-production checklist — none of these are done yet:**
+**Status: IMPLEMENTATION-COMPLETE, awaiting deployment validation.** Signed off
+2026-08-05. No further feature work is required before rollout; everything
+remaining is operational and needs a real environment — Neon credentials and
+till hardware — rather than code.
 
-1. Apply the cloud migration after a Neon backup, having confirmed it is
-   additive. Tooling: `npm run sync:verify-migration` (proves additive-only
-   against the live schema; refuses to apply without an explicit flag).
-2. Full-day end-to-end validation: morning download → a business day with the
-   network physically disconnected → night sync → reconcile every module.
-   Harness: `npm run sync:validate`.
-3. Stress test with realistic volumes. Harness: `npm run sync:stress`.
-4. Merge only after the above. Offline stays disabled by default regardless.
+**Deployment runbook.** Steps 1-4 are the gate; do not do step 5 before them.
+
+1. **Create a Neon backup branch.** Instant, costs nothing until it diverges,
+   and gives you a database to point the app at if anything goes wrong.
+   ```bash
+   neonctl branches create --name pre-offline-sync-$(date +%Y%m%d)
+   ```
+2. **Apply the additive migration to that branch.**
+   ```bash
+   npm run sync:verify-migration                                   # verify first
+   npm run sync:verify-migration -- --apply --i-have-taken-a-backup
+   ```
+   Already verified read-only against production on 2026-08-05: additive-only,
+   no half-applied migrations, and the live database needs exactly the four sync
+   tables with no other drift.
+3. **Run the full end-to-end validation against the branch.**
+   ```bash
+   DATABASE_URL=<branch-url> npm run sync:validate -- --transactions 500
+   ```
+   Morning download → a day of trade with the network closed at the socket →
+   night sync → every module reconciled, plus a duplicate-upload proof.
+4. **Run the stress suite on the ACTUAL till hardware**, not a developer laptop.
+   The published figures (§ OFFLINE_FIRST 14.3 — 0.58 ms capture overhead,
+   233 sales/s) are a laptop upper bound; the number that matters is the one the
+   cashier feels.
+   ```bash
+   npm run sync:stress -- --products 2000 --transactions 3000
+   ```
+5. **Only then** enable Offline Mode on the deployment being cut over. It stays
+   `false` in `.env.example`, in the Dockerfile and in the compose file
+   permanently — enabling is a per-deployment decision, never a repo default,
+   and §4.3's safety suite fails if that changes.
 
 ---
 
