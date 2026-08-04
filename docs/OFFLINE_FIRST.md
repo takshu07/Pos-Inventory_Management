@@ -499,8 +499,57 @@ identical to two machines; only the wire is shorter.
 
 ### 14.3 Stress and recovery — `npm run sync:stress`
 
-See §14.3 output for throughput, queue drain rate, conflict handling and
-recovery from an interrupted sync.
+Runs **without a cloud** by default. The expensive, risky parts of an offline
+day are all local — the write path the cashier waits on, the trigger overhead on
+every one of those writes, and the queue's behaviour at a day's depth — so they
+can be measured before anything is provisioned, and re-measured on the actual
+till hardware, which is where the number that matters comes from.
+
+```bash
+npm run sync:stress                                        # defaults: 1k products, 2k sales
+npm run sync:stress -- --products 2000 --transactions 3000
+npm run sync:stress -- --with-cloud --i-accept-writes-to-this-database
+```
+
+**Measured 2026-08-05** — 2,000 products (4,000 catalog rows), 3,000 sales,
+12,000 captured writes, on a development laptop. Retail hardware will be slower;
+treat these as an upper bound, not a promise.
+
+| Measure | Result |
+|---|---|
+| Catalog load (morning download's write side) | 4,000 rows in 1.5s — **2,700 rows/s** |
+| Barcode / SKU lookup — the scan path | **0.28 ms** average |
+| Checkout **with** change capture | 4.64 ms per sale |
+| Checkout **without** capture (control) | 4.05 ms per sale |
+| **Capture overhead** | **+0.58 ms per sale (+14%)** |
+| Full day: 3,000 sales | 12.9s — **233 sales/s** sustained |
+| Queue depth after the day | 12,000 items (4 per sale, exactly as expected) |
+| Local database size | 16.5 MB |
+| Process heap | 207 MB — the queue is streamed in batches, never loaded whole |
+| Status aggregate (polled by every till screen) | **0.73 ms** at 12,000 items |
+| Batch claim (200 items) | 4.1 ms |
+| Idempotency keys unique | 12,000 / 12,000, all device-namespaced |
+| Conflict decisions | 20,000 in 5 ms |
+
+**The number that decides whether this is usable is the capture overhead:
+0.58 ms per sale.** A cashier cannot perceive it, and it buys the atomicity
+guarantee that a sale and its queue entry commit together.
+
+It also verifies, at volume:
+
+- **Interrupted sync** — 500 items stranded `IN_FLIGHT` plus a run left
+  `RUNNING`; after recovery, 0 still stranded, the run closed, and the queue
+  total unchanged. Nothing lost, nothing invisible to the next drain.
+- **Capture failure** — a write with capture disabled is confirmed *not*
+  captured (which is why a stuck flag is an alarm, not a warning), the startup
+  repair re-enables it, and capture resumes.
+- **Conflict rules** — cloud wins a price change and logs it; the till wins a
+  recorded sale; and Postgres `"12.50"` against SQLite `12.5` is recognized as
+  identical rather than logged as a false conflict on every priced row.
+
+⚠ Cloud-side upload throughput is **not** measured without `--with-cloud`. The
+harness says so explicitly at the end of every run rather than letting a green
+result imply more coverage than it has.
 
 ---
 
