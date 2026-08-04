@@ -52,8 +52,8 @@ export default function OwnerProductsPage() {
 
   const { data, isLoading, isError, refetch, isFetching } = useOwnerProducts(serverParams);
   const { data: detail, isLoading: detailLoading } = useOwnerProduct(detailId ?? undefined);
-  const { data: categories = [], isPending: categoriesPending } = useCategoryOptions();
-  const { data: brands = [], isPending: brandsPending } = useBrandOptions();
+  const { data: categories = [] } = useCategoryOptions();
+  const { data: brands = [] } = useBrandOptions();
 
   const products = data?.data ?? [];
   const total = data?.total ?? 0;
@@ -136,7 +136,6 @@ export default function OwnerProductsPage() {
           brands={brands}
           showStatusFilter
           hasActiveFilters={hasActiveFilters}
-          optionsLoading={categoriesPending || brandsPending}
         />
       </div>
 

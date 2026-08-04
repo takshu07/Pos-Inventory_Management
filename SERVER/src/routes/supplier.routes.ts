@@ -10,13 +10,6 @@ const router = Router();
 router.use(authenticate);
 
 router.get("/", requireRole("OWNER"), supplierController.list);
-
-// Picker projection (id + businessName only, no stats). Registered BEFORE
-// "/:id" so Express does not read "options" as a supplier id. Only MANAGER is
-// required: managers filter inventory by supplier, and this exposes no
-// commercial data — unlike the OWNER-gated list, which carries payment rollups.
-router.get("/options", requireRole("MANAGER"), supplierController.options);
-
 router.get(
   "/:id",
   requireRole("OWNER"),

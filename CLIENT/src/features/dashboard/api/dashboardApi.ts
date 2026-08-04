@@ -85,30 +85,21 @@ export async function getSalesKPIs(filters: { startDate?: string; endDate?: stri
  * Sourced from GET /sales (accessible to all roles) filtered to today — NOT the
  * owner-only analytics engine. Returns an exact transaction count (the paginated
  * `total`, independent of page size) and the summed revenue of today's sales.
- * A store's daily volume is small, so a single full-size page covers it; if a
+ * A store's daily volume is small, so a single high-limit page covers it; if a
  * day ever exceeds the limit, the count stays exact and revenue reflects the
  * fetched page (never a fabricated number).
- *
- * ⚠ `limit` is CAPPED AT 100 by the shared `paginationSchema`. This asked for
- * 200, so every request 400'd and the tile silently showed zeros — a failure
- * that looked like "no sales today" rather than like an error. Do not raise
- * this past MAX_PAGE_LIMIT; to cover a busier day, page or add a totals
- * endpoint instead.
  */
 export interface OperationalTodayStats {
   orderCount: number;
   revenue: number;
 }
 
-/** The server's shared pagination ceiling (SERVER/src/validation/common.validation.ts). */
-const MAX_PAGE_LIMIT = 100;
-
 export async function getOperationalTodayStats(): Promise<OperationalTodayStats> {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
   const response = await apiClient.get<any>("/sales", {
-    params: { startDate: startOfDay.toISOString(), limit: MAX_PAGE_LIMIT, page: 1 },
+    params: { startDate: startOfDay.toISOString(), limit: 200, page: 1 },
   });
 
   // Interceptor unwraps to response.data = { total, data: Sale[] }.

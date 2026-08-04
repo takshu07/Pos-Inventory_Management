@@ -4,7 +4,6 @@ import { Sidebar } from "./Sidebar";
 import { Navbar } from "./Navbar";
 import { MobileSidebar } from "./MobileSidebar";
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
-import { useCatalogLookupPrefetch } from "@/lib/useCatalogLookupPrefetch";
 /**
  * MainLayout — Authenticated Application Shell
  * Structure:
@@ -25,13 +24,6 @@ import { useCatalogLookupPrefetch } from "@/lib/useCatalogLookupPrefetch";
 export function MainLayout() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const location = useLocation();
-
-  // Warms the category/brand/supplier dropdown caches while the shell paints,
-  // so filter bars render their full option list on first paint instead of
-  // visibly filling in a moment later. Called BEFORE the auth redirect below —
-  // hooks must run on every render — and gated by the flag rather than by an
-  // early return.
-  useCatalogLookupPrefetch(isAuthenticated);
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

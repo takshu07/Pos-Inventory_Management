@@ -10,13 +10,6 @@ const router = Router();
 router.use(authenticate);
 
 router.get("/", requireRole("OWNER"), brandController.list);
-
-// Picker projection (id + name only, no stats). Registered BEFORE "/:id" so
-// Express does not read "options" as a brand id. Only MANAGER is required:
-// managers filter product/inventory tables by brand, and this exposes no
-// commercial data — unlike the OWNER-gated list, which carries revenue stats.
-router.get("/options", requireRole("MANAGER"), brandController.options);
-
 router.get(
   "/:id",
   requireRole("OWNER"),

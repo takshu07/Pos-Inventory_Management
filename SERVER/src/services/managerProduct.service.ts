@@ -118,9 +118,6 @@ export async function listCategories() {
 }
 
 export async function listBrands() {
-  // findOptions for the same reason as categories above: the paginated list
-  // capped this at the first 100 brands, silently dropping the rest from the
-  // manager's filter dropdown.
-  const data = await brandRepository.findOptions();
+  const { data } = await brandRepository.findMany({ page: 1, limit: 100, isActive: true });
   return data.map((b) => ({ id: b.id, name: b.name }));
 }

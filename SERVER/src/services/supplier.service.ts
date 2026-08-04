@@ -86,18 +86,6 @@ export async function listSuppliers(query: ListSuppliersQuery) {
 }
 
 /**
- * Every active supplier, unpaginated — the picker projection.
- *
- * Dropdowns must show the WHOLE list; the previous caller asked the paginated
- * list endpoint for `limit=200`, which exceeds the shared pagination cap of 100
- * and made the whole request fail validation, leaving the picker empty. Skips
- * `withStats` — a picker needs id and name, not purchase rollups.
- */
-export async function getSupplierOptions() {
-  return supplierRepository.findOptions();
-}
-
-/**
  * Full supplier profile: the record, its rollups, and the three histories the
  * profile screen shows as tabs. Fetched together because the profile always
  * renders all of them, so splitting into four round trips to a network-latency

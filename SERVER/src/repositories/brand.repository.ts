@@ -38,15 +38,6 @@ export const brandRepository = {
     return { total, data };
   },
 
-  /** Active brands only, id+name, unpaginated — the picker projection. */
-  async findOptions() {
-    return prisma.brand.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    });
-  },
-
   async findById(id: string) {
     return prisma.brand.findUnique({ where: { id } });
   },

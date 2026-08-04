@@ -20,17 +20,6 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
   });
 });
 
-/** Unpaginated id+name list for filter/picker dropdowns. */
-export const options = asyncHandler(async (_req: Request, res: Response) => {
-  const result = await brandService.getBrandOptions();
-
-  return res.status(HTTP_STATUS.OK).json({
-    success: true,
-    message: "Brand options retrieved successfully.",
-    data: result,
-  });
-});
-
 export const getById = asyncHandler(async (req: Request, res: Response) => {
   const result = await brandService.getBrandById(req.params["id"] as string);
 

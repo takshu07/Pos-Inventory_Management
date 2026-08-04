@@ -258,17 +258,11 @@ export async function fetchProductVariants(productId: string): Promise<VariantOp
   }));
 }
 
-/**
- * Active suppliers for the create-purchase picker.
- *
- * ⚠ Uses `/suppliers/options`, the unpaginated picker projection — NOT the
- * paginated list. The previous version asked the list for `limit=200`, which
- * exceeds the shared pagination cap of 100, so the request failed validation
- * with a 400 and the dropdown rendered empty. Even at a legal limit the list
- * would silently truncate past its page size.
- */
+/** Active suppliers for the create-purchase picker. */
 export async function fetchSupplierOptions(): Promise<{ id: string; businessName: string }[]> {
-  const res = await apiClient.get<any>("/suppliers/options");
-  const rows: Supplier[] = res?.data ?? [];
+  const res = await apiClient.get<any>("/suppliers", {
+    params: { limit: 200, page: 1, isActive: "true" },
+  });
+  const rows: Supplier[] = res?.data?.data ?? [];
   return rows.map((s) => ({ id: s.id, businessName: s.businessName }));
 }
