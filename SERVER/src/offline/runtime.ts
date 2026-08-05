@@ -49,9 +49,28 @@ export async function initializeOfflineRuntime(): Promise<void> {
   const config = offlineConfig();
 
   if (!config.enabled) {
-    // The default path. Nothing initializes, nothing is logged at info level,
-    // and the process is byte-for-byte the server that existed before this
-    // feature was added.
+    // The default path. Nothing initializes, and the process is byte-for-byte
+    // the server that existed before this feature was added.
+    //
+    // The one thing it does do is state the resolved gate, because "did the
+    // rollback actually take effect?" is otherwise unanswerable from the logs.
+    // The config is memoized and the SQLite handle is parked on `globalThis`,
+    // so a `tsx watch` reload does NOT re-read the flag — an operator can flip
+    // it, see the process reload, and believe a rollback happened when the old
+    // value is still live. This line is what they grep for to confirm.
+    //
+    // `staleRole` surfaces the rollback-hygiene trap: offline is off, but an
+    // edge role was left behind. Harmless now that the endpoints gate on
+    // `enabled`, still worth clearing before it confuses the next person.
+    logger.info(
+      {
+        enabled: false,
+        role: config.role,
+        dataSource: "cloud",
+        staleRole: config.role === "edge" ? true : undefined,
+      },
+      "offline: disabled — this node runs entirely on the cloud database"
+    );
     return;
   }
 

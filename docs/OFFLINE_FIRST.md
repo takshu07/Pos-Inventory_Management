@@ -299,7 +299,7 @@ false entries a day, which is the same as having no conflict log at all.
 | `SYNC_CLOUD_URL` | — | **Required on edge.** |
 | `SYNC_DEVICE_SECRET` | — | **Required.** Min 32 chars. |
 | `SYNC_DOWNLOAD_BATCH_SIZE` | `500` | |
-| `SYNC_UPLOAD_BATCH_SIZE` | `200` | |
+| `SYNC_UPLOAD_BATCH_SIZE` | `50` | ⚠ Do not raise. See below. |
 | `SYNC_COMPRESSION_THRESHOLD` | `4096` | Gzip bodies above this. |
 | `SYNC_MAX_ATTEMPTS` | `8` | Then the item parks as FAILED. |
 | `SYNC_BASE_BACKOFF_MS` / `SYNC_MAX_BACKOFF_MS` | `2000` / `300000` | Full jitter. |
@@ -311,6 +311,17 @@ false entries a day, which is the same as having no conflict log at all.
 ⚠ Two stores must never share an `OFFLINE_DEVICE_ID`. They would produce
 colliding idempotency keys and the cloud would silently discard one store's
 sales as duplicates.
+
+⚠ **`SYNC_UPLOAD_BATCH_SIZE` is 50, and raising it breaks uploads.** The cloud
+applies a batch in ONE interactive transaction budgeted at 120s
+(`cloudApply.ts`). Against Neon a round trip costs ~330ms, so 200 items cannot
+finish inside that window: the transaction expires, the **whole batch rolls
+back**, and the till retries the same doomed payload forever — a queue that
+never drains while every individual item is perfectly valid. 50 leaves
+comfortable headroom. A day's queue simply uploads as several batches, which the
+receipt ledger already makes idempotent, so there is no cost to the smaller
+size. This table previously documented `200`; that was doc/code drift, corrected
+after validation confirmed 50.
 
 ---
 
@@ -343,6 +354,37 @@ npm start
 
 On first boot the mirror is empty, so the node runs an initial download
 automatically and logs loudly that it cannot sell until it succeeds.
+
+### Rolling back
+
+Offline Mode is **startup-controlled**: the same build runs enabled or disabled,
+so turning it off is a config change plus a full restart — no rebuild, no
+redeploy, **no migration reversal, and no data deletion**.
+
+```bash
+# 1. Drain first, while still enabled (edge nodes):
+curl -X POST localhost:3000/api/v1/sync/run -d '{"direction":"UPLOAD"}'
+curl localhost:3000/api/v1/sync/status    # require pending == 0 AND inFlight == 0
+
+# 2. Set OFFLINE_MODE_ENABLED=false, and unset OFFLINE_ROLE.
+# 3. Ensure DATABASE_URL is set — a till normally has none by design.
+# 4. FULL restart (not a watch-reload; the config is memoized).
+```
+
+Three things worth knowing before you do it:
+
+- **Roll back edge nodes before the cloud node.** Disabling the cloud first
+  makes every till's upload 404, burning retry attempts until items park as
+  `FAILED` and need an explicit `POST /sync/retry`.
+- **A disabled edge node switches from SQLite to Neon**, so it needs a
+  `DATABASE_URL` it has never had. Without one it refuses to boot — fail-safe,
+  and the error now says exactly this.
+- **Never** run `npm run db:local:setup`, delete `data/pos-local.db`, or reverse
+  the migration as part of a rollback. Those are the only ways to actually lose
+  the queue.
+
+📖 **Full procedure, including verification steps and re-enabling:
+[OFFLINE_ROLLBACK_RUNBOOK.md](OFFLINE_ROLLBACK_RUNBOOK.md).**
 
 ---
 

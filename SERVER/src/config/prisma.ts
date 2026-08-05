@@ -39,6 +39,58 @@ import { createInstrumentedPool } from "./queryInstrumentation";
 
 const REQUIRED_ENV_VARS = ["DATABASE_URL", "JWT_SECRET"] as const;
 
+/**
+ * Detects the one startup failure that looks like a broken server but is
+ * actually a half-finished rollback.
+ *
+ * A till running Offline Mode legitimately has NO `DATABASE_URL` — the waiver
+ * below is what allows that. The moment `OFFLINE_MODE_ENABLED` is set to false,
+ * the waiver stops applying and the node demands a variable it has never had.
+ * Failing closed here is correct (the alternative is a till that boots and then
+ * fails at the first sale), but the bare "missing environment variable" message
+ * gives whoever is doing the rollback at 6am no way to connect the error to the
+ * change they just made.
+ *
+ * The tell is leftover offline variables: a node with `OFFLINE_ROLE=edge` or a
+ * device id still set, but the master switch off, was an edge node minutes ago.
+ */
+function looksLikeEdgeRollback(): boolean {
+  if (process.env["OFFLINE_MODE_ENABLED"]?.trim()) {
+    // Explicitly present. Only a falsy value indicates a rollback; a truthy one
+    // means the node is enabled and took the waiver.
+    if (isEdgeNode()) return false;
+  }
+
+  const roleIsEdge =
+    process.env["OFFLINE_ROLE"]?.trim().toLowerCase() === "edge";
+
+  return roleIsEdge || Boolean(process.env["OFFLINE_DEVICE_ID"]?.trim());
+}
+
+/** The actionable half of the rollback error. Kept out of the throw for width. */
+const EDGE_ROLLBACK_GUIDANCE = [
+  "",
+  "This node still has Offline Mode variables set (OFFLINE_ROLE / OFFLINE_DEVICE_ID)",
+  "but OFFLINE_MODE_ENABLED is not enabled, so this looks like an edge-node",
+  "rollback in progress.",
+  "",
+  "An edge node runs on local SQLite and has no DATABASE_URL by design. Disabling",
+  "Offline Mode moves it back onto the cloud database, which requires one.",
+  "",
+  "To finish the rollback:",
+  "  1. Set DATABASE_URL to the cloud (Neon) connection string for this store.",
+  "  2. Unset OFFLINE_ROLE, or set it to `cloud`, so no stale edge config remains.",
+  "  3. Start the server again (a full restart — a watch-reload will not re-read this).",
+  "",
+  "To cancel the rollback and keep running offline instead:",
+  "  Set OFFLINE_MODE_ENABLED=true and restart.",
+  "",
+  "⚠ Queued sales are NOT lost either way. They remain in the local SQLite file",
+  "  and upload once Offline Mode is enabled again. Do NOT delete that file and",
+  "  do NOT run `npm run db:local:setup` to clear this error — that destroys the",
+  "  queue. See docs/OFFLINE_ROLLBACK_RUNBOOK.md.",
+].join("\n");
+
 export function validateEnvironment(): void {
   const missing = REQUIRED_ENV_VARS.filter((key) => {
     // An edge node has no DATABASE_URL by design — it never opens a connection
@@ -50,12 +102,19 @@ export function validateEnvironment(): void {
     return !process.env[key]?.trim();
   });
 
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missing.join(", ")}. ` +
-        "Server cannot start without them."
-    );
+  if (missing.length === 0) return;
+
+  const base =
+    `Missing required environment variables: ${missing.join(", ")}. ` +
+    "Server cannot start without them.";
+
+  // Only DATABASE_URL has a rollback story. A missing JWT_SECRET is a plain
+  // misconfiguration and gets the plain message.
+  if (missing.includes("DATABASE_URL") && looksLikeEdgeRollback()) {
+    throw new Error(`${base}\n${EDGE_ROLLBACK_GUIDANCE}`);
   }
+
+  throw new Error(base);
 }
 
 // =============================================================================

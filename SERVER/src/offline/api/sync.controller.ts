@@ -173,13 +173,38 @@ export const listCloudConflicts = asyncHandler(async (req: Request, res: Respons
 // EDGE SIDE
 // =============================================================================
 
+/**
+ * True when this process must NOT take an edge code path on these endpoints.
+ *
+ * ⚠ The `enabled` half is load-bearing, and it is why this is a named helper
+ * rather than an inline `role !== "edge"`. Rollback is performed by setting
+ * `OFFLINE_MODE_ENABLED=false` — which is the natural way to disable a flag and
+ * leaves the rest of the offline block, `OFFLINE_ROLE=edge` included, in place.
+ * Gating on `role` alone made a disabled server take the edge branch anyway and
+ * open SQLite, breaking the "disabled is fully inert" guarantee in exactly the
+ * situation the guarantee exists for:
+ *
+ *   • no local database file → `getLocalClient()` throws, and the client polls
+ *     status every 10s, so an inert server logs a 500 six times a minute;
+ *   • a local file left over from before rollback → the cashier sees a live
+ *     indicator with a real pending count on a node whose sync engine is not
+ *     running, i.e. data reported as queued that nothing will ever drain.
+ *
+ * Checking `enabled` first makes a disabled node answer as a plain cloud node
+ * regardless of what `OFFLINE_ROLE` was left at.
+ */
+function servesCloudPayload(): boolean {
+  const config = offlineConfig();
+  return !config.enabled || config.role !== "edge";
+}
+
 /** GET /sync/status — what the cashier's indicator reads. */
 export const status = asyncHandler(async (_req: Request, res: Response) => {
-  const config = offlineConfig();
-
   // A cloud node answers rather than 404s, so one client build works against
-  // both deployments without branching on which it is talking to.
-  if (config.role !== "edge") {
+  // both deployments without branching on which it is talking to. A DISABLED
+  // node answers the same way, so rollback is invisible to the client beyond
+  // the indicator disappearing.
+  if (servesCloudPayload()) {
     return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
@@ -216,6 +241,19 @@ export const status = asyncHandler(async (_req: Request, res: Response) => {
  * checkout: it holds no lock the POS path needs.
  */
 export const run = asyncHandler(async (req: Request, res: Response) => {
+  // Same gate as /status. Without it a disabled node with a stale
+  // `OFFLINE_ROLE=edge` reaches the engine and fails somewhere inside the local
+  // client, which reads as "sync is broken" rather than "sync is off".
+  if (servesCloudPayload()) {
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        skipped: true,
+        reason: "Offline Mode is not enabled on this node; there is nothing to sync.",
+      },
+    });
+  }
+
   const body = runBody.parse(req.body ?? {});
 
   const result =
@@ -232,6 +270,13 @@ export const run = asyncHandler(async (req: Request, res: Response) => {
 
 /** POST /sync/retry — requeue failed items. */
 export const retry = asyncHandler(async (req: Request, res: Response) => {
+  if (servesCloudPayload()) {
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: { requeued: 0 },
+    });
+  }
+
   const body = retryBody.parse(req.body ?? {});
 
   const requeued = await retryFailedItems(
@@ -246,6 +291,14 @@ export const retry = asyncHandler(async (req: Request, res: Response) => {
 
 /** GET /sync/history — past runs, for the history screen. */
 export const history = asyncHandler(async (req: Request, res: Response) => {
+  // The diagnostic reads below share `/status`'s exposure: each one reaches
+  // `getLocalClient()`. They are not polled, so they were the lower-severity
+  // half of the finding, but a rolled-back node should answer "nothing here"
+  // rather than surface a raw SQLite error to a manager opening the screen.
+  if (servesCloudPayload()) {
+    return res.status(HTTP_STATUS.OK).json({ success: true, data: [] });
+  }
+
   const limit = Number(req.query["limit"] ?? 50) || 50;
 
   return res.status(HTTP_STATUS.OK).json({
@@ -256,6 +309,14 @@ export const history = asyncHandler(async (req: Request, res: Response) => {
 
 /** GET /sync/queue — the queue itself, for diagnosis. */
 export const queue = asyncHandler(async (req: Request, res: Response) => {
+  if (servesCloudPayload()) {
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: [],
+      meta: { total: 0 },
+    });
+  }
+
   const result = await syncStatus.getQueueItems({
     status: typeof req.query["status"] === "string" ? req.query["status"] : undefined,
     limit: Number(req.query["limit"] ?? 100) || 100,
@@ -270,6 +331,10 @@ export const queue = asyncHandler(async (req: Request, res: Response) => {
 
 /** GET /sync/conflicts — locally recorded conflicts. */
 export const conflicts = asyncHandler(async (req: Request, res: Response) => {
+  if (servesCloudPayload()) {
+    return res.status(HTTP_STATUS.OK).json({ success: true, data: [] });
+  }
+
   const limit = Number(req.query["limit"] ?? 50) || 50;
 
   return res.status(HTTP_STATUS.OK).json({
@@ -280,6 +345,10 @@ export const conflicts = asyncHandler(async (req: Request, res: Response) => {
 
 /** GET /sync/events — the append-only breadcrumb trail. */
 export const events = asyncHandler(async (req: Request, res: Response) => {
+  if (servesCloudPayload()) {
+    return res.status(HTTP_STATUS.OK).json({ success: true, data: [] });
+  }
+
   return res.status(HTTP_STATUS.OK).json({
     success: true,
     data: await syncStatus.getSyncEvents({
@@ -297,7 +366,11 @@ export const events = asyncHandler(async (req: Request, res: Response) => {
  * perfectly; it is just no longer recording them anywhere that survives.
  */
 export const health = asyncHandler(async (_req: Request, res: Response) => {
-  if (offlineConfig().role !== "edge") {
+  // Disabled counts as cloud here too (see `servesCloudPayload`). A rolled-back
+  // node must report healthy rather than 503: it has no capture to be broken,
+  // and an uptime monitor left pointed at this endpoint should not page anyone
+  // because a node was deliberately taken out of Offline Mode.
+  if (servesCloudPayload()) {
     return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: { healthy: true, findings: [], role: "cloud" },

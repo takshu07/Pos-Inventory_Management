@@ -34,6 +34,11 @@ export default defineConfig({
       "src/offline/__tests__/requestSignature.test.ts",
       "src/offline/__tests__/rawBodyCapture.test.ts",
       "src/offline/__tests__/conflicts.test.ts",
+      // Rollback safety: the disabled path must never reach SQLite. Pure
+      // config/controller logic — the local client is mocked to throw, which
+      // is precisely what makes the assertion meaningful without a database.
+      "src/offline/__tests__/rollback.test.ts",
+      "src/offline/__tests__/defaultDisabled.test.ts",
     ],
     testTimeout: 10000,
   },
