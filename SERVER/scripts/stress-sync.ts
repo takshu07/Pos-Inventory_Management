@@ -115,14 +115,28 @@ async function main(): Promise<void> {
   const capture = await verifyChangeCapture(db);
   metric("change-capture triggers", `${capture.installed}`, capture.missing.length === 0 ? "ok" : "fail");
 
-  for (const table of [
-    "sync_queue", "sync_events", "sync_runs", "sync_conflicts",
-    "payments", "sale_items", "sales", "inventory_movements",
-    "product_variants", "products", "customers", "attendance",
-    "employees", "categories", "sizes", "colors",
-  ]) {
-    await db.$executeRawUnsafe(`DELETE FROM "${table}"`);
+  // This list is a subset of the 55-model mirror, so rows in tables it does not
+  // name (expenses, discount_rules, …) still reference the categories and
+  // employees being deleted, and SQLite refuses the DELETE. Suspending FK
+  // enforcement for the truncation is safe precisely because EVERY table below
+  // is emptied — there is no dangling reference left to protect — and it is
+  // re-enabled immediately after.
+  await db.$executeRawUnsafe(`PRAGMA foreign_keys = OFF`);
+
+  try {
+    for (const table of [
+      "sync_queue", "sync_events", "sync_runs", "sync_conflicts",
+      "expenses", "discount_rules",
+      "payments", "sale_items", "sales", "inventory_movements",
+      "product_variants", "products", "customers", "attendance",
+      "employees", "categories", "sizes", "colors",
+    ]) {
+      await db.$executeRawUnsafe(`DELETE FROM "${table}"`);
+    }
+  } finally {
+    await db.$executeRawUnsafe(`PRAGMA foreign_keys = ON`);
   }
+
   metric("database cleared", "ok");
 
   const tag = `ST-${Date.now().toString(36)}`;

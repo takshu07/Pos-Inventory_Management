@@ -27,6 +27,13 @@ export default defineConfig({
       // Request-contract schemas. Zod parsing is pure, so these need no
       // database either.
       "src/validation/__tests__/**/*.test.ts",
+      // Offline sync: policy classification/ordering, signature canonicalization
+      // and raw-body capture. All pure logic over the generated manifest and
+      // node:crypto — no database, despite living under src/offline.
+      "src/offline/__tests__/policy.test.ts",
+      "src/offline/__tests__/requestSignature.test.ts",
+      "src/offline/__tests__/rawBodyCapture.test.ts",
+      "src/offline/__tests__/conflicts.test.ts",
     ],
     testTimeout: 10000,
   },

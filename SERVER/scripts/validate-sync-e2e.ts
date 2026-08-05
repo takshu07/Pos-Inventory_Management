@@ -52,6 +52,12 @@ process.env["SYNC_CLOUD_URL"] = `http://127.0.0.1:${PORT}`;
 process.env["SYNC_DEVICE_SECRET"] =
   process.env["SYNC_DEVICE_SECRET"] ?? "e2e-validation-secret-".padEnd(48, "x");
 process.env["SYNC_AUTO_ENABLED"] = "false"; // the harness drives every run itself
+// Connectivity uses hysteresis: 2 consecutive good probes before it will call
+// itself online. This harness opens the listener and immediately runs ONE sync,
+// so with the production default the state is still "unknown" and every download
+// is skipped. A store wants the damping; a single-shot test cannot afford it.
+process.env["SYNC_PROBE_OK_THRESHOLD"] = "1";
+process.env["SYNC_PROBE_FAIL_THRESHOLD"] = "1";
 process.env["LOCAL_DATABASE_PATH"] =
   process.env["LOCAL_DATABASE_PATH"] ?? "./data/e2e-validation.db";
 
@@ -84,7 +90,12 @@ function phase(title: string): void {
 let sequence = 0;
 const nextId = () => (sequence += 1);
 const tag = `E2E-${Date.now().toString(36)}`;
-const uniquePhone = () => `9${String(700_000_000 + nextId()).slice(0, 9)}`;
+// `phone` is @unique cloud-wide and this harness is re-run against a branch that
+// keeps the rows from the previous run, so the counter alone repeats and the
+// second run always collides. Offset it per-run so each run claims a fresh block.
+const phoneRunOffset = Date.now() % 100_000_000;
+const uniquePhone = () =>
+  `9${String(100_000_000 + ((phoneRunOffset + nextId()) % 900_000_000)).slice(0, 9)}`;
 
 interface DayTotals {
   sales: number;
@@ -384,7 +395,6 @@ async function seedCloudMasterData(
   cloud: Awaited<ReturnType<typeof import("../src/config/prisma").getCloudClient>>
 ): Promise<Seeded> {
   const category = await cloud.category.create({ data: { name: `${tag}-cat` } });
-  const size = await cloud.size.create({ data: { name: `${tag}-M` } });
   const color = await cloud.color.create({ data: { name: `${tag}-Blue` } });
 
   const product = await cloud.product.create({
@@ -395,12 +405,20 @@ async function seedCloudMasterData(
     },
   });
 
+  // ProductVariant is unique on (productId, sizeId, colorId), so each variant
+  // needs its own size — reusing one size collides after the first insert.
+  const sizes = await Promise.all(
+    Array.from({ length: 5 }, (_unused, index) =>
+      cloud.size.create({ data: { name: `${tag}-S${index}` } })
+    )
+  );
+
   const variantIds: string[] = [];
   for (let index = 0; index < 5; index += 1) {
     const variant = await cloud.productVariant.create({
       data: {
         productId: product.id,
-        sizeId: size.id,
+        sizeId: sizes[index]!.id,
         colorId: color.id,
         sku: `${tag}-SKU-${index}`,
         costPrice: "100.00",
@@ -411,6 +429,11 @@ async function seedCloudMasterData(
     });
     variantIds.push(variant.id);
   }
+
+  // An expense category has to exist in the CLOUD so the morning download
+  // carries it to the till — without one the business day cannot record the
+  // drawer expense and that whole path goes untested.
+  await cloud.expenseCategory.create({ data: { name: `${tag}-Sundries` } });
 
   const employee = await cloud.employee.create({
     data: {
@@ -463,7 +486,7 @@ async function runBusinessDay(
       employeeId: employee.id,
       date: new Date(),
       status: "PRESENT",
-      checkIn: new Date(),
+      clockInAt: new Date(),
     },
   });
   totals.attendance += 1;
@@ -552,7 +575,9 @@ async function runBusinessDay(
   if (expenseCategory !== null) {
     await local.expense.create({
       data: {
+        expenseCode: `${tag}-EXP-1`,
         categoryId: expenseCategory.id,
+        title: "Tea and biscuits",
         amount: "250.00",
         description: `${tag} tea and biscuits`,
         expenseDate: new Date(),

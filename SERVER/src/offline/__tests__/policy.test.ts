@@ -165,6 +165,38 @@ describe("derived sets", () => {
     expect(positionOf("Product")).toBeLessThan(positionOf("ProductVariant"));
     expect(positionOf("Supplier")).toBeLessThan(positionOf("ProductVariant"));
     expect(positionOf("Customer")).toBeLessThan(positionOf("CustomerAddress"));
+
+    // Employee is the edge this list originally missed, and the omission was
+    // not obvious: the dependency is not a business relation but the AUDIT
+    // columns. `categories`, `products` and friends carry createdById /
+    // updatedById foreign keys to `employees`, so a catalog that arrives first
+    // fails with "FOREIGN KEY constraint failed" and the download goes PARTIAL.
+    expect(positionOf("Employee")).toBeLessThan(positionOf("Category"));
+    expect(positionOf("Employee")).toBeLessThan(positionOf("Product"));
+  });
+
+  it("downloads Employee before anything carrying audit columns", () => {
+    // Kept separate from the business-relation assertions above because it is a
+    // DIFFERENT kind of dependency and that is exactly why it was missed: the
+    // catalog does not "belong to" an employee in any domain sense, it merely
+    // records who last touched each row. Every synced table with
+    // createdById/updatedById needs Employee to have landed already.
+    const order = downloadEntities().map((p) => p.entity);
+    const positionOf = (entity: string) => order.indexOf(entity);
+
+    const employee = positionOf("Employee");
+    expect(employee).toBeGreaterThanOrEqual(0);
+
+    for (const audited of ["Category", "Product", "ProductVariant", "Customer"]) {
+      const index = positionOf(audited);
+      if (index < 0) continue; // not currently a download entity
+
+      expect(
+        employee,
+        `${audited} downloads at ${index}, before Employee at ${employee} — its ` +
+          `createdById/updatedById foreign keys will fail`
+      ).toBeLessThan(index);
+    }
   });
 
   it("includes BIDIRECTIONAL entities in both directions", () => {
