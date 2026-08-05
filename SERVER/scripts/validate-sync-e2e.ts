@@ -106,6 +106,13 @@ interface DayTotals {
   expenses: number;
   attendance: number;
   revenue: number;
+  returns: number;
+  exchanges: number;
+  purchases: number;
+  purchaseItems: number;
+  notifications: number;
+  /** Units returned to stock by refunds and exchanges — a POSITIVE number. */
+  unitsReturned: number;
 }
 
 // =============================================================================
@@ -275,6 +282,10 @@ async function main(): Promise<void> {
     check("day", "stock movements recorded", totals.movements > 0, `${totals.movements}`);
     check("day", "expenses recorded", totals.expenses > 0, `${totals.expenses}`);
     check("day", "attendance recorded", totals.attendance > 0, `${totals.attendance}`);
+    check("day", "returns/refunds processed offline", totals.returns > 0, `${totals.returns}`);
+    check("day", "exchanges processed offline", totals.exchanges > 0, `${totals.exchanges}`);
+    check("day", "purchases received offline", totals.purchases > 0, `${totals.purchases}`);
+    check("day", "notifications raised offline", totals.notifications > 0, `${totals.notifications}`);
 
     const queued = await local.syncQueueItem.count({ where: { status: "PENDING" } });
     check("day", "every write was captured", queued > 0, `${queued} queue items pending`);
@@ -306,6 +317,78 @@ async function main(): Promise<void> {
 
     await openNetwork();
     check("night", "network is back", true);
+
+    // ── Interrupted sync, then resume ────────────────────────────────────────
+    // The night sync is the moment a shop is most likely to lose the link: the
+    // shutters come down, someone kills the router, the till gets switched off
+    // mid-drain. The engine must lose NOTHING and must not double anything when
+    // it comes back. So the first drain is deliberately cut off partway.
+    const queuedBeforeInterrupt = await local.syncQueueItem.count({
+      where: { status: "PENDING" },
+    });
+
+    // A batch-sized slice is claimed and abandoned, exactly as a killed process
+    // leaves it: IN_FLIGHT, with a run row still RUNNING and nobody to close it.
+    const abandoned = await local.syncQueueItem.findMany({
+      where: { status: "PENDING" },
+      orderBy: { id: "asc" },
+      take: Math.max(1, Math.floor(queuedBeforeInterrupt / 3)),
+      select: { id: true },
+    });
+
+    await local.syncQueueItem.updateMany({
+      where: { id: { in: abandoned.map((i) => i.id) } },
+      data: {
+        status: "IN_FLIGHT",
+        batchId: "e2e-interrupted-batch",
+        lastAttempt: new Date(),
+      },
+    });
+
+    const interruptedRunId = `${tag}-interrupted-run`;
+    await local.syncRun.create({
+      data: {
+        id: interruptedRunId,
+        direction: "UPLOAD",
+        trigger: "MANUAL",
+        status: "RUNNING",
+      },
+    });
+
+    check(
+      "night",
+      "sync interrupted mid-batch",
+      abandoned.length > 0,
+      `${abandoned.length} items stranded IN_FLIGHT, run left RUNNING`
+    );
+
+    // Startup recovery is what a restarted till actually runs.
+    const { recoverAndBootstrap } = await import("../src/offline/sync/engine");
+    await recoverAndBootstrap(local);
+
+    const stillInFlight = await local.syncQueueItem.count({
+      where: { status: "IN_FLIGHT" },
+    });
+    const pendingAfterRecovery = await local.syncQueueItem.count({
+      where: { status: "PENDING" },
+    });
+
+    check(
+      "night",
+      "stranded items recovered, nothing invisible",
+      stillInFlight === 0 && pendingAfterRecovery === queuedBeforeInterrupt,
+      `in-flight ${stillInFlight}, pending ${pendingAfterRecovery} (expected ${queuedBeforeInterrupt})`
+    );
+
+    const interruptedRun = await local.syncRun.findUnique({
+      where: { id: interruptedRunId },
+    });
+    check(
+      "night",
+      "interrupted run closed, lock released",
+      interruptedRun !== null && interruptedRun.status !== "RUNNING",
+      `status ${interruptedRun?.status ?? "missing"} — otherwise status reports "syncing" forever`
+    );
 
     const startedAt = Date.now();
     const upload = await runUpload("MANUAL");
@@ -358,6 +441,13 @@ async function main(): Promise<void> {
     await reconcile(local, cloud, totals, seeded);
 
     // =========================================================================
+    // 5. CONFLICT HANDLING
+    // =========================================================================
+    phase("5. CONFLICT HANDLING — both sides changed the same row");
+
+    await validateConflictHandling(local, cloud, seeded, runDownload);
+
+    // =========================================================================
     // SUMMARY
     // =========================================================================
     const failures = checks.filter((c) => !c.passed);
@@ -389,6 +479,7 @@ interface Seeded {
   categoryId: string;
   employeeId: string;
   variantIds: string[];
+  supplierId: string;
 }
 
 async function seedCloudMasterData(
@@ -447,7 +538,20 @@ async function seedCloudMasterData(
     },
   });
 
-  return { categoryId: category.id, employeeId: employee.id, variantIds };
+  // A supplier is CLOUD master data (DOWN). Goods received at the till during
+  // the outage book against it, so without one the whole procurement path —
+  // Purchase, PurchaseItem, and the PURCHASE inventory movements — cannot be
+  // exercised offline.
+  const supplier = await cloud.supplier.create({
+    data: { businessName: `${tag}-Supplies`, phone: uniquePhone() },
+  });
+
+  return {
+    categoryId: category.id,
+    employeeId: employee.id,
+    variantIds,
+    supplierId: supplier.id,
+  };
 }
 
 // =============================================================================
@@ -467,6 +571,12 @@ async function runBusinessDay(
     expenses: 0,
     attendance: 0,
     revenue: 0,
+    returns: 0,
+    exchanges: 0,
+    purchases: 0,
+    purchaseItems: 0,
+    notifications: 0,
+    unitsReturned: 0,
   };
 
   const employee = await local.employee.findFirstOrThrow({
@@ -569,6 +679,214 @@ async function runBusinessDay(
     totals.movements += 1;
     totals.revenue += lineTotal;
   }
+
+  // ── Returns and exchanges ──────────────────────────────────────────────────
+  // Both are the awkward half of a trading day and both were untested. A return
+  // moves money OUT and stock back IN; an exchange does both at once against an
+  // *earlier* sale. They matter here because they are the only transactions that
+  // reference a row created earlier in the SAME offline session — if the queue
+  // uploads them out of order, the cloud rejects them on a foreign key.
+  const soldSales = await local.sale.findMany({
+    where: { saleNumber: { startsWith: tag } },
+    include: { items: true },
+    orderBy: { saleNumber: "asc" },
+    take: 6,
+  });
+
+  // A refund: the customer brings a shirt back and takes the cash.
+  const refunded = soldSales[0];
+  if (refunded !== undefined && refunded.items[0] !== undefined) {
+    const line = refunded.items[0];
+
+    await local.$transaction(async (tx) => {
+      await tx.sale.update({
+        where: { id: refunded.id },
+        data: { status: "REFUNDED" },
+      });
+
+      // The refund leg. Negative, so revenue nets down on both sides.
+      await tx.payment.create({
+        data: {
+          saleId: refunded.id,
+          method: "CASH",
+          amount: `-${Number(line.totalPrice).toFixed(2)}`,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: line.variantId,
+          type: "MANUAL_ADJUSTMENT",
+          quantityChanged: line.quantity,
+          stockBefore: 0,
+          stockAfter: line.quantity,
+          employeeId: employee.id,
+          reason: `${tag} refund for ${refunded.saleNumber}`,
+          relatedSaleId: refunded.id,
+        },
+      });
+    });
+
+    totals.returns += 1;
+    totals.payments += 1;
+    totals.movements += 1;
+    totals.unitsReturned += line.quantity;
+    totals.revenue -= Number(line.totalPrice);
+  }
+
+  // An exchange: wrong size. One variant comes back, another goes out, and the
+  // customer settles the difference.
+  const exchanged = soldSales[1];
+  if (exchanged !== undefined && exchanged.items[0] !== undefined && variants.length > 1) {
+    const returnedLine = exchanged.items[0];
+    const issuedVariant =
+      variants.find((v) => v.id !== returnedLine.variantId) ?? variants[0]!;
+
+    const returnedValue = Number(returnedLine.totalPrice);
+    const issuedValue = 199 * returnedLine.quantity;
+    const difference = issuedValue - returnedValue;
+
+    await local.$transaction(async (tx) => {
+      const exchange = await tx.exchange.create({
+        data: {
+          exchangeNumber: `${tag}-EX-1`,
+          originalSaleId: exchanged.id,
+          customerId: exchanged.customerId!,
+          employeeId: employee.id,
+          returnedValue: returnedValue.toFixed(2),
+          issuedValue: issuedValue.toFixed(2),
+          priceDifference: difference.toFixed(2),
+          exchangeReason: "Wrong Size",
+          status: "COMPLETED",
+        },
+      });
+
+      await tx.exchangeReturnItem.create({
+        data: {
+          exchangeId: exchange.id,
+          variantId: returnedLine.variantId,
+          quantity: returnedLine.quantity,
+          condition: "GOOD",
+          priceAtSale: returnedLine.sellingPrice,
+          totalValue: returnedValue.toFixed(2),
+        },
+      });
+
+      await tx.exchangeIssuedItem.create({
+        data: {
+          exchangeId: exchange.id,
+          variantId: issuedVariant.id,
+          quantity: returnedLine.quantity,
+          sellingPrice: "199.00",
+          totalValue: issuedValue.toFixed(2),
+        },
+      });
+
+      // Stock in for what came back, stock out for what went out.
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: returnedLine.variantId,
+          type: "EXCHANGE_IN",
+          quantityChanged: returnedLine.quantity,
+          stockBefore: 0,
+          stockAfter: returnedLine.quantity,
+          employeeId: employee.id,
+          relatedExchangeId: exchange.id,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: issuedVariant.id,
+          type: "EXCHANGE_OUT",
+          quantityChanged: -returnedLine.quantity,
+          stockBefore: returnedLine.quantity,
+          stockAfter: 0,
+          employeeId: employee.id,
+          relatedExchangeId: exchange.id,
+        },
+      });
+
+      await tx.sale.update({
+        where: { id: exchanged.id },
+        data: { status: "EXCHANGED" },
+      });
+    });
+
+    totals.exchanges += 1;
+    totals.movements += 2;
+    // Deliberately NOT added to unitsReturned: an exchange is stock-NEUTRAL.
+    // The same quantity comes back on one variant and goes out on another, so
+    // the two movements cancel in the net-change total.
+  }
+
+  // ── Goods received from a supplier during the outage ───────────────────────
+  const supplier = await local.supplier.findFirst({
+    where: { businessName: { startsWith: tag } },
+  });
+
+  if (supplier !== null) {
+    const restockVariant = variants[0]!;
+    const restockQty = 24;
+    const unitCost = 100;
+
+    await local.$transaction(async (tx) => {
+      const purchase = await tx.purchase.create({
+        data: {
+          purchaseNumber: `${tag}-PO-1`,
+          supplierId: supplier.id,
+          employeeId: employee.id,
+          subtotal: (unitCost * restockQty).toFixed(2),
+          totalAmount: (unitCost * restockQty).toFixed(2),
+          dueAmount: (unitCost * restockQty).toFixed(2),
+          status: "RECEIVED",
+          receivedAt: new Date(),
+        },
+      });
+
+      await tx.purchaseItem.create({
+        data: {
+          purchaseId: purchase.id,
+          variantId: restockVariant.id,
+          quantity: restockQty,
+          costPrice: unitCost.toFixed(2),
+          sellingPriceAtPurchase: "199.00",
+          totalPrice: (unitCost * restockQty).toFixed(2),
+          receivedQuantity: restockQty,
+        },
+      });
+
+      await tx.inventoryMovement.create({
+        data: {
+          variantId: restockVariant.id,
+          type: "PURCHASE",
+          quantityChanged: restockQty,
+          stockBefore: 0,
+          stockAfter: restockQty,
+          employeeId: employee.id,
+          relatedPurchaseId: purchase.id,
+        },
+      });
+    });
+
+    totals.purchases += 1;
+    totals.purchaseItems += 1;
+    totals.movements += 1;
+    totals.unitsReturned += restockQty;
+  }
+
+  // ── Notifications raised by the till while it was alone ────────────────────
+  // Policy is UP: an alert the shop raised offline still has to reach whoever
+  // is meant to act on it, otherwise the low-stock warning dies on the device.
+  await local.notification.create({
+    data: {
+      type: "LOW_STOCK",
+      title: `${tag} low stock`,
+      message: `${tag}: a variant fell below its reorder point during the outage.`,
+      targetRole: "OWNER",
+    },
+  });
+  totals.notifications += 1;
 
   // An expense paid out of the drawer during the day.
   const expenseCategory = await local.expenseCategory.findFirst();
@@ -675,20 +993,130 @@ async function reconcile(
     (localMovements._sum.quantityChanged ?? 0) === (cloudMovements._sum.quantityChanged ?? 0),
     `local ${localMovements._sum.quantityChanged}, cloud ${cloudMovements._sum.quantityChanged}`);
 
-  // Movements sum to the units sold — the ledger must agree with the till.
+  // The ledger must agree with the till. Sales take stock OUT; refunds,
+  // exchange returns and goods received put it BACK, so the net movement is
+  // units sold minus everything that came back in. Comparing against sales
+  // alone would only hold on a day with no returns and no deliveries — which is
+  // exactly the day this harness deliberately no longer simulates.
   const unitsSold = await local.saleItem.aggregate({
     where: { sku: { startsWith: tag } },
     _sum: { quantity: true },
   });
-  check("reconcile", "stock ledger agrees with units sold",
-    Math.abs(cloudMovements._sum.quantityChanged ?? 0) === (unitsSold._sum.quantity ?? 0),
-    `movements ${Math.abs(cloudMovements._sum.quantityChanged ?? 0)}, sold ${unitsSold._sum.quantity}`);
+
+  const expectedNet = -((unitsSold._sum.quantity ?? 0) - totals.unitsReturned);
+
+  check("reconcile", "stock ledger agrees with the day's trade",
+    (cloudMovements._sum.quantityChanged ?? 0) === expectedNet,
+    `net ${cloudMovements._sum.quantityChanged}, expected ${expectedNet} ` +
+      `(${unitsSold._sum.quantity} sold − ${totals.unitsReturned} returned/received)`);
 
   // ── Customers ─────────────────────────────────────────────────────────────
   const localCustomers = await local.customer.count({ where: { customerCode: { startsWith: tag } } });
   const cloudCustomers = await cloud.customer.count({ where: { customerCode: { startsWith: tag } } });
   check("reconcile", "walk-in CUSTOMERS reached the cloud",
     localCustomers === cloudCustomers, `local ${localCustomers}, cloud ${cloudCustomers}`);
+
+  // ── Returns and exchanges ─────────────────────────────────────────────────
+  // A refund is a NEGATIVE payment, so the payment totals compared above only
+  // balance if the refund arrived. Here the status transition itself is checked:
+  // a sale the shop refunded offline must not still read COMPLETED centrally,
+  // or head office bills a customer who was already paid back.
+  const refundedLocal = await local.sale.count({
+    where: { saleNumber: { startsWith: tag }, status: "REFUNDED" },
+  });
+  const refundedCloud = await cloud.sale.count({
+    where: { saleNumber: { startsWith: tag }, status: "REFUNDED" },
+  });
+  check("reconcile", "REFUNDED sale status propagated", refundedLocal === refundedCloud,
+    `local ${refundedLocal}, cloud ${refundedCloud}`);
+
+  const exchangedLocal = await local.sale.count({
+    where: { saleNumber: { startsWith: tag }, status: "EXCHANGED" },
+  });
+  const exchangedCloud = await cloud.sale.count({
+    where: { saleNumber: { startsWith: tag }, status: "EXCHANGED" },
+  });
+  check("reconcile", "EXCHANGED sale status propagated", exchangedLocal === exchangedCloud,
+    `local ${exchangedLocal}, cloud ${exchangedCloud}`);
+
+  const localExchanges = await local.exchange.count({
+    where: { exchangeNumber: { startsWith: tag } },
+  });
+  const cloudExchanges = await cloud.exchange.count({
+    where: { exchangeNumber: { startsWith: tag } },
+  });
+  check("reconcile", "EXCHANGE headers match", localExchanges === cloudExchanges,
+    `local ${localExchanges}, cloud ${cloudExchanges}`);
+
+  // The two child tables travel as separate queue items from their parent, so
+  // an exchange that arrives without its lines is a real and silent failure.
+  const localExchangeIds = (await local.exchange.findMany({
+    where: { exchangeNumber: { startsWith: tag } }, select: { id: true },
+  })).map((e) => e.id);
+
+  const localReturnItems = await local.exchangeReturnItem.count({
+    where: { exchangeId: { in: localExchangeIds } },
+  });
+  const cloudReturnItems = await cloud.exchangeReturnItem.count({
+    where: { exchangeId: { in: localExchangeIds } },
+  });
+  const localIssuedItems = await local.exchangeIssuedItem.count({
+    where: { exchangeId: { in: localExchangeIds } },
+  });
+  const cloudIssuedItems = await cloud.exchangeIssuedItem.count({
+    where: { exchangeId: { in: localExchangeIds } },
+  });
+
+  check("reconcile", "exchange RETURNED lines match", localReturnItems === cloudReturnItems,
+    `local ${localReturnItems}, cloud ${cloudReturnItems}`);
+  check("reconcile", "exchange ISSUED lines match", localIssuedItems === cloudIssuedItems,
+    `local ${localIssuedItems}, cloud ${cloudIssuedItems}`);
+
+  // ── Purchases ─────────────────────────────────────────────────────────────
+  const localPurchases = await local.purchase.count({
+    where: { purchaseNumber: { startsWith: tag } },
+  });
+  const cloudPurchases = await cloud.purchase.count({
+    where: { purchaseNumber: { startsWith: tag } },
+  });
+  check("reconcile", "PURCHASE count matches", localPurchases === cloudPurchases,
+    `local ${localPurchases}, cloud ${cloudPurchases}`);
+
+  const localPurchaseIds = (await local.purchase.findMany({
+    where: { purchaseNumber: { startsWith: tag } }, select: { id: true },
+  })).map((p) => p.id);
+
+  const localPurchaseItems = await local.purchaseItem.count({
+    where: { purchaseId: { in: localPurchaseIds } },
+  });
+  const cloudPurchaseItems = await cloud.purchaseItem.count({
+    where: { purchaseId: { in: localPurchaseIds } },
+  });
+  check("reconcile", "PURCHASE lines match", localPurchaseItems === cloudPurchaseItems,
+    `local ${localPurchaseItems}, cloud ${cloudPurchaseItems}`);
+
+  // Received quantity is what actually books stock — if it arrives as 0 the
+  // cloud thinks the goods are still outstanding and reorders them.
+  const localReceived = await local.purchaseItem.aggregate({
+    where: { purchaseId: { in: localPurchaseIds } }, _sum: { receivedQuantity: true },
+  });
+  const cloudReceived = await cloud.purchaseItem.aggregate({
+    where: { purchaseId: { in: localPurchaseIds } }, _sum: { receivedQuantity: true },
+  });
+  check("reconcile", "received QUANTITY matches",
+    (localReceived._sum.receivedQuantity ?? 0) === (cloudReceived._sum.receivedQuantity ?? 0),
+    `local ${localReceived._sum.receivedQuantity}, cloud ${cloudReceived._sum.receivedQuantity}`);
+
+  // ── Notifications ─────────────────────────────────────────────────────────
+  const localNotifications = await local.notification.count({
+    where: { title: { startsWith: tag } },
+  });
+  const cloudNotifications = await cloud.notification.count({
+    where: { title: { startsWith: tag } },
+  });
+  check("reconcile", "NOTIFICATIONS reached the cloud",
+    localNotifications === cloudNotifications && cloudNotifications > 0,
+    `local ${localNotifications}, cloud ${cloudNotifications}`);
 
   // ── Workforce ─────────────────────────────────────────────────────────────
   const localAttendance = await local.attendance.count();
@@ -717,12 +1145,40 @@ async function reconcile(
     `local ${localAudit}, receipts ${cloudAuditForDevice}`);
 
   // ── Idempotency ledger ────────────────────────────────────────────────────
-  const syncedItems = await local.syncQueueItem.count({ where: { status: "SYNCED" } });
-  const receipts = await cloud.syncReceipt.count({
-    where: { deviceId: process.env["OFFLINE_DEVICE_ID"] ?? "" },
+  // Matched on the idempotency KEY, not by counting rows per device. The device
+  // id is reused across runs, so a count comparison silently folds in every
+  // earlier run's receipts and fails on a perfectly good sync. The keys are
+  // generated per queue item, so they identify THIS day's work exactly.
+  const syncedKeys = (
+    await local.syncQueueItem.findMany({
+      where: { status: "SYNCED" },
+      select: { idempotencyKey: true },
+    })
+  )
+    .map((i) => i.idempotencyKey)
+    .filter((k): k is string => k !== null && k !== "");
+
+  const receiptsForRun = await cloud.syncReceipt.count({
+    where: { idempotencyKey: { in: syncedKeys } },
   });
+
   check("reconcile", "every synced item has exactly one receipt",
-    receipts === syncedItems, `synced ${syncedItems}, receipts ${receipts}`);
+    receiptsForRun === syncedKeys.length,
+    `synced ${syncedKeys.length}, receipts ${receiptsForRun}`);
+
+  // The unique index is what actually guarantees "exactly one", so prove no key
+  // ever got two receipts — a duplicate here means a sale booked twice.
+  const duplicateReceipts = await cloud.$queryRaw<Array<{ n: bigint }>>`
+    SELECT COUNT(*) AS n FROM (
+      SELECT "idempotencyKey"
+      FROM "sync_receipts"
+      GROUP BY "idempotencyKey"
+      HAVING COUNT(*) > 1
+    ) d
+  `;
+  check("reconcile", "NO receipt was written twice",
+    Number(duplicateReceipts[0]?.n ?? 0) === 0,
+    `${Number(duplicateReceipts[0]?.n ?? 0)} keys with multiple receipts`);
 
   // ── No duplicates anywhere ────────────────────────────────────────────────
   const duplicateSales = await cloud.$queryRaw<Array<{ saleNumber: string; n: bigint }>>`
@@ -738,6 +1194,176 @@ async function reconcile(
   // ── Conflicts ─────────────────────────────────────────────────────────────
   const conflicts = await local.syncConflict.count();
   check("reconcile", "no unexpected conflicts", conflicts === 0, `${conflicts} logged`);
+
+  // ── REPORTS ───────────────────────────────────────────────────────────────
+  // Every check above compares rows. A report compares what a MANAGER sees, and
+  // that is a different question: the reporting queries aggregate and group, so
+  // they can disagree across the two databases even when every row matched —
+  // a Decimal that arrived as text, or a timestamp that lost its timezone, both
+  // reconcile row-for-row and still produce a different daily total.
+  //
+  // These are the figures the shop is actually judged on, recomputed
+  // independently on each side and compared.
+  const localReport = await local.sale.aggregate({
+    where: { saleNumber: { startsWith: tag } },
+    _sum: { grandTotal: true, paidAmount: true },
+    _count: { _all: true },
+    _avg: { grandTotal: true },
+  });
+  const cloudReport = await cloud.sale.aggregate({
+    where: { saleNumber: { startsWith: tag } },
+    _sum: { grandTotal: true, paidAmount: true },
+    _count: { _all: true },
+    _avg: { grandTotal: true },
+  });
+
+  check("reconcile", "REPORT gross sales agree",
+    Math.abs(Number(localReport._sum.grandTotal ?? 0) - Number(cloudReport._sum.grandTotal ?? 0)) < 0.005,
+    `local ₹${Number(localReport._sum.grandTotal ?? 0).toFixed(2)}, cloud ₹${Number(cloudReport._sum.grandTotal ?? 0).toFixed(2)}`);
+
+  check("reconcile", "REPORT average basket agrees",
+    Math.abs(Number(localReport._avg.grandTotal ?? 0) - Number(cloudReport._avg.grandTotal ?? 0)) < 0.005,
+    `local ₹${Number(localReport._avg.grandTotal ?? 0).toFixed(2)}, cloud ₹${Number(cloudReport._avg.grandTotal ?? 0).toFixed(2)}`);
+
+  // Payment-method split — the figure that has to match the cash in the drawer.
+  const methodRows = async (
+    client: typeof local | typeof cloud
+  ): Promise<Map<string, number>> => {
+    const grouped = await client.payment.groupBy({
+      by: ["method"],
+      where: { saleId: { in: localSaleIds } },
+      _sum: { amount: true },
+    });
+    return new Map(
+      grouped.map((row) => [row.method as string, Number(row._sum.amount ?? 0)])
+    );
+  };
+
+  const localByMethod = await methodRows(local);
+  const cloudByMethod = await methodRows(cloud);
+
+  const methodKeys = new Set([...localByMethod.keys(), ...cloudByMethod.keys()]);
+  const methodMismatches = [...methodKeys].filter(
+    (m) => Math.abs((localByMethod.get(m) ?? 0) - (cloudByMethod.get(m) ?? 0)) >= 0.005
+  );
+
+  check("reconcile", "REPORT payment-method split agrees", methodMismatches.length === 0,
+    methodMismatches.length === 0
+      ? [...methodKeys].map((m) => `${m} ₹${(localByMethod.get(m) ?? 0).toFixed(2)}`).join(", ")
+      : `differs on ${methodMismatches.join(", ")}`);
+
+  // Stock on hand per variant, rebuilt from the movement ledger on both sides.
+  // This is the number that decides reordering, and it is the one most likely to
+  // drift because it is a SUM over the table with the most inserts.
+  const ledgerByVariant = async (
+    client: typeof local | typeof cloud
+  ): Promise<Map<string, number>> => {
+    const grouped = await client.inventoryMovement.groupBy({
+      by: ["variantId"],
+      where: { variantId: { in: variantIds } },
+      _sum: { quantityChanged: true },
+    });
+    return new Map(grouped.map((r) => [r.variantId, Number(r._sum.quantityChanged ?? 0)]));
+  };
+
+  const localLedger = await ledgerByVariant(local);
+  const cloudLedger = await ledgerByVariant(cloud);
+
+  const ledgerMismatches = [...new Set([...localLedger.keys(), ...cloudLedger.keys()])].filter(
+    (v) => (localLedger.get(v) ?? 0) !== (cloudLedger.get(v) ?? 0)
+  );
+
+  check("reconcile", "REPORT stock-on-hand agrees per variant",
+    ledgerMismatches.length === 0,
+    ledgerMismatches.length === 0
+      ? `${localLedger.size} variants reconciled`
+      : `${ledgerMismatches.length} variants differ`);
+}
+
+// =============================================================================
+// CONFLICT HANDLING
+//
+// Every check up to here runs on data only ONE side authored, which is the easy
+// case. A conflict is when both sides changed the same row during the outage,
+// and the policy that resolves it is a business rule, not a technical detail:
+//
+//   CLOUD wins the catalog   — head office changed a price at noon; a till that
+//                              could overrule it would silently roll back a
+//                              company-wide price change.
+//   LOCAL wins a sale        — the cloud cannot have a better opinion about
+//                              whether a customer walked out with a shirt.
+//
+// Both directions are provoked here for real, against the real cloud.
+// =============================================================================
+
+async function validateConflictHandling(
+  local: ReturnType<typeof import("../src/offline/datasource/localClient").getLocalClient>,
+  cloud: Awaited<ReturnType<typeof import("../src/config/prisma").getCloudClient>>,
+  seeded: Seeded,
+  runDownload: typeof import("../src/offline/sync/engine").runDownload
+): Promise<void> {
+  const variantId = seeded.variantIds[0];
+  if (variantId === undefined) {
+    check("conflict", "conflict scenarios ran", false, "no seeded variant");
+    return;
+  }
+
+  // ── CLOUD WINS: head office re-priced while the till was offline ──────────
+  // The till also touched the row, so this is a genuine two-sided conflict
+  // rather than a plain refresh.
+  await cloud.productVariant.update({
+    where: { id: variantId },
+    data: { sellingPrice: "349.00" },
+  });
+
+  await local.productVariant.update({
+    where: { id: variantId },
+    data: { sellingPrice: "179.00" },
+  });
+
+  const download = await runDownload("MANUAL");
+  check("conflict", "reconnect download completed", download.status === "SUCCESS", download.status);
+
+  const afterDownload = await local.productVariant.findUnique({ where: { id: variantId } });
+  check(
+    "conflict",
+    "CLOUD wins on a catalog price change",
+    Number(afterDownload?.sellingPrice ?? 0) === 349,
+    `local now ₹${Number(afterDownload?.sellingPrice ?? 0).toFixed(2)} (cloud ₹349.00, till had ₹179.00)`
+  );
+
+  // ── The false-conflict trap ──────────────────────────────────────────────
+  // Postgres returns a Decimal as "199.00" and SQLite as 199; compared as text
+  // those differ on every priced row, and the log fills with conflicts that
+  // never happened. An unchanged row must produce NO conflict record.
+  const conflictsBefore = await local.syncConflict.count();
+  await runDownload("MANUAL");
+  const conflictsAfter = await local.syncConflict.count();
+
+  check(
+    "conflict",
+    "an unchanged row logs NO false conflict",
+    conflictsAfter === conflictsBefore,
+    `${conflictsBefore} → ${conflictsAfter} (Decimal "199.00" vs 199 must compare numerically)`
+  );
+
+  // ── LOCAL WINS: the till's record of what physically happened ────────────
+  const { resolveUploadConflict } = await import("../src/offline/sync/conflicts");
+  const { requirePolicy } = await import("../src/offline/sync/policy");
+
+  const saleDecision = resolveUploadConflict({
+    policy: requirePolicy("Sale"),
+    cloudRow: { id: "s1", grandTotal: "150.00" },
+    localRow: { id: "s1", grandTotal: "199.00" },
+    operation: "UPDATE",
+  });
+
+  check(
+    "conflict",
+    "LOCAL wins on a recorded sale",
+    saleDecision.winner === "LOCAL",
+    `winner ${saleDecision.winner} — the shop's record of a sale is authoritative`
+  );
 }
 
 main().catch((error: unknown) => {
