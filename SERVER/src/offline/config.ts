@@ -165,7 +165,14 @@ export function resolveOfflineConfig(): OfflineConfig {
     deviceSecret: readString("SYNC_DEVICE_SECRET", ""),
 
     downloadBatchSize: readInt("SYNC_DOWNLOAD_BATCH_SIZE", 500),
-    uploadBatchSize: readInt("SYNC_UPLOAD_BATCH_SIZE", 200),
+
+    // 50, not 200. The cloud applies a batch in ONE interactive transaction
+    // budgeted at 120s (cloudApply.ts). Against Neon a round trip costs ~330ms,
+    // so 200 items cannot finish inside that window — the transaction expires,
+    // the whole batch rolls back, and the till retries the same doomed payload
+    // forever. 50 leaves comfortable headroom; a day's queue simply uploads as
+    // several batches, which the receipt ledger already makes idempotent.
+    uploadBatchSize: readInt("SYNC_UPLOAD_BATCH_SIZE", 50),
     compressionThresholdBytes: readInt("SYNC_COMPRESSION_THRESHOLD", 4096),
 
     retry: {

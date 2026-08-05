@@ -69,7 +69,7 @@ import ownerWorkforceRoutes from "./routes/owner.workforce.routes";
 import ownerAuditRoutes from "./routes/owner.audit.routes";
 import managerWorkforceRoutes from "./routes/manager.workforce.routes";
 import healthRoutes from "./routes/health.routes";
-import syncRoutes from "./offline/api/sync.routes";
+import syncRoutes, { isSignedSyncPath, SYNC_MOUNT_PATH } from "./offline/api/sync.routes";
 import crypto from "crypto";
 
 const app = express();
@@ -166,10 +166,28 @@ app.use(cors(corsOptions));
 // =============================================================================
 // BODY PARSER
 // Limit payload size to 10mb to prevent denial-of-service via large payloads.
+//
+// The machine-to-machine sync endpoints are DELIBERATELY excluded. They are
+// authenticated by an HMAC signature computed over the exact bytes the edge
+// node serialized, so their router installs its own parser with a `verify`
+// hook that keeps those raw bytes. A parser here would drain the stream first,
+// that hook would never run, and the verifier would end up hashing "" for
+// every upload — rejecting all of them with a 401 that looks like a bad
+// credential rather than a body that was consumed too early.
 // =============================================================================
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+const skipForSignedSyncRoutes =
+  (parser: express.RequestHandler): express.RequestHandler =>
+  (req, res, next) => {
+    if (isSignedSyncPath(req.path)) {
+      next();
+      return;
+    }
+    parser(req, res, next);
+  };
+
+app.use(skipForSignedSyncRoutes(express.json({ limit: "10mb" })));
+app.use(skipForSignedSyncRoutes(express.urlencoded({ extended: true, limit: "10mb" })));
 
 // =============================================================================
 // REQUEST LOGGER + OBSERVABILITY CONTEXT
@@ -319,7 +337,7 @@ app.use("/api/v1/owner/audit-logs", ownerAuditRoutes);
 // HMAC device signature (an edge node syncs at 2am with nobody logged in);
 // everything else is the operator surface behind the normal JWT + RBAC. Inert
 // unless OFFLINE_MODE_ENABLED is set.
-app.use("/api/v1/sync", syncRoutes);
+app.use(SYNC_MOUNT_PATH, syncRoutes);
 
 // ── Inventory ───────────────────────────────────────────────────────────────
 // Three trees, one controller. /owner/inventory is the full surface including

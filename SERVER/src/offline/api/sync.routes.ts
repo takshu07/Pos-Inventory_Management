@@ -67,6 +67,24 @@ const syncBodyParser = express.json({
   verify: captureRawSyncBody,
 });
 
+/**
+ * Mount prefix and the two paths under it whose bodies are HMAC-signed.
+ *
+ * Exported because `app.ts` MUST skip its global body parser for exactly these
+ * paths: a parser that runs first drains the stream, `captureRawSyncBody` never
+ * fires, and the verifier silently hashes an empty body — every upload then
+ * fails with a 401 that reads like a bad credential. Keeping the list here, next
+ * to the routes it describes, is what stops the two from drifting apart.
+ */
+export const SYNC_MOUNT_PATH = "/api/v1/sync";
+const SIGNED_SYNC_ENDPOINTS = ["/download", "/upload"] as const;
+
+export function isSignedSyncPath(path: string): boolean {
+  return SIGNED_SYNC_ENDPOINTS.some(
+    (endpoint) => path === `${SYNC_MOUNT_PATH}${endpoint}`
+  );
+}
+
 router.get("/download", syncBodyParser, authenticateDevice, sync.download);
 router.post("/upload", syncBodyParser, authenticateDevice, sync.upload);
 

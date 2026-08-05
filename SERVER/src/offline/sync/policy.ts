@@ -87,6 +87,24 @@ const LOCAL_EVENT: PolicySpec = { direction: "UP", conflictWinner: "LOCAL" };
  * entities that reference them.
  */
 const POLICIES: ReadonlyArray<readonly [string, PolicySpec]> = [
+  // ── Identity first ────────────────────────────────────────────────────────
+  // Employee leads the catalog because the catalog references it: Category,
+  // Product and friends carry `createdById`/`updatedById` foreign keys. Placed
+  // after the catalog, every category row whose author had not arrived yet
+  // failed with "FOREIGN KEY constraint failed" and the whole download went
+  // PARTIAL.
+  [
+    "Employee",
+    {
+      direction: "DOWN",
+      conflictWinner: "CLOUD",
+      note:
+        "Includes the password hash and role. A till that could author these " +
+        "would be a privilege-escalation path: create an OWNER locally, sync " +
+        "up, own the chain.",
+    },
+  ],
+
   // ── Catalog and configuration: head office decides ────────────────────────
   ["Settings", CLOUD_MASTER],
   ["Size", CLOUD_MASTER],
@@ -105,17 +123,8 @@ const POLICIES: ReadonlyArray<readonly [string, PolicySpec]> = [
   ["PrinterSetting", CLOUD_MASTER],
 
   // ── Identity and permissions: never editable from a till ──────────────────
-  [
-    "Employee",
-    {
-      direction: "DOWN",
-      conflictWinner: "CLOUD",
-      note:
-        "Includes the password hash and role. A till that could author these " +
-        "would be a privilege-escalation path: create an OWNER locally, sync " +
-        "up, own the chain.",
-    },
-  ],
+  // (Employee itself is declared at the top — the catalog's audit columns
+  // reference it, so it must download first.)
   ["Shift", CLOUD_MASTER],
 
   // ── Customers: master data that a cashier may also create at the counter ──

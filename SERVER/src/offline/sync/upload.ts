@@ -344,10 +344,17 @@ export async function uploadPendingChanges(
     });
 
     try {
+      // The cloud applies a whole batch in ONE transaction budgeted at 120s
+      // (see cloudApply.ts). The transport's 60s default cut the client off
+      // while that transaction was still committing: the rows landed, the
+      // response never arrived, and the till re-sent a day it had already
+      // uploaded. Outlast the server, and let the server's own timeout be the
+      // thing that bounds a batch.
       const response = await syncRequest<UploadResponse>({
         method: "POST",
         path: "/api/v1/sync/upload",
         body: request,
+        timeoutMs: 150_000,
       });
 
       outcome.bytesSent += response.bytesSent;
