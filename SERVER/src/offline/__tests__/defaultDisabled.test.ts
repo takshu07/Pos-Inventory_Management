@@ -243,4 +243,30 @@ describe("committed configuration", () => {
       ).toBe(false);
     }
   });
+
+  it("does not enable offline mode in any CI workflow", () => {
+    // A workflow that exports OFFLINE_MODE_ENABLED=true turns the pipeline
+    // green against SQLite while production runs on Neon — the suite would
+    // then be proving the wrong server. Worse, CI files are the usual place a
+    // deploy step reads its environment from, so a value set here can travel
+    // to a real host without ever appearing in .env.example.
+    //
+    // Discovered as a gap during pre-deployment review: the three checks above
+    // existed, this one did not, and CI is the file least likely to be re-read
+    // before a release.
+    const workflowDir = path.join(SERVER_ROOT, ".github", "workflows");
+    if (!fs.existsSync(workflowDir)) return;
+
+    const workflows = fs
+      .readdirSync(workflowDir)
+      .filter((name) => /\.ya?ml$/i.test(name));
+
+    for (const file of workflows) {
+      const contents = fs.readFileSync(path.join(workflowDir, file), "utf8");
+      expect(
+        /OFFLINE_MODE_ENABLED\s*[:=]\s*["']?(1|true|yes|on)\b/i.test(contents),
+        `.github/workflows/${file} enables offline mode`
+      ).toBe(false);
+    }
+  });
 });
