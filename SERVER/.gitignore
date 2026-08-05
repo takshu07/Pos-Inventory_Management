@@ -10,6 +10,10 @@ lerna-debug.log*
 # Diagnostic reports
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
+# Stress-test output (scripts/production-stress.ts) — attach to a sign-off,
+# do not commit: every run writes a new machine-stamped file.
+reports/
+
 # Runtime data
 pids
 *.pid
