@@ -263,13 +263,31 @@ function NavItemRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => vo
 /** One definition of the row look, so leaves and single-link groups match. */
 function rowClass(isActive: boolean, isPending: boolean, collapsed: boolean) {
   return cn(
-    "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",
+    /* `relative` anchors the active marker pseudo-element below. */
+    "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium",
     "transition-colors duration-150",
     "hover:bg-accent hover:text-accent-foreground",
     isActive
-      ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground"
+      ? /*
+         * Was a SOLID primary block. One saturated slab is fine; eight of them
+         * stacked down the rail makes the navigation the loudest thing on screen
+         * and pulls attention away from the content the user actually came for.
+         *
+         * A tinted wash plus a left marker bar signals "you are here" just as
+         * unambiguously at a fraction of the visual weight — and the marker means
+         * the cue is not carried by colour alone, so it survives colour-blindness
+         * and glare on a bright shop floor.
+         */
+        cn(
+          "bg-accent text-accent-foreground font-semibold",
+          "hover:bg-accent hover:text-accent-foreground",
+          "before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2",
+          "before:h-5 before:w-1 before:rounded-r-full before:bg-primary",
+          /* The bar would be clipped to a sliver in the icon-only rail. */
+          collapsed && "before:hidden"
+        )
       : "text-muted-foreground",
-    isPending && "bg-accent text-accent-foreground",
+    isPending && "bg-accent/60 text-accent-foreground",
     collapsed && "justify-center px-2"
   );
 }

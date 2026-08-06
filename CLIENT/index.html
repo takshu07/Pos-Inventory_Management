@@ -10,8 +10,10 @@
 
     <!-- Colour the browser/OS chrome (mobile address bar, PWA titlebar) to match
          whichever theme is active, instead of leaving a bright strip above a dark app. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#020817" />
+    <!-- Kept in sync with --background in src/styles/index.css. A stale value here
+         shows as a mismatched strip above the app on mobile. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#faf9fd" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#141320" />
 
     <!--
       PRE-PAINT THEME STAMP — must stay inline, synchronous, and above the stylesheet.

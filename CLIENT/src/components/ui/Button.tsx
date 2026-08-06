@@ -9,19 +9,29 @@ import { cn } from "@/utils/cn";
 
 const buttonVariants = {
   variant: {
-    default:     "bg-primary text-primary-foreground shadow hover:bg-primary/90",
-    destructive: "bg-destructive text-destructive-foreground shadow hover:bg-destructive/90",
-    outline:     "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
-    secondary:   "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
+    /* Primary lifts on hover (shadow-sm → shadow-md) rather than only darkening.
+       Movement toward the user reads as affordance faster than a colour shift. */
+    default:     "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 hover:shadow-md",
+    destructive: "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90 hover:shadow-md",
+    outline:     "border border-input bg-card shadow-xs hover:bg-accent hover:text-accent-foreground hover:border-primary/30",
+    secondary:   "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
     ghost:       "hover:bg-accent hover:text-accent-foreground",
     link:        "text-primary underline-offset-4 hover:underline",
-    success:     "bg-emerald-600 text-white shadow hover:bg-emerald-700",
+    /* Stays emerald: on a POS, the confirm/complete-sale button is muscle memory
+       and its colour is part of the meaning, not part of the theme. */
+    success:     "bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 hover:shadow-md",
   },
+  /*
+   * Heights are bumped ~1 step from the old 8/9/11. This is a touchscreen POS:
+   * a 36px control is under the ~44px comfortable-tap threshold, and every near-
+   * miss on a till costs a cashier real time. Larger targets also lower the
+   * precision demand, which is what actually reduces body tension over a shift.
+   */
   size: {
-    sm:   "h-8 px-3 text-xs rounded-md",
-    md:   "h-9 px-4 py-2 text-sm rounded-md",
-    lg:   "h-11 px-8 text-base rounded-md",
-    icon: "h-9 w-9 rounded-md",
+    sm:   "h-9 px-3.5 text-xs rounded-lg",
+    md:   "h-10 px-4 py-2 text-sm rounded-lg",
+    lg:   "h-12 px-8 text-base rounded-lg",
+    icon: "h-10 w-10 rounded-lg",
   },
 } as const;
 
@@ -54,8 +64,19 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={disabled || loading}
         className={cn(
           "inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium",
-          "transition-colors duration-150",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+          /* Was transition-colors; box-shadow and transform are now animated too,
+             so the press below actually eases instead of snapping. */
+          "transition-[colors,box-shadow,transform] duration-150 ease-[cubic-bezier(0.4,0,0.2,1)]",
+          /* Tactile press. A touchscreen gives no physical travel, so this 1%
+             scale substitutes the missing feedback — confirmation that the tap
+             registered, which is what stops users double-tapping and
+             double-charging. Kept subtle enough to feel rather than watch, and
+             `transform` is GPU-composited so it never triggers layout.
+             Automatically disabled by the global prefers-reduced-motion rule. */
+          "active:scale-[0.99]",
+          /* offset-2 with an offset colour matched to the surface gives the ring
+             a clean gap instead of it fusing with the button edge. */
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           "disabled:pointer-events-none disabled:opacity-50",
           buttonVariants.variant[variant],
           buttonVariants.size[size],

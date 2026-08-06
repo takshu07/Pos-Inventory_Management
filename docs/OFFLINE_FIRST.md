@@ -314,7 +314,9 @@ sales as duplicates.
 
 ⚠ **`SYNC_UPLOAD_BATCH_SIZE` is 50, and raising it breaks uploads.** The cloud
 applies a batch in ONE interactive transaction budgeted at 120s
-(`cloudApply.ts`). Against Neon a round trip costs ~330ms, so 200 items cannot
+(`cloudApply.ts`). Against Neon a round trip costs ~330ms — **measured at 253ms
+p50 to production and 270ms to a branch, from India to `us-east-1`, on
+2026-08-06** — so 200 items cannot
 finish inside that window: the transaction expires, the **whole batch rolls
 back**, and the till retries the same doomed payload forever — a queue that
 never drains while every individual item is perfectly valid. 50 leaves
@@ -327,11 +329,19 @@ after validation confirmed 50.
 
 ## 10. Deployment
 
-> **Status: implementation-complete, awaiting deployment validation** (2026-08-05).
-> No feature work remains. The gate is the four operational steps in
-> [MODULE_STATUS §0.4](MODULE_STATUS.md) — Neon backup branch, apply the
-> migration there, run `sync:validate` against it, run `sync:stress` on the real
-> till hardware. Offline Mode stays disabled until those pass.
+> **Status: implementation-complete, one gate remaining** (updated 2026-08-06).
+> The Neon-branch steps are **done** — migration applied, `sync:validate` passed
+> 64/64, till provisioned and verified
+> ([PHASE8](PHASE8_NEON_BRANCH_VALIDATION_REPORT.md)). **The remaining gate is
+> `sync:stress` on the real till hardware**, which cannot be satisfied from a
+> laptop. Offline Mode stays disabled until that passes.
+
+⚠ **Plan the overnight window against measured throughput, not hope.** Upload is
+latency-bound at ~574 ms per queue item against `us-east-1` from India
+(measured). A 3,000-sale day is ~12,000 items ≈ **2 hours** to drain; a
+1,000-sale day ≈ 41 min. This fits a normal overnight close, but if the shop
+runs bigger days or the window is short, **move the cloud node to a nearer
+region** — it is the largest available speedup and needs no code change.
 
 ### Cloud node
 
@@ -354,6 +364,21 @@ npm start
 
 On first boot the mirror is empty, so the node runs an initial download
 automatically and logs loudly that it cannot sell until it succeeds.
+
+**For a new till, provision explicitly rather than relying on that first-boot
+download.** The automatic path gets a catalog onto the machine; it does not
+prove the mirror is one you can sell from, and it will happily build on top of
+an inherited database — a mirror cloned from another till, or one left behind by
+a stress run. `npm run till:provision` refuses those, guarantees a brand-new
+SQLite file, and verifies the result before the till is declared ready:
+
+```bash
+npm run till:provision:check    # dry run — every safety check, nothing written
+npm run till:provision          # build and verify the mirror
+```
+
+It refuses outright, with no override, if the local queue holds un-uploaded
+sales. 📖 **[TILL_PROVISIONING_RUNBOOK.md](TILL_PROVISIONING_RUNBOOK.md).**
 
 ### Rolling back
 
@@ -485,9 +510,17 @@ something is normalizing a column differently on the two sides — check
 
 ## 14. Pre-production validation
 
-Three harnesses, in the order they must be run. **None of them has been run
-against a real environment yet** — that is the remaining work before Offline
-Mode may be enabled (`MODULE_STATUS §0.4`).
+Three harnesses, in the order they must be run.
+
+> **Status (2026-08-06):** all three have now been run against a real Neon
+> branch — migration applied, **64/64 end-to-end checks passed** with revenue
+> reconciling to the paisa, and a till provisioned and verified (15/15). Full
+> results, including two findings that changed this document, are in
+> [PHASE8_NEON_BRANCH_VALIDATION_REPORT.md](PHASE8_NEON_BRANCH_VALIDATION_REPORT.md).
+>
+> **The remaining blocking gate is the real till hardware** (Phase 6). That run
+> was made from a development laptop, so fsync cost, storage latency,
+> responsiveness under load and the peripherals are still unmeasured.
 
 ### 14.1 Migration verification — `npm run sync:verify-migration`
 
@@ -556,8 +589,15 @@ till hardware, which is where the number that matters comes from.
 ```bash
 npm run sync:stress                                        # defaults: 1k products, 2k sales
 npm run sync:stress -- --products 2000 --transactions 3000
-npm run sync:stress -- --with-cloud --i-accept-writes-to-this-database
 ```
+
+⚠ **There is no `--with-cloud`.** This harness is local-only by construction. The
+flag used to exist and never measured anything: its only effect was to suppress
+the "cloud throughput NOT measured" footer, which turned an honest gap into a
+green run that looked like it had covered the upload path. It now refuses with
+exit 2. For the cloud half — real signed HTTP, upload drain, reconciliation —
+run `sync:validate` (§14.2). See
+[PHASE8_NEON_BRANCH_VALIDATION_REPORT §5](PHASE8_NEON_BRANCH_VALIDATION_REPORT.md).
 
 **Measured 2026-08-05** — 2,000 products (4,000 catalog rows), 3,000 sales,
 12,000 captured writes, on a development laptop. Retail hardware will be slower;
@@ -569,7 +609,7 @@ treat these as an upper bound, not a promise.
 | Barcode / SKU lookup — the scan path | **0.28 ms** average |
 | Checkout **with** change capture | 4.64 ms per sale |
 | Checkout **without** capture (control) | 4.05 ms per sale |
-| **Capture overhead** | **+0.58 ms per sale (+14%)** |
+| **Capture overhead** | **below the harness's noise floor — see the warning below** |
 | Full day: 3,000 sales | 12.9s — **233 sales/s** sustained |
 | Queue depth after the day | 12,000 items (4 per sale, exactly as expected) |
 | Local database size | 16.5 MB |
@@ -579,9 +619,19 @@ treat these as an upper bound, not a promise.
 | Idempotency keys unique | 12,000 / 12,000, all device-namespaced |
 | Conflict decisions | 20,000 in 5 ms |
 
-**The number that decides whether this is usable is the capture overhead:
-0.58 ms per sale.** A cashier cannot perceive it, and it buys the atomicity
-guarantee that a sale and its queue entry commit together.
+⚠ **Do not quote the capture-overhead figure.** A 2026-08-06 re-run of the same
+harness produced **−34.9% (−2.54 ms)** — capture apparently making checkouts
+*faster*, which is impossible. The harness runs a single unrepeated A/B with the
+with-capture arm first on a colder database, no warm-up and no interleaving, so
+the two arms differ by less than the run-to-run noise and the subtraction is
+meaningless. The `+0.58 ms / +14%` previously printed here was the same artifact
+with a favourable sign.
+
+**What is solidly established is the absolute number: checkout costs ~5–7 ms
+either way** — two orders of magnitude under the 250 ms threshold — and that is
+what the decision rests on. Capture overhead is somewhere below the noise floor;
+it is not a measured quantity yet. Fixing the A/B (repeat, interleave, discard a
+warm-up) would make it one.
 
 It also verifies, at volume:
 

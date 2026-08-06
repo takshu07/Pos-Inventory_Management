@@ -89,11 +89,31 @@ function argNumber(flag: string, fallback: number): number {
 async function main(): Promise<void> {
   const productCount = argNumber("--products", 1000);
   const transactionCount = argNumber("--transactions", 2000);
-  const withCloud = process.argv.includes("--with-cloud");
+  // `--with-cloud` used to exist here, but it never synced anything: it only
+  // suppressed the "NOT measured" footer. A flag that turns an honest "this was
+  // not measured" into a clean green run is worse than no flag at all, because
+  // the run then implies coverage it does not have. It now refuses outright and
+  // names the harness that really does exercise the cloud.
+  if (process.argv.includes("--with-cloud")) {
+    console.error(`
+  ✖ --with-cloud is not supported by this harness.
+
+    It never measured the cloud. It only hid the "NOT measured" notice, which
+    made a local-only run look like it had covered the upload path.
+
+    This harness is local-only by construction — it measures the till's write
+    path, capture overhead and queue behaviour at depth.
+
+    For the cloud half (real signed HTTP, upload drain, full reconciliation):
+        npm run sync:validate -- --transactions 200
+`);
+    process.exitCode = 2;
+    return;
+  }
 
   console.log("=".repeat(78));
   console.log("  SYNC STRESS AND RECOVERY");
-  console.log(`  products: ${productCount.toLocaleString()}   transactions: ${transactionCount.toLocaleString()}   cloud: ${withCloud ? "yes" : "no"}`);
+  console.log(`  products: ${productCount.toLocaleString()}   transactions: ${transactionCount.toLocaleString()}   cloud: no (local-only by design)`);
   console.log("=".repeat(78));
 
   const { getLocalClient, prepareLocalDatabase } = await import(
@@ -484,12 +504,14 @@ async function main(): Promise<void> {
     for (const failure of failures) console.log(`    ${failure.label}: ${failure.value} ${failure.note ?? ""}`);
   }
 
-  if (!withCloud) {
-    console.log(`
+  console.log(`
   Cloud-side throughput (upload rate, wire conflicts) was NOT measured.
-  Re-run against a disposable database with:
-      npm run sync:stress -- --with-cloud --i-accept-writes-to-this-database`);
-  }
+  This harness is local-only by construction: it measures the till's write
+  path, capture overhead and queue behaviour, none of which need a cloud.
+
+  For the cloud half — real signed HTTP, upload drain, reconciliation —
+  run the end-to-end validator instead:
+      npm run sync:validate -- --transactions 200`);
   console.log("=".repeat(78));
 
   await db.$disconnect();

@@ -39,7 +39,15 @@
 //
 //   • `Prisma.Decimal` is the SAME class in both generated clients, so the
 //     `instanceof Prisma.Decimal` checks in finance.engine.ts and
-//     cashRegister.engine.ts behave identically.
+//     cashRegister.engine.ts behave identically. (Re-verified 2026-08-06:
+//     `cloud.Prisma.Decimal === local.Prisma.Decimal` is true.)
+//
+//     ⚠ Class identity was never the hazard. A Decimal keeps its digits in own
+//     ENUMERABLE properties, so any generic object walk that rebuilds args with
+//     `{ ...source }` silently converts it to a plain object and Prisma rejects
+//     the write. The scalar-list bridge did exactly that until 2026-08-06 — see
+//     `isOpaqueValue` in scalarListBridge.ts. Anything else added to this layer
+//     that walks args must skip Decimals the same way.
 //   • `Prisma.PrismaClientKnownRequestError` is likewise shared, so the P2002
 //     check in finance.service.ts and the duck-typed check in
 //     error.middleware.ts both still fire.

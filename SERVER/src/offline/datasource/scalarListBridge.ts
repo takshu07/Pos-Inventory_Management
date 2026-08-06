@@ -127,6 +127,42 @@ function decodeListValue(value: unknown, elementType: string): unknown {
 /** Depth guard — Prisma args/results are shallow; this only stops cycles. */
 const MAX_DEPTH = 12;
 
+/**
+ * True for values that are objects but must be passed to Prisma BY REFERENCE,
+ * never walked into and rebuilt.
+ *
+ * `Prisma.Decimal` is the one that bites. A Decimal carries its digits in own
+ * enumerable properties — `Object.keys(new Decimal(5000))` is
+ * `["constructor","s","e","d"]` — so the generic `{ ...source }` copy below
+ * produces a PLAIN object with a `constructor` key and no Decimal prototype.
+ * Prisma then rejects the write with:
+ *
+ *     Invalid value for argument `constructor`: We could not serialize
+ *     [object Function] value.
+ *
+ * That fired on any write carrying a Decimal anywhere in its args — opening a
+ * cash register, which blocks every sale on the till. It is matched by shape
+ * rather than by `instanceof` so a Decimal from either generated client (or a
+ * future decimal.js copy) is covered without importing a client here.
+ */
+function isOpaqueValue(node: object): boolean {
+  if (node instanceof Date) return true;
+  if (ArrayBuffer.isView(node) || node instanceof ArrayBuffer) return true;
+
+  // Matched by SHAPE, deliberately. The obvious check — `constructor.name ===
+  // "Decimal"` — silently fails: the bundled client minifies the class to
+  // `Decimal2`, so a name test lets the value through and the bug returns.
+  // decimal.js instances always carry sign/exponent/digits as `s`/`e`/`d` and
+  // expose `toFixed`, and nothing in a Prisma args tree looks like that by
+  // accident.
+  const candidate = node as { s?: unknown; e?: unknown; d?: unknown; toFixed?: unknown };
+  return (
+    typeof candidate.toFixed === "function" &&
+    typeof candidate.s === "number" &&
+    typeof candidate.e === "number"
+  );
+}
+
 function encodeArgs(node: unknown, depth = 0): unknown {
   if (depth > MAX_DEPTH || node === null || typeof node !== "object") {
     return node;
@@ -136,7 +172,7 @@ function encodeArgs(node: unknown, depth = 0): unknown {
     return node.map((entry) => encodeArgs(entry, depth + 1));
   }
 
-  if (node instanceof Date) return node;
+  if (isOpaqueValue(node)) return node;
 
   const source = node as Record<string, unknown>;
   let result: Record<string, unknown> | undefined;
@@ -170,7 +206,10 @@ function decodeResult(node: unknown, depth = 0): unknown {
     return node;
   }
 
-  if (node instanceof Date) return node;
+  // Same reasoning as encodeArgs: a Decimal read back from SQLite must not be
+  // walked into. Here the damage would be subtler — the object survives, but
+  // recursing over `s`/`e`/`d` is pure waste on every priced row read.
+  if (isOpaqueValue(node)) return node;
 
   const record = node as Record<string, unknown>;
 

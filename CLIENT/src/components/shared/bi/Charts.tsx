@@ -53,59 +53,78 @@ import { formatCurrencyCompact, formatCurrency, formatNumber, formatPercent } fr
 const VIZ_CSS = `
 .bi-viz {
   --bi-surface: #ffffff;
-  --bi-grid: #e5e7eb;
-  --bi-axis: #9ca3af;
-  --bi-text: #374151;
-  --bi-s1: #2a78d6;
-  --bi-s2: #eb6834;
+  /* Grid recedes further than before: gridlines are a reading aid, not data, and
+     the old #e5e7eb competed with the thinner series strokes. */
+  --bi-grid: #ece9f5;
+  --bi-axis: #9b96ad;
+  --bi-text: #3d3752;
+  /* s1 leads with the brand indigo so charts belong to the same system as the
+     rest of the shell. Remaining hues are spaced around the wheel for categorical
+     separability, and all sit in a narrow lightness band so no single series
+     shouts louder than the others purely by being brighter. */
+  --bi-s1: #5b5bd6;
+  --bi-s2: #e07a5f;
   --bi-s3: #1baf7a;
-  --bi-s4: #8b5cf6;
+  --bi-s4: #9b72e0;
   --bi-s5: #d9a441;
-  --bi-s6: #d64550;
+  --bi-s6: #d6607a;
+  /* Unchanged in meaning: profit/loss keep the learned green/red mapping. */
   --bi-positive: #1baf7a;
   --bi-negative: #d64550;
 }
 @media (prefers-color-scheme: dark) {
   .bi-viz {
-    --bi-surface: #0b0b0c;
-    --bi-grid: #27272a;
-    --bi-axis: #71717a;
-    --bi-text: #d4d4d8;
-    --bi-s1: #3987e5;
-    --bi-s2: #d95926;
-    --bi-s3: #199e70;
-    --bi-s4: #9d76f7;
-    --bi-s5: #c99433;
-    --bi-s6: #e05a63;
-    --bi-positive: #199e70;
+    /* Matches the dark --card, so charts sit ON their card rather than punching
+       a near-black hole through it (the old #0b0b0c was darker than any surface
+       in the new palette). */
+    --bi-surface: #1a1826;
+    --bi-grid: #2c2940;
+    --bi-axis: #7d7899;
+    --bi-text: #d8d5e3;
+    /* Same hue order as light, lifted in lightness and eased in chroma so the
+       series stay vivid on a dark field without vibrating against it. */
+    --bi-s1: #7b7bf0;
+    --bi-s2: #e8907a;
+    --bi-s3: #2bc48c;
+    --bi-s4: #b18cf0;
+    --bi-s5: #dcae5c;
+    --bi-s6: #e8798f;
+    --bi-positive: #2bc48c;
     --bi-negative: #e05a63;
   }
 }
 :root[data-theme="dark"] .bi-viz {
-  --bi-surface: #0b0b0c;
-  --bi-grid: #27272a;
-  --bi-axis: #71717a;
-  --bi-text: #d4d4d8;
-  --bi-s1: #3987e5;
-  --bi-s2: #d95926;
-  --bi-s3: #199e70;
-  --bi-s4: #9d76f7;
-  --bi-s5: #c99433;
-  --bi-s6: #e05a63;
-  --bi-positive: #199e70;
+  --bi-surface: #1a1826;
+  --bi-grid: #2c2940;
+  --bi-axis: #7d7899;
+  --bi-text: #d8d5e3;
+  --bi-s1: #7b7bf0;
+  --bi-s2: #e8907a;
+  --bi-s3: #2bc48c;
+  --bi-s4: #b18cf0;
+  --bi-s5: #dcae5c;
+  --bi-s6: #e8798f;
+  --bi-positive: #2bc48c;
   --bi-negative: #e05a63;
 }
 :root[data-theme="light"] .bi-viz {
   --bi-surface: #ffffff;
-  --bi-grid: #e5e7eb;
-  --bi-axis: #9ca3af;
-  --bi-text: #374151;
-  --bi-s1: #2a78d6;
-  --bi-s2: #eb6834;
+  /* Grid recedes further than before: gridlines are a reading aid, not data, and
+     the old #e5e7eb competed with the thinner series strokes. */
+  --bi-grid: #ece9f5;
+  --bi-axis: #9b96ad;
+  --bi-text: #3d3752;
+  /* s1 leads with the brand indigo so charts belong to the same system as the
+     rest of the shell. Remaining hues are spaced around the wheel for categorical
+     separability, and all sit in a narrow lightness band so no single series
+     shouts louder than the others purely by being brighter. */
+  --bi-s1: #5b5bd6;
+  --bi-s2: #e07a5f;
   --bi-s3: #1baf7a;
-  --bi-s4: #8b5cf6;
+  --bi-s4: #9b72e0;
   --bi-s5: #d9a441;
-  --bi-s6: #d64550;
+  --bi-s6: #d6607a;
+  /* Unchanged in meaning: profit/loss keep the learned green/red mapping. */
   --bi-positive: #1baf7a;
   --bi-negative: #d64550;
 }

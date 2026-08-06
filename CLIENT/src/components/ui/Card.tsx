@@ -12,6 +12,12 @@ export const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
       ref={ref}
       className={cn(
         "rounded-xl border border-border bg-card text-card-foreground shadow-sm",
+        /* The card is the most repeated shape in the app, so its transition sets
+           the perceived "weight" of the whole UI. 200ms on a bezier that starts
+           fast and settles slow reads as responsive-but-unhurried; the browser
+           default (ease, instant start) feels mechanical by comparison.
+           Restricted to box-shadow/border so this never animates layout. */
+        "transition-[box-shadow,border-color] duration-200 ease-[cubic-bezier(0.4,0,0.2,1)]",
         className
       )}
       {...props}

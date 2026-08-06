@@ -34,12 +34,22 @@ export default defineConfig({
       "src/offline/__tests__/requestSignature.test.ts",
       "src/offline/__tests__/rawBodyCapture.test.ts",
       "src/offline/__tests__/conflicts.test.ts",
+      "src/offline/__tests__/scalarListBridge.test.ts",
       // Rollback safety: the disabled path must never reach SQLite. Pure
       // config/controller logic — the local client is mocked to throw, which
       // is precisely what makes the assertion meaningful without a database.
       "src/offline/__tests__/rollback.test.ts",
       "src/offline/__tests__/defaultDisabled.test.ts",
+      // Till provisioning. Uses REAL SQLite (a pushed mirror template that each
+      // case copies) but never touches Neon — the cloud download is stubbed per
+      // case. So it needs no DATABASE_URL and belongs on the fast path, despite
+      // being an integration suite by every other measure.
+      "src/offline/__tests__/provisioning.integration.test.ts",
     ],
-    testTimeout: 10000,
+    // The provisioning suite pushes a mirror template once at module scope,
+    // which is a ~30s Prisma subprocess. The 10s default kills it mid-push and
+    // the whole suite then reports as skipped.
+    testTimeout: 120000,
+    hookTimeout: 120000,
   },
 });

@@ -36,72 +36,169 @@
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
   --radius-sm: calc(var(--radius) - 4px);
+  --radius-xl: calc(var(--radius) + 4px);
 
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  /*
+   * ── Elevation ───────────────────────────────────────────────────────────────
+   * Tailwind's stock shadows are small, tight and neutral-grey, which on a light
+   * UI reads as a hard smudge under the card. These are wider, softer and TINTED
+   * with the brand hue (250) — a coloured shadow is what separates "soft daylight
+   * on a warm surface" from "drop shadow applied in a dialog box".
+   *
+   * Two stacked layers per level: a tight contact shadow that anchors the card to
+   * the surface, plus a wide ambient one that gives it the diffuse lift. Opacities
+   * stay low (≤0.08) so depth is felt rather than noticed.
+   *
+   * Overriding the --shadow-* theme keys means every existing `shadow-sm` /
+   * `shadow-md` in the codebase picks these up with no component edits.
+   */
+  --shadow-xs: 0 1px 2px 0 hsl(250 25% 20% / 0.04);
+  --shadow-sm: 0 1px 2px 0 hsl(250 25% 20% / 0.04), 0 2px 8px -2px hsl(250 25% 20% / 0.06);
+  --shadow-md: 0 2px 4px -1px hsl(250 25% 20% / 0.05), 0 8px 20px -4px hsl(250 25% 20% / 0.08);
+  --shadow-lg: 0 4px 8px -2px hsl(250 25% 20% / 0.05), 0 16px 32px -8px hsl(250 25% 20% / 0.10);
+  --shadow-xl: 0 8px 16px -4px hsl(250 25% 20% / 0.06), 0 24px 48px -12px hsl(250 25% 20% / 0.12);
+  /* Reserved for true overlays (Modal, Drawer). Deeper than xl so a dialog reads
+     as floating well clear of the page, but still hue-matched — Tailwind's stock
+     2xl is a heavy neutral-black slab that looks foreign against these surfaces. */
+  --shadow-2xl: 0 12px 24px -8px hsl(250 25% 20% / 0.10), 0 32px 64px -16px hsl(250 25% 20% / 0.18);
 }
 
+/*
+ * ── Palette ───────────────────────────────────────────────────────────────────
+ * A calm, low-arousal surface set with a single indigo-violet brand accent.
+ *
+ * The design goal is sustained comfort, not first-impression punch: this screen
+ * is stared at for a whole shift, so every choice below trades a little contrast
+ * "pop" for a lot less accumulated eye strain.
+ *
+ * THREE RULES THIS PALETTE FOLLOWS
+ *
+ * 1. NO PURE WHITE, NO PURE BLACK.
+ *    #fff on a bright retail floor is a glare source, and pure black next to
+ *    light text maximises halation (the smeared look on thin glyphs, worst for
+ *    astigmatic and tired eyes). Light tops out at 98% L, dark bottoms out at
+ *    ~9% L. This is the single biggest comfort win here.
+ *
+ * 2. THE CANVAS IS RECESSED, CARDS ARE LIFTED.
+ *    Previously background and card were both 100% white, so a card was visible
+ *    only by its border — the eye had to hunt for structure. Now the canvas sits
+ *    a step darker than the cards it holds, so panels read as foreground by
+ *    luminance alone. Grouping comes for free from the value structure instead
+ *    of costing the user attention (Gestalt figure/ground).
+ *
+ * 3. NEUTRALS ARE WARM AND HUE-CONSISTENT.
+ *    Every grey carries a trace of the brand hue (~255) rather than the old
+ *    cold 210-222 blue-grey. A consistent hue family is what makes a UI feel
+ *    "designed" rather than assembled, and warmth reads as calm where cold blue-
+ *    grey reads as clinical.
+ *
+ * Chroma is kept low on all surfaces so the ONLY saturated things on screen are
+ * the brand accent and the semantic status colours (emerald/amber/red). Those
+ * status colours are deliberately untouched by this retheme: on a POS they carry
+ * meaning (in stock / low stock / error), so they must stay learned and distinct.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Canvas sits below the cards, with a faint warmth. Not #fff — see rule 1. */
+    --background: 255 30% 98%;
+    /* 15% L, not ~5%: full-strength black text on a light UI is more contrast
+       than sustained reading wants. Still ~14:1 on the canvas, well past AAA. */
+    --foreground: 255 25% 15%;
 
+    /* Cards lift ABOVE the canvas — the figure/ground split from rule 2. */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 255 25% 15%;
 
+    /* Popovers/menus read as floating above even the cards. */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 255 25% 15%;
 
-    /* Enterprise Blue Primary */
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+    /* Indigo-violet brand accent. Held at 58% L so white text on it clears AA
+       (~4.6:1) while the hue stays soft rather than the harsh electric blue of
+       the old 221 primary. Far from emerald/amber/red, so buttons never read as
+       status and alerts never read as branding. */
+    --primary: 245 58% 58%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Quiet tinted fills for secondary surfaces and hover states. */
+    --secondary: 255 30% 95%;
+    --secondary-foreground: 255 25% 22%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 255 25% 96%;
+    /* 45% L — the AA floor (4.6:1) for secondary text. Deliberately not lighter:
+       muted must stay *readable*, not decorative. */
+    --muted-foreground: 255 12% 45%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* `accent` is the hover/active wash across nav, menus and ghost buttons.
+       A faint tint of the brand hue, so hover feels related to the brand rather
+       than a generic grey smudge. */
+    --accent: 245 45% 95%;
+    --accent-foreground: 245 50% 38%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* 48% L, not a punchier 55%: --destructive is used as TEXT (field errors,
+       validation messages), not just as a button fill, so it has to clear 4.5:1
+       against the card. At 55% it measured 4.38:1 — a real AA failure on the
+       exact copy a user must read to fix their mistake. */
+    --destructive: 0 72% 48%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    /* Borders are low-contrast on purpose. Once cards are separated by luminance
+       (rule 2) the border is only a hint, and hard grey lines are visual noise
+       that make a dense POS table feel like a spreadsheet cage. */
+    --border: 255 20% 91%;
+    --input: 255 20% 88%;
+    --ring: 245 58% 58%;
 
-    --radius: 0.5rem;
+    /* Softer corners than the old 0.5rem. Rounded shapes are processed faster
+       and rated as safer/calmer than sharp ones — cheap, real comfort. */
+    --radius: 0.75rem;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    /* ~9% L, not ~5%, and hue-matched to the light theme. Deep charcoal-indigo
+       instead of near-black: see rule 1 on halation. */
+    --background: 250 20% 9%;
+    /* Softened off-white, NOT #fff. Pure white on dark is the single harshest
+       pairing in UI and the main cause of dark-mode eye fatigue. */
+    --foreground: 250 20% 93%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    /* Dark mode INVERTS rule 2's direction: raised surfaces get LIGHTER, which
+       is how depth reads when light comes from above. Card above canvas. */
+    --card: 250 18% 12%;
+    --card-foreground: 250 20% 93%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    /* Highest surface in the stack, so menus separate from the cards below. */
+    --popover: 250 18% 14%;
+    --popover-foreground: 250 20% 93%;
 
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    /* Lifted L and reduced chroma vs. light mode. A saturated colour on a dark
+       field vibrates against it; this stays vivid without buzzing. */
+    --primary: 245 70% 68%;
+    --primary-foreground: 250 25% 12%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 250 15% 18%;
+    --secondary-foreground: 250 20% 93%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted: 250 15% 18%;
+    /* 62% L keeps secondary text ~5:1 on the dark canvas. Dark mode needs muted
+       text LIGHTER than the naive inverse, or it drops below legibility. */
+    --muted-foreground: 250 12% 62%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 245 25% 22%;
+    --accent-foreground: 245 60% 82%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    /* Dark mode moves the OPPOSITE way from light: error text must get lighter
+       to stay readable on a dark card (52% measured only 3.58:1). Chroma is
+       eased at the same time so it alerts without glaring off a dark screen. */
+    --destructive: 0 75% 68%;
+    --destructive-foreground: 250 25% 12%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    /* Borders as subtle lightening, since shadows are nearly invisible on dark. */
+    --border: 250 15% 20%;
+    --input: 250 15% 24%;
+    --ring: 245 70% 68%;
   }
 }
 
@@ -134,6 +231,44 @@
     /* Belt-and-braces against a horizontal scrollbar appearing from one
        overflowing table and shifting the whole shell sideways. */
     overflow-x: hidden;
+
+    /*
+     * Comfort typography. 1.6 line-height and a touch of letter-spacing widen the
+     * horizontal "channel" the eye tracks along; too-tight leading is a large and
+     * commonly missed source of reading fatigue in dense admin tables.
+     */
+    line-height: 1.6;
+    letter-spacing: 0.005em;
+    /* Opt into the font's real numerals for tabular data. Prices and stock counts
+       sit in columns, and proportional digits make them ragged and slower to
+       compare down a column. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * Headings pull the opposite way from body text: tighter leading and slightly
+   * negative tracking. Large type at default spacing looks loose and unresolved,
+   * and the contrast in density is what makes a heading scan as a heading.
+   */
+  h1, h2, h3, h4 {
+    line-height: 1.25;
+    letter-spacing: -0.018em;
+    @apply text-foreground;
+  }
+
+  /*
+   * Dark-mode elevation. A shadow on a near-black surface is invisible — there is
+   * nothing darker to cast onto — so raised surfaces there are separated by a
+   * hairline top highlight instead, mimicking a light source above. Without this
+   * every card in dark mode flattens into the canvas.
+   */
+  .dark [data-elevated],
+  .dark .shadow-sm,
+  .dark .shadow-md,
+  .dark .shadow-lg {
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.04),
+      0 2px 8px -2px hsl(0 0% 0% / 0.4);
   }
 
   /*

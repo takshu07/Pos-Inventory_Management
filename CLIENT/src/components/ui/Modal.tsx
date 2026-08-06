@@ -85,7 +85,11 @@ export function Modal({ open, onClose, title, description, children, footer, siz
       {/* Backdrop */}
       <div
         className={cn(
-          "absolute inset-0 bg-black/60 backdrop-blur-sm",
+          /* Hue-matched to the palette rather than flat black, and lightened to
+             /50 with a stronger blur. Pure black at 60% slams the whole screen
+             into shadow; a tinted, blurred veil separates the dialog just as
+             well while keeping the context behind it legible and calm. */
+          "absolute inset-0 bg-[hsl(250_30%_10%_/_0.5)] backdrop-blur-md",
           "transition-opacity duration-150 ease-out",
           shown ? "opacity-100" : "opacity-0"
         )}

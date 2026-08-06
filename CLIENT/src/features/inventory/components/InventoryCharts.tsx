@@ -28,36 +28,36 @@ import { formatCurrency, formatNumber } from "../utils/format";
 const VIZ_CSS = `
 .inv-viz {
   --inv-surface: #ffffff;
-  --inv-grid: #e5e7eb;
-  --inv-axis: #9ca3af;
-  --inv-s1: #2a78d6;
-  --inv-s2: #eb6834;
+  --inv-grid: #ece9f5;
+  --inv-axis: #9b96ad;
+  --inv-s1: #5b5bd6;
+  --inv-s2: #e07a5f;
   --inv-s3: #1baf7a;
 }
 @media (prefers-color-scheme: dark) {
   .inv-viz {
-    --inv-surface: #0b0b0c;
-    --inv-grid: #27272a;
-    --inv-axis: #71717a;
-    --inv-s1: #3987e5;
-    --inv-s2: #d95926;
-    --inv-s3: #199e70;
+    --inv-surface: #1a1826;
+    --inv-grid: #2c2940;
+    --inv-axis: #7d7899;
+    --inv-s1: #7b7bf0;
+    --inv-s2: #e8907a;
+    --inv-s3: #2bc48c;
   }
 }
 :root[data-theme="dark"] .inv-viz {
-  --inv-surface: #0b0b0c;
-  --inv-grid: #27272a;
-  --inv-axis: #71717a;
-  --inv-s1: #3987e5;
-  --inv-s2: #d95926;
-  --inv-s3: #199e70;
+  --inv-surface: #1a1826;
+  --inv-grid: #2c2940;
+  --inv-axis: #7d7899;
+  --inv-s1: #7b7bf0;
+  --inv-s2: #e8907a;
+  --inv-s3: #2bc48c;
 }
 :root[data-theme="light"] .inv-viz {
   --inv-surface: #ffffff;
-  --inv-grid: #e5e7eb;
-  --inv-axis: #9ca3af;
-  --inv-s1: #2a78d6;
-  --inv-s2: #eb6834;
+  --inv-grid: #ece9f5;
+  --inv-axis: #9b96ad;
+  --inv-s1: #5b5bd6;
+  --inv-s2: #e07a5f;
   --inv-s3: #1baf7a;
 }
 `;
