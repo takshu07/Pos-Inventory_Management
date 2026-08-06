@@ -104,44 +104,33 @@ function splitOnPlaceholders(sql: string): string[] {
  * costs one regex test.
  */
 function translateArgs(args: unknown, operation: string): unknown {
+  // ── Array-wrapped tagged template: [Sql] ───────────────────────────────────
+  // What Prisma 7 actually hands a `$executeRaw` / `$queryRaw` query extension:
+  // the `Sql` object boxed in a single-element array, NOT bare and NOT
+  // `[string, ...params]`. Because it is an Array, the bare-template branch
+  // below never matched it (`Array.isArray(args.strings)` is false on the
+  // array itself), and because `args[0]` is an object rather than a string the
+  // positional branch did not match either — so every tagged-template raw query
+  // fell through to the "unrecognized shape" warning and was executed against
+  // SQLite as untranslated POSTGRES.
+  //
+  // The failure was not subtle at the driver but was invisible in practice: the
+  // warning is logged at WARN, and the one call site users hit constantly
+  // (closeOpenSessions, on every login) is fire-and-forget, so the login still
+  // succeeded and only the session row was silently never written.
+  //
+  // Unwrap, translate with the same logic as the bare shape, and re-box.
+  if (Array.isArray(args) && args.length === 1 && isTaggedTemplate(args[0])) {
+    const translated = translateTaggedTemplate(args[0]);
+    // Preserve the original object when nothing changed, so the untouched path
+    // stays allocation-free and `Sql` keeps its prototype.
+    if (translated === args[0]) return args;
+    return [translated];
+  }
+
   // ── Tagged template: $queryRaw`…` ──────────────────────────────────────────
   if (isTaggedTemplate(args)) {
-    const joined = args.strings.join(PLACEHOLDER);
-
-    if (!needsTranslation(joined)) return args;
-
-    // ── Translate the WHOLE statement, then split it back ────────────────────
-    // Translating each fragment on its own is WRONG, and quietly so. A tagged
-    // template is cut at parameter boundaries, and a cast lands exactly on one:
-    //
-    //     $queryRaw`… (${now}::timestamp - "loginAt") …`
-    //
-    // splits into "… (" and "::timestamp - \"loginAt\") …". The second fragment
-    // starts with `::timestamp` and has NO operand in front of it, so a
-    // fragment-local rewrite emits `CAST( AS TEXT)` — a syntax error if you are
-    // lucky, and a mangled expression if you are not.
-    //
-    // Joining on `?` first gives the translator a complete, valid statement in
-    // which `?::timestamp` is an ordinary cast over a parameter. Splitting on
-    // `?` afterwards restores the fragments, and the interleaving still lines
-    // up because translation preserves the number and order of placeholders —
-    // `?::timestamp` becomes `CAST(? AS TEXT)`, still exactly one `?`.
-    const translated = translateSql(joined);
-    const fragments = splitOnPlaceholders(translated);
-
-    // If translation somehow changed the placeholder count, the fragments no
-    // longer line up with the values and binding would silently shift every
-    // parameter by one. Refuse rather than run it.
-    if (fragments.length !== args.strings.length) {
-      throw new Error(
-        `SQLite translation changed the parameter count of a raw query ` +
-          `(${args.strings.length - 1} → ${fragments.length - 1}). Refusing to ` +
-          `execute it: mismatched placeholders would bind the wrong values.\n` +
-          `  Query: ${joined.replace(/\s+/g, " ").slice(0, 300)}`
-      );
-    }
-
-    return { ...args, strings: fragments };
+    return translateTaggedTemplate(args);
   }
 
   // ── Positional: $queryRawUnsafe(sql, ...params) ────────────────────────────
@@ -159,6 +148,66 @@ function translateArgs(args: unknown, operation: string): unknown {
   );
 
   return args;
+}
+
+/**
+ * Translates one tagged-template statement, preserving the `Sql` object's own
+ * prototype and any fields beyond `strings`/`values` — Prisma's `Sql` carries
+ * internals the driver reads, so this must never rebuild it as a plain object.
+ *
+ * Returns the input unchanged when no translation is needed.
+ */
+function translateTaggedTemplate<T extends TaggedTemplateArgs>(args: T): T {
+  const joined = args.strings.join(PLACEHOLDER);
+
+  if (!needsTranslation(joined)) return args;
+
+  // ── Translate the WHOLE statement, then split it back ──────────────────────
+  // Translating each fragment on its own is WRONG, and quietly so. A tagged
+  // template is cut at parameter boundaries, and a cast lands exactly on one:
+  //
+  //     $queryRaw`… (${now}::timestamp - "loginAt") …`
+  //
+  // splits into "… (" and "::timestamp - \"loginAt\") …". The second fragment
+  // starts with `::timestamp` and has NO operand in front of it, so a
+  // fragment-local rewrite emits `CAST( AS TEXT)` — a syntax error if you are
+  // lucky, and a mangled expression if you are not.
+  //
+  // Joining on `?` first gives the translator a complete, valid statement in
+  // which `?::timestamp` is an ordinary cast over a parameter. Splitting on
+  // `?` afterwards restores the fragments, and the interleaving still lines
+  // up because translation preserves the number and order of placeholders —
+  // `?::timestamp` becomes `CAST(? AS TEXT)`, still exactly one `?`.
+  const translated = translateSql(joined);
+  const fragments = splitOnPlaceholders(translated);
+
+  // If translation somehow changed the placeholder count, the fragments no
+  // longer line up with the values and binding would silently shift every
+  // parameter by one. Refuse rather than run it.
+  if (fragments.length !== args.strings.length) {
+    throw new Error(
+      `SQLite translation changed the parameter count of a raw query ` +
+        `(${args.strings.length - 1} → ${fragments.length - 1}). Refusing to ` +
+        `execute it: mismatched placeholders would bind the wrong values.\n` +
+        `  Query: ${joined.replace(/\s+/g, " ").slice(0, 300)}`
+    );
+  }
+
+  // Rebuilt through Object.create so the result keeps the ORIGINAL prototype.
+  // Prisma's `Sql` is a class instance the driver type-checks and reads
+  // internals from; returning a plain `{ ...args }` object loses that
+  // prototype, and the adapter then rejects it exactly like a bare string —
+  // which is the same class of failure this branch exists to fix.
+  const rebuilt: T = Object.create(
+    Object.getPrototypeOf(args) as object,
+    Object.getOwnPropertyDescriptors(args)
+  ) as T;
+  Object.defineProperty(rebuilt, "strings", {
+    ...Object.getOwnPropertyDescriptor(args, "strings"),
+    value: fragments,
+  });
+
+  return rebuilt;
 }
 
 // =============================================================================

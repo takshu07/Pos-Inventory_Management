@@ -1,5 +1,9 @@
 import { Outlet, Navigate, useLocation } from "react-router";
-import { useAuthStore, selectIsAuthenticated } from "@/store/auth.store";
+import {
+  useAuthStore,
+  selectIsAuthenticated,
+  selectSessionStatus,
+} from "@/store/auth.store";
 import { Sidebar } from "./Sidebar";
 import { Navbar } from "./Navbar";
 import { MobileSidebar } from "./MobileSidebar";
@@ -23,7 +27,19 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
  */
 export function MainLayout() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const sessionStatus = useAuthStore(selectSessionStatus);
   const location = useLocation();
+
+  // `isAuthenticated` is `sessionStatus === "authenticated"`, so it also reads
+  // false while the session is merely being REVALIDATED ('loading'). Redirecting
+  // on that blink threw the user out to /login mid-navigation and tore down this
+  // whole shell. Only a settled non-authenticated session is a real logout.
+  //
+  // ManagerRoute above already holds the cold-boot case behind a loader, so by
+  // the time this renders the status is normally settled; this is the backstop.
+  if (sessionStatus === "idle" || sessionStatus === "loading") {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />;

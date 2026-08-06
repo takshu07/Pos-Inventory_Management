@@ -27,6 +27,7 @@
  *   the user is actually authenticated.
  */
 
+import { useRef } from "react";
 import { Navigate, Outlet } from "react-router";
 import { useAuthStore, selectIsAuthenticated, selectSessionStatus, selectRole } from "@/store/auth.store";
 import { FullScreenLoader } from "@/components/ui";
@@ -38,6 +39,58 @@ import {
 } from "../utils/permissions";
 import { AUTH_ROUTES } from "../constants";
 
+// ─── Session resolution ───────────────────────────────────────────────────────
+//
+// A guard may only make an authorization decision when the session is SETTLED.
+// 'idle' and 'loading' are not "denied" — they are "not known yet", and the two
+// were previously conflated, which is what made navigation flicker and bounce.
+//
+// Two separate failures came out of that:
+//
+//   1. WHITE FLASH. These guards sit ABOVE MainLayout in the route tree, so
+//      returning <FullScreenLoader /> unmounts the whole shell — sidebar, navbar
+//      and page — and remounts it a tick later. That reads as a page reload, not
+//      a navigation. Once the shell is up, a transient status change must never
+//      tear it back down.
+//
+//   2. BOUNCE TO THE PREVIOUS SECTION. AuthBootstrapper calls /auth/me and
+//      flips status to 'loading', then 'authenticated'. If a navigation to an
+//      owner-only route resolved its lazy chunk inside that window, `role` read
+//      null, canAccessAdmin(null) returned false, and the guard fired
+//      <Navigate replace> — rewriting history and dropping the user back where
+//      they came from. Intermittent, because it depended on request timing.
+//
+// `useSettledAccess` closes both: it never revokes access it has already
+// granted for the lifetime of the mounted guard. A REAL logout or role change
+// unmounts these guards via the top-level status flip to 'unauthenticated' /
+// 'expired', so this cannot pin a stale grant open — see the explicit check.
+
+type Access = "pending" | "granted" | "denied";
+
+/**
+ * Resolves a guard's decision, latching 'granted' so an in-flight session
+ * refresh cannot momentarily revoke it mid-navigation.
+ *
+ * @param settled  false while sessionStatus is 'idle' | 'loading'
+ * @param allowed  the guard's own predicate, only meaningful once settled
+ */
+function useSettledAccess(settled: boolean, allowed: boolean): Access {
+  const grantedOnce = useRef(false);
+
+  // A settled + allowed session is the only thing that opens the latch.
+  if (settled && allowed) grantedOnce.current = true;
+
+  // An explicit denial on a SETTLED session always wins over the latch: this is
+  // a real logout, a real expiry, or a real role change, not a refresh blip.
+  if (settled && !allowed) {
+    grantedOnce.current = false;
+    return "denied";
+  }
+
+  if (grantedOnce.current) return "granted";
+  return settled ? "granted" : "pending";
+}
+
 // ─── Protected Route ──────────────────────────────────────────────────────────
 // Blocks unauthenticated users. Used as wrapper for ALL authenticated routes.
 // MainLayout already has this logic — this export is for composable use elsewhere.
@@ -46,12 +99,13 @@ export function ProtectedRoute() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
   const sessionStatus = useAuthStore(selectSessionStatus);
 
-  // Pre-hydration: show loader to prevent flash
-  if (sessionStatus === "idle" || sessionStatus === "loading") {
-    return <FullScreenLoader />;
-  }
+  const settled = sessionStatus !== "idle" && sessionStatus !== "loading";
+  const access = useSettledAccess(settled, isAuthenticated);
 
-  if (!isAuthenticated) {
+  // Pre-hydration only: show loader to prevent the login page flashing.
+  if (access === "pending") return <FullScreenLoader />;
+
+  if (access === "denied") {
     return <Navigate to={AUTH_ROUTES.login} replace />;
   }
 
@@ -92,16 +146,21 @@ export function OwnerRoute() {
   const sessionStatus = useAuthStore(selectSessionStatus);
   const role = useAuthStore(selectRole);
 
-  if (sessionStatus === "idle" || sessionStatus === "loading") {
-    return <FullScreenLoader />;
-  }
+  const settled = sessionStatus !== "idle" && sessionStatus !== "loading";
+  const access = useSettledAccess(settled, isAuthenticated && canAccessAdmin(role));
 
-  if (!isAuthenticated) {
-    return <Navigate to={AUTH_ROUTES.login} replace />;
-  }
+  // Nested INSIDE MainLayout, so the shell is already on screen. Rendering
+  // nothing (rather than a FullScreenLoader) keeps the sidebar and navbar in
+  // place during the blink; RouteProgress is what signals the pending state.
+  if (access === "pending") return null;
 
-  if (!canAccessAdmin(role)) {
-    return <Navigate to={AUTH_ROUTES.unauthorized} replace />;
+  if (access === "denied") {
+    return (
+      <Navigate
+        to={isAuthenticated ? AUTH_ROUTES.unauthorized : AUTH_ROUTES.login}
+        replace
+      />
+    );
   }
 
   return <Outlet />;
@@ -124,15 +183,20 @@ export function ManagerRoute() {
   const sessionStatus = useAuthStore(selectSessionStatus);
   const role = useAuthStore(selectRole);
 
-  if (sessionStatus === "idle" || sessionStatus === "loading") {
-    return <FullScreenLoader />;
-  }
+  const settled = sessionStatus !== "idle" && sessionStatus !== "loading";
+  const access = useSettledAccess(
+    settled,
+    isAuthenticated && canAccessManagerPortal(role)
+  );
 
-  if (!isAuthenticated) {
-    return <Navigate to={AUTH_ROUTES.login} replace />;
-  }
+  // Only on a genuine COLD boot (nothing granted yet) is the full-screen loader
+  // correct. Once this guard has admitted the user, the shell below it stays
+  // mounted through any later session refresh — swapping it for a loader is
+  // what produced the white flash between sidebar sections.
+  if (access === "pending") return <FullScreenLoader />;
 
-  if (!canAccessManagerPortal(role)) {
+  if (access === "denied") {
+    if (!isAuthenticated) return <Navigate to={AUTH_ROUTES.login} replace />;
     // Cashier trying to reach the management shell → back to their portal.
     return <Navigate to={AUTH_ROUTES.cashierHome} replace />;
   }
@@ -150,15 +214,16 @@ export function CashierRoute() {
   const sessionStatus = useAuthStore(selectSessionStatus);
   const role = useAuthStore(selectRole);
 
-  if (sessionStatus === "idle" || sessionStatus === "loading") {
-    return <FullScreenLoader />;
-  }
+  const settled = sessionStatus !== "idle" && sessionStatus !== "loading";
+  const access = useSettledAccess(
+    settled,
+    isAuthenticated && canAccessCashierPortal(role)
+  );
 
-  if (!isAuthenticated) {
-    return <Navigate to={AUTH_ROUTES.login} replace />;
-  }
+  if (access === "pending") return <FullScreenLoader />;
 
-  if (!canAccessCashierPortal(role)) {
+  if (access === "denied") {
+    if (!isAuthenticated) return <Navigate to={AUTH_ROUTES.login} replace />;
     return <Navigate to={AUTH_ROUTES.dashboard} replace />;
   }
 

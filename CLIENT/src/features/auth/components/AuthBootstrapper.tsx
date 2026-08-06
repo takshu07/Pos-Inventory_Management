@@ -45,7 +45,19 @@ export function AuthBootstrapper() {
     }
 
     // Token exists — validate it against the server.
-    setSessionStatus("loading");
+    //
+    // Only announce 'loading' when we have NOTHING to render with. If a user was
+    // persisted alongside the token we can show the app immediately and let the
+    // check confirm in the background: an unnecessary 'loading' here un-settles
+    // every route guard above, which is what made the shell flash and (on
+    // owner-only routes) bounce back to the previous section. A failed check
+    // still lands in the .catch below and logs the user out properly.
+    const { user: persistedUser } = useAuthStore.getState();
+    if (persistedUser) {
+      setSession(accessToken, persistedUser);
+    } else {
+      setSessionStatus("loading");
+    }
 
     getCurrentUser()
       .then((response) => {

@@ -1,0 +1,17 @@
+# =============================================================================
+# LINE ENDINGS
+#
+# Windows PowerShell 5.1 only recognises a here-string's closing "@ when it is
+# followed by CRLF. A .ps1 checked out with LF endings fails to parse with an
+# error pointing hundreds of lines away from the real cause, so PowerShell files
+# are pinned to CRLF in the working tree regardless of core.autocrlf.
+# =============================================================================
+
+* text=auto
+
+*.ps1  text eol=crlf
+*.psm1 text eol=crlf
+*.cmd  text eol=crlf
+*.bat  text eol=crlf
+
+*.sh   text eol=lf

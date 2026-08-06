@@ -493,6 +493,22 @@ throws rather than approximating because these queries compute money.
 **`SQLite translation changed the parameter count of a raw query`** — a defensive
 refusal. Mismatched placeholders would bind every value one position out.
 
+**`Expected first argument to be a string`, from better-sqlite3** — a raw query
+reached the driver without being translated. Prisma hands a query extension the
+`Sql` object **wrapped in a single-element array**, and `rawSqlBridge` originally
+recognized only the bare object and the positional `[sql, ...params]` form, so
+`[Sql]` matched neither and fell through to the untranslated path. Fixed
+2026-08-06; `rawSqlBridge.test.ts` pins all three shapes.
+
+Two properties make this worth knowing rather than merely fixed. The bridge
+already logged `raw query arrived in an unrecognized shape` — at **WARN**, so a
+till running at `info` showed nothing. And the call site users hit constantly
+(`closeOpenSessions`, on every login) is **fire-and-forget**, so logins kept
+succeeding while `login_history` was silently never written: presence and session
+history were empty on the till and nobody noticed. If that warning appears in a
+log, treat it as an error — it means a query is running as Postgres against
+SQLite.
+
 **Sync 401s** — clock skew beyond `SYNC_SIGNATURE_TOLERANCE_MS`, a mismatched
 `SYNC_DEVICE_SECRET`, or a deactivated device. The response is deliberately
 identical for all three; check the cloud's logs, which record the real reason.

@@ -5,8 +5,14 @@ the plug and watch the POS keep selling.
 
 **Nothing here touches production.** The rig reads `SERVER/.env.offline-test`
 and never your real `.env`. Its cloud is the **test** Neon branch
-(`ep-lingering-bonus`), proven isolated from production (`ep-frosty-moon`) by a
+(`ep-cool-dew`), proven isolated from production (`ep-frosty-moon`) by a
 marker-table check. Sales you ring up here upload *there*.
+
+The rig also never sets a variable in your shell — every command that needs rig
+environment runs in a child process, so `npm run dev` in the same terminal is
+unaffected. See
+[OFFLINE_TEST_RIG_OPERATIONS.md](OFFLINE_TEST_RIG_OPERATIONS.md) for the startup
+sequence, failure modes and recovery steps.
 
 ---
 
@@ -82,15 +88,26 @@ A clean result ends with:
 
 ### Verified on 2026-08-06
 
-5 sales rung up with the cloud process stopped, then drained:
+**Two consecutive offline cycles** on the rebuilt rig, without restarting
+anything between them — 5 sales in the first, 4 in the second, all rung up
+through the HTTP checkout path with the cloud process stopped:
 
 ```
-  ✔ sale count                   local 5  cloud 5
-  ✔ sale revenue                 local 4056.00  cloud 4056.00
+  cycle 1   upload 44 items -> 44 applied, 0 duplicates, 0 conflicts, 0 failed
+  cycle 2   upload 35 items -> 35 applied, 0 duplicates, 0 conflicts, 0 failed
+
+  ✔ sale count                   local 9  cloud 9
+  ✔ sale revenue                 local 4059.00  cloud 4059.00
+  ✔ sale items                   local 9  cloud 9
+  ✔ payment count                local 9  cloud 9
   ✔ payment total                local 4056.48  cloud 4056.48
-  ✔ inventory movements          local 5  cloud 5
+  ✔ inventory movements          local 9  cloud 9
   ✔ no duplicate sales in cloud  0
+  ✔ synced items / receipts      local 88  cloud 88
 ```
+
+Provisioning in the same run passed all 15 mirror checks (93 rows, 19 entities,
+66.3s), and no rig environment variable reached the operator's shell.
 
 ---
 
@@ -99,6 +116,7 @@ A clean result ends with:
 | Command | What it does |
 |---|---|
 | `provision` | Builds a fresh, verified mirror. Refuses if the queue holds unsent sales. |
+| `provision -Force` | Same, but rebuilds an existing mirror. Still refuses on unsent sales. |
 | `start` | Starts both nodes. |
 | `offline` | Stops the cloud. The outage. |
 | `online` | Restarts the cloud. Does **not** sync. |
@@ -141,13 +159,18 @@ failures when the sync was perfect — the difference was one pre-existing
 ```
 
 **"Walk-In customer not initialized."** The singleton `isWalkIn` customer is
-missing — every anonymous checkout needs it. Restore it:
+missing — every anonymous checkout needs it, so the till cannot sell at all.
+Restore it in the *cloud*, then bring it to the till:
 
 ```powershell
 $env:DATABASE_URL="<test branch url>"
 npx tsx scripts/ensure-walkin.ts
-.\scripts\offline-test.ps1 provision    # re-download so the till gets it
+.\scripts\offline-test.ps1 sync         # arrives as a downloaded Customer row
 ```
+
+`sync` is faster than re-provisioning and leaves the queue alone. Use
+`provision -Force` only if the mirror needs rebuilding for other reasons — and
+note it will refuse while the queue still holds unsent sales, which is correct.
 
 **Provisioning refuses with "no stress-test data".** The *cloud* holds `E2E-`
 rows from an earlier harness run, and it will not build a till from
@@ -160,7 +183,17 @@ npx tsx scripts/clean-test-branch.ts
 ```
 
 **Cloud node won't start, `DatabaseNotReachable`.** Neon auto-suspends idle
-branches. Run `start` again; the second attempt wakes it.
+branches, and the first connection after that errors rather than waiting. The
+rig now wakes the branch on purpose before anything depends on it, so this
+should no longer happen — `provision`, `start`, `online` and `verify` each print
+`warming ep-… is awake (N.Ns, M attempts)` first. To wake it by hand:
+
+```powershell
+node scripts/warm-test-branch.mjs --timeout 90
+```
+
+If that reports `28P01`, the branch credentials are wrong rather than cold —
+a branch deleted and recreated reports this even with an unchanged password.
 
 ---
 
