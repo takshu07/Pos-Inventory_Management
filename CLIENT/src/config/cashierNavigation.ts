@@ -40,3 +40,20 @@ export const CASHIER_NAV: NavSection[] = [
     ],
   },
 ];
+
+/**
+ * Whether a cashier nav row must match its URL exactly (NavLink's `end` prop).
+ *
+ * Same rule as the manager shell's `isExactNavPath`: NavLink's default segment
+ * prefix match is right for detail screens (a shift summary under My Shifts has
+ * no nav row of its own), but wrong where a second nav row sits underneath a
+ * first. "/cashier/register" prefixes "/cashier/register/history", so without
+ * this both rows light up on the shifts screen.
+ */
+const CASHIER_NAV_PATHS: string[] = CASHIER_NAV.flatMap((section) =>
+  section.items.map((item) => item.path)
+);
+
+export function isExactCashierNavPath(path: string): boolean {
+  return CASHIER_NAV_PATHS.some((other) => other.startsWith(`${path}/`));
+}

@@ -325,9 +325,13 @@ export class SaleService {
         if (existing) {
           finalCustomerId = existing.id;
         } else {
-          // Generate customer code based on the highest existing code
+          // Generate customer code based on the highest existing code.
+          // Includes the Walk-In row: on databases provisioned by
+          // scripts/ensure-walkin.ts it holds a CUS- code, and skipping it
+          // regenerates a code that already exists (unique violation → 409).
+          // Mirrors customerRepository.getNextSequenceNumber().
           const lastCustomer = await tx.customer.findFirst({
-            where: { isWalkIn: false, customerCode: { startsWith: 'CUS-' } },
+            where: { customerCode: { startsWith: 'CUS-' } },
             orderBy: { customerCode: 'desc' }
           });
           

@@ -78,6 +78,27 @@ export interface RegisterActivity {
   employee: EmployeeBrief | null;
 }
 
+/**
+ * The itemised build-up of expected cash.
+ *
+ * ONLY CASH APPEARS HERE. UPI, card, exchange and store-credit values are
+ * excluded by design — they move no notes, and including them would produce a
+ * drawer figure that can never be counted against.
+ *
+ *   expectedInDrawer = openingFloat + cashCollected
+ *                    − cashRefunds − cashPayouts − cashDrops
+ *                    ± otherAdjustments
+ */
+export interface DrawerBreakdown {
+  openingFloat: number;
+  cashCollected: number;
+  cashRefunds: number;
+  cashPayouts: number;
+  cashDrops: number;
+  otherAdjustments: number;
+  expectedInDrawer: number;
+}
+
 export interface LiveDashboard {
   hasOpenSession: boolean;
   session: RegisterSession | null;
@@ -87,6 +108,26 @@ export interface LiveDashboard {
     cashOut: number;
     expectedCash: number;
   } | null;
+  /**
+   * The traceable build-up of expected cash. Every field is a CASH movement,
+   * and the lines reconcile exactly to `expectedInDrawer`.
+   */
+  drawer: DrawerBreakdown | null;
+  /** Money taken this shift, and what was handed back in cash. */
+  collected: {
+    cash: number;
+    upi: number;
+    card: number;
+    other: number;
+    digital: number;
+    totalCollected: number;
+    cashRefunds: number;
+    storeCreditRefunds: number;
+    netCollected: number;
+    /** Money taken on exchanges. Part of totalCollected, not of grossSales. */
+    exchangeTopUps: number;
+    grossSales: number;
+  } | null;
   sales: {
     cash: number;
     upi: number;
@@ -95,8 +136,13 @@ export interface LiveDashboard {
     split: number;
     gross: number;
     discounts: number;
+    /** Refunds paid back in CASH. The only refund figure that hits the drawer. */
     refunds: number;
     refundCount: number;
+    /** Refunds settled as store credit. Informational — moves no notes. */
+    storeCreditRefunds: number;
+    totalRefunds: number;
+    /** Merchandise value issued on exchange. Informational, never cash. */
     exchangeValue: number;
     exchangeCount: number;
     transactionCount: number;
@@ -170,7 +216,11 @@ export interface ShiftSummary {
     cardSales: number;
     otherSales: number;
     splitSales: number;
+    /** Cash refunds only — the figure that legitimately reduces the drawer. */
     refunds: number;
+    /** Refunds settled as store credit. Informational. */
+    storeCreditRefunds: number;
+    /** Merchandise issued on exchange. Informational, never cash. */
     exchanges: number;
     discounts: number;
     cashDrops: number;
@@ -180,6 +230,8 @@ export interface ShiftSummary {
     difference: number | null;
     transactionCount: number;
   };
+  /** Line-by-line build-up of expected cash; sums exactly to its own total. */
+  drawer: DrawerBreakdown & { closingCash: number | null };
   shift: {
     employee: string;
     employeeCode: string | null;

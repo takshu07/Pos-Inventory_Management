@@ -70,8 +70,12 @@ export default function ShiftSummaryPage() {
     );
   }
 
-  const { totals, shift, session } = data;
+  const { totals, shift, session, drawer } = data;
   const kind = varianceKind(totals.difference);
+
+  // Named once so the tender panel's total and its net cannot drift apart.
+  const totalCollected =
+    totals.cashSales + totals.upiSales + totals.cardSales + totals.otherSales;
 
   // Reconciliation requires a supervisor who did NOT work the shift. Both
   // conditions are enforced server-side; hiding the button when they fail
@@ -198,10 +202,20 @@ export default function ShiftSummaryPage() {
             <StatRow label="Card sales" value={formatCurrencyExact(totals.cardSales)} />
             <StatRow label="Other tenders" value={formatCurrencyExact(totals.otherSales)} />
             <StatRow
-              label="Total"
-              value={formatCurrencyExact(
-                totals.cashSales + totals.upiSales + totals.cardSales + totals.otherSales
-              )}
+              label="Total money collected"
+              value={formatCurrencyExact(totalCollected)}
+              emphasis
+            />
+            {/* Cash refunds only — store credit hands over a balance, not
+                money, so deducting it would understate what was taken. */}
+            <StatRow
+              label="− Cash refunds"
+              value={formatCurrencyExact(totals.refunds)}
+              tone="negative"
+            />
+            <StatRow
+              label="Net collected"
+              value={formatCurrencyExact(totalCollected - totals.refunds)}
               emphasis
             />
             <StatRow
@@ -220,38 +234,73 @@ export default function ShiftSummaryPage() {
               tone="muted"
             />
           </div>
+
+          {/* Fenced off: merchandise and account credit are not takings. */}
+          <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/20 p-2.5">
+            <p className="text-xs font-medium text-muted-foreground">
+              Informational — not money
+            </p>
+            <div className="mt-1 space-y-0.5">
+              <StatRow
+                label="Exchange value issued"
+                value={formatCurrencyExact(totals.exchanges)}
+                tone="muted"
+              />
+              <StatRow
+                label="Store credit refunds"
+                value={formatCurrencyExact(totals.storeCreditRefunds)}
+                tone="muted"
+              />
+            </div>
+          </div>
         </MetricPanel>
 
         {/* ── Reconciliation ───────────────────────────────────────────────── */}
+        {/* Every line here is a CASH movement, and they sum exactly to
+            "Expected in drawer". The panel previously listed cash sales and
+            refunds against a total derived from the drawer ledger, so the
+            arithmetic on screen did not add up to the figure beneath it. */}
         <MetricPanel title="Drawer reconciliation">
           <div className="space-y-0.5">
-            <StatRow label="Opening cash" value={formatCurrencyExact(totals.openingCash)} />
+            <StatRow label="Opening float" value={formatCurrencyExact(drawer.openingFloat)} />
             <StatRow
-              label="+ Cash sales"
-              value={formatCurrencyExact(totals.cashSales)}
+              label="+ Cash collected"
+              value={formatCurrencyExact(drawer.cashCollected)}
               tone="positive"
             />
             <StatRow
-              label="− Cash drops"
-              value={formatCurrencyExact(totals.cashDrops)}
+              label="− Cash refunds"
+              value={formatCurrencyExact(drawer.cashRefunds)}
               tone="negative"
             />
             <StatRow
               label="− Cash payouts"
-              value={formatCurrencyExact(totals.cashPayouts)}
+              value={formatCurrencyExact(drawer.cashPayouts)}
               tone="negative"
             />
             <StatRow
-              label="− Refunds"
-              value={formatCurrencyExact(totals.refunds)}
+              label="− Cash drops"
+              value={formatCurrencyExact(drawer.cashDrops)}
               tone="negative"
             />
+            {!!drawer.otherAdjustments && (
+              <StatRow
+                label="± Other cash adjustments"
+                value={formatCurrencyExact(drawer.otherAdjustments)}
+                tone={drawer.otherAdjustments > 0 ? "positive" : "negative"}
+              />
+            )}
             <StatRow
-              label="Expected cash"
-              value={formatCurrencyExact(totals.expectedCash)}
+              label="Expected in drawer"
+              value={formatCurrencyExact(drawer.expectedInDrawer)}
               emphasis
             />
-            <StatRow label="Counted cash" value={formatCurrencyExact(totals.countedCash)} />
+            <StatRow
+              label="Closing cash (counted)"
+              value={
+                drawer.closingCash === null ? "—" : formatCurrencyExact(drawer.closingCash)
+              }
+            />
             <StatRow
               label="Difference"
               value={
@@ -267,6 +316,11 @@ export default function ShiftSummaryPage() {
               }
             />
           </div>
+
+          <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">
+            Cash only. UPI, card, exchange value and store credit never enter the
+            drawer and are excluded.
+          </p>
         </MetricPanel>
 
         {/* ── Denominations ────────────────────────────────────────────────── */}

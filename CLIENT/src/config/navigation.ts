@@ -344,6 +344,50 @@ export function canAccessNavItem(item: NavItem, role: Role): boolean {
   return item.allowedRoles.includes(role);
 }
 
+/**
+ * Every nav destination in the tree, groups-as-links included.
+ *
+ * Deliberately NOT role-filtered: it feeds `isExactNavPath`, and whether
+ * "/register" needs exact matching is a property of the URL space, not of who
+ * is looking. Filtering here would make a MANAGER — who cannot see the owner's
+ * nested entries — match differently from an OWNER on the same URL.
+ */
+const ALL_NAV_PATHS: string[] = NAV_GROUPS.flatMap((group) => [
+  ...(group.path !== undefined ? [group.path] : []),
+  ...(group.items ?? []).map((item) => item.path),
+]);
+
+/**
+ * Paths that another nav entry is nested beneath.
+ *
+ * NavLink matches by path SEGMENT PREFIX by default, which is what we want for
+ * detail screens — /sales/:saleId should keep "Sales History" lit, and there is
+ * no nav row of its own to take over. It is wrong wherever a second nav row
+ * lives underneath a first: on /register/history that default lit BOTH "My
+ * Register" and "Register History", and likewise for /admin/inventory,
+ * /admin/settings, /admin/reports and /admin/finance against their children.
+ *
+ * So the rule is not "always exact" — that would break the detail screens — but
+ * "exact only where a nested nav row exists to claim the deeper URL". Derived
+ * rather than hand-listed so adding a child page cannot silently reintroduce a
+ * double highlight.
+ */
+const EXACT_MATCH_PATHS: ReadonlySet<string> = new Set(
+  ALL_NAV_PATHS.filter((candidate) =>
+    ALL_NAV_PATHS.some((other) => other.startsWith(`${candidate}/`))
+  )
+);
+
+/**
+ * Whether a nav row must match its URL exactly (NavLink's `end` prop).
+ *
+ * "/" is always exact: it prefixes every route in the app, so without this the
+ * Dashboard row is active on every screen.
+ */
+export function isExactNavPath(path: string): boolean {
+  return path === "/" || EXACT_MATCH_PATHS.has(path);
+}
+
 /** A group is visible when its own roles allow it AND it has something to show. */
 export function visibleGroupItems(group: NavGroup, role: Role): NavItem[] {
   if (group.allowedRoles?.length && !group.allowedRoles.includes(role)) return [];
@@ -362,19 +406,43 @@ export function isGroupVisible(group: NavGroup, role: Role): boolean {
  *
  * Longest-match wins: `/admin/inventory/low-stock` belongs to Analytics even
  * though Inventory's `/admin/inventory` is also a prefix of it.
+ *
+ * Returns null for a route with no nav entry (a 404, a detail screen outside
+ * any section). That is deliberate — leaving every group unhighlighted is
+ * honest, where guessing the nearest one marks a section the user is not in.
  */
 export function findGroupForPath(pathname: string, role: Role): string | null {
   let bestId: string | null = null;
   let bestLength = -1;
 
+  const consider = (candidatePath: string, groupId: string) => {
+    const exact = candidatePath === pathname;
+    // The trailing "/" is what keeps "/admin/inventoryfoo" from matching
+    // "/admin/inventory" — the boundary is a path separator, not a prefix.
+    const nested = pathname.startsWith(`${candidatePath}/`);
+    if ((exact || nested) && candidatePath.length > bestLength) {
+      bestId = groupId;
+      bestLength = candidatePath.length;
+    }
+  };
+
   for (const group of NAV_GROUPS) {
-    for (const item of visibleGroupItems(group, role)) {
-      const exact = item.path === pathname;
-      const nested = pathname.startsWith(`${item.path}/`);
-      if ((exact || nested) && item.path.length > bestLength) {
-        bestId = group.id;
-        bestLength = item.path.length;
-      }
+    const items = visibleGroupItems(group, role);
+
+    // A group that is its own destination (Dashboard: `path`, no `items`)
+    // renders as a plain link, so it has no child for the loop below to match.
+    // Without this, "/" resolved to null and the landing page every user sees
+    // first was the one screen with no sidebar highlight.
+    //
+    // EXACT match only — deliberately not `consider`, which also accepts nested
+    // paths. Dashboard's path is "/", a prefix of every route in the app, so the
+    // nested rule would let it claim every URL.
+    if (group.path !== undefined && group.path === pathname) {
+      consider(group.path, group.id);
+    }
+
+    for (const item of items) {
+      consider(item.path, group.id);
     }
   }
 

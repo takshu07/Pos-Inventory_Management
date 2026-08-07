@@ -4,6 +4,7 @@ import {
   selectIsAuthenticated,
   selectSessionStatus,
 } from "@/store/auth.store";
+import { useSettledAccess } from "@/features/auth";
 import { Sidebar } from "./Sidebar";
 import { Navbar } from "./Navbar";
 import { MobileSidebar } from "./MobileSidebar";
@@ -35,13 +36,21 @@ export function MainLayout() {
   // on that blink threw the user out to /login mid-navigation and tore down this
   // whole shell. Only a settled non-authenticated session is a real logout.
   //
-  // ManagerRoute above already holds the cold-boot case behind a loader, so by
-  // the time this renders the status is normally settled; this is the backstop.
-  if (sessionStatus === "idle" || sessionStatus === "loading") {
+  // This uses the SAME latching decision as ManagerRoute above rather than
+  // reading sessionStatus directly. Those two must never disagree: ManagerRoute
+  // latches 'granted' and keeps rendering its <Outlet/>, so if this layout
+  // independently returned null for a transient 'loading' it would unmount the
+  // sidebar, navbar and page — and nothing would re-render it back, because the
+  // guard above never changed its mind. That is what left a blank white screen
+  // when a navigation (Dashboard → POS) overlapped a session refresh.
+  const settled = sessionStatus !== "idle" && sessionStatus !== "loading";
+  const access = useSettledAccess(settled, isAuthenticated);
+
+  if (access === "pending") {
     return null;
   }
 
-  if (!isAuthenticated) {
+  if (access === "denied") {
     return <Navigate to="/login" replace />;
   }
 

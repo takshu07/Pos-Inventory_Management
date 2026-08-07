@@ -3,7 +3,7 @@ import { cn } from "@/utils/cn";
 import { prefetchHandlers } from "@/app/router/prefetch";
 import { useAuthStore } from "@/store/auth.store";
 import { useUIStore } from "@/store/ui.store";
-import { CASHIER_NAV } from "@/config/cashierNavigation";
+import { CASHIER_NAV, isExactCashierNavPath } from "@/config/cashierNavigation";
 import { Store, X } from "lucide-react";
 
 /**
@@ -60,6 +60,7 @@ export function CashierMobileSidebar() {
                 <NavLink
                   key={item.path}
                   to={item.path}
+                  end={isExactCashierNavPath(item.path)}
                   onClick={() => setSidebarOpen(false)}
                   {...prefetchHandlers(item.path)}
                   className={({ isActive, isPending }) =>

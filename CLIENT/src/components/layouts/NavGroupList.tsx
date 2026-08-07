@@ -7,6 +7,7 @@ import { prefetchHandlers } from "@/app/router/prefetch";
 import {
   NAV_GROUPS,
   findGroupForPath,
+  isExactNavPath,
   isGroupVisible,
   visibleGroupItems,
 } from "@/config/navigation";
@@ -123,7 +124,7 @@ function NavGroupRow({
       <li>
         <NavLink
           to={group.path}
-          end={group.path === "/"}
+          end={isExactNavPath(group.path)}
           {...prefetchHandlers(group.path)}
           onClick={onNavigate}
           className={({ isActive, isPending }) =>
@@ -228,7 +229,7 @@ function NavItemRow({ item, onNavigate }: { item: NavItem; onNavigate?: () => vo
     <li>
       <NavLink
         to={item.path}
-        end={item.path === "/"}
+        end={isExactNavPath(item.path)}
         // Warm this screen's chunk on hover/focus/touch, so the click that
         // follows usually has nothing left to download. See app/router/prefetch.
         {...prefetchHandlers(item.path)}

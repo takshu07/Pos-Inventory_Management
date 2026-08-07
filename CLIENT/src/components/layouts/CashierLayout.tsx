@@ -1,5 +1,10 @@
 import { Outlet, Navigate, useLocation } from "react-router";
-import { useAuthStore, selectIsAuthenticated } from "@/store/auth.store";
+import {
+  useAuthStore,
+  selectIsAuthenticated,
+  selectSessionStatus,
+} from "@/store/auth.store";
+import { useSettledAccess } from "@/features/auth";
 import { CashierSidebar } from "./CashierSidebar";
 import { Navbar } from "./Navbar";
 import { CashierMobileSidebar } from "./CashierMobileSidebar";
@@ -14,14 +19,24 @@ import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
  * POS Checkout and My Profile.
  *
  * Role enforcement lives in CashierRoute (the router wraps this subtree with
- * it). The isAuthenticated guard here is a defensive fallback mirroring
- * MainLayout — it never renders the shell for a signed-out user.
+ * it). The guard here is a defensive fallback mirroring MainLayout — it never
+ * renders the shell for a signed-out user, but it must reach the SAME latched
+ * decision CashierRoute did. Reading `isAuthenticated` alone treated a session
+ * revalidation blink as a logout and redirected the till to /login mid-shift.
  */
 export function CashierLayout() {
   const isAuthenticated = useAuthStore(selectIsAuthenticated);
+  const sessionStatus = useAuthStore(selectSessionStatus);
   const location = useLocation();
 
-  if (!isAuthenticated) {
+  const settled = sessionStatus !== "idle" && sessionStatus !== "loading";
+  const access = useSettledAccess(settled, isAuthenticated);
+
+  if (access === "pending") {
+    return null;
+  }
+
+  if (access === "denied") {
     return <Navigate to="/login" replace />;
   }
 

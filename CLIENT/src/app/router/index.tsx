@@ -23,6 +23,7 @@ import {
   SessionExpiredModal,
 } from "@/features/auth";
 import { RouteProgress } from "@/components/ui";
+import { RouteErrorElement } from "./RouteErrorElement";
 
 /**
  * RootLayout runs inside the Router context, providing global auth utilities
@@ -63,6 +64,11 @@ export const router = createBrowserRouter([
   {
     Component: RootLayout,
     HydrateFallback: () => null, // Silences the React Router hydration warning
+    // Backstop for routes that sit outside both shells (/login, /unauthorized)
+    // and for anything the layout-level handlers do not cover. The layout ones
+    // are preferred because they keep the navigation chrome mounted; this one
+    // still beats React Router's default, which renders an unstyled stack trace.
+    errorElement: <RouteErrorElement />,
     children: [
       // ─── Public Routes (Guest only — redirect authenticated users) ───────────
       {
@@ -99,6 +105,13 @@ export const router = createBrowserRouter([
   {
     path: "/",
     Component: MainLayout, // Contains isAuthenticated guard + Sidebar + Navbar
+    // Catches what a React error boundary cannot: a rejected `async lazy()`
+    // import, which fails in the router's data layer rather than during render.
+    // Mounted ON the layout so the fallback renders inside <Outlet /> with the
+    // Sidebar and Navbar still mounted — without it React Router falls back to
+    // its own default, which replaces the whole tree and leaves a blank screen
+    // with no way to navigate out. See RouteErrorElement for the full note.
+    errorElement: <RouteErrorElement />,
     children: [
       // Manager + Owner screens
       {
@@ -757,6 +770,10 @@ export const router = createBrowserRouter([
       {
         path: "/cashier",
         Component: CashierLayout,
+        // Same containment as the manager shell. It matters more here, not
+        // less: a till stays open for days, so it is the client most likely to
+        // be holding chunk names that a deploy has already replaced.
+        errorElement: <RouteErrorElement />,
         children: [
           {
             index: true,

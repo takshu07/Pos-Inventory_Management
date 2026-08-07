@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 
+import { clampLimit } from "@/lib/api/pagination";
 import {
   EMPTY_PURCHASE_FILTERS,
   type CatalogFilterState,
@@ -62,7 +63,11 @@ export function usePurchaseFilters(defaultLimit = 20, debounceMs = 300) {
   const [params, setParams] = useSearchParams();
 
   const page = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
-  const limit = parseInt(params.get("limit") || String(defaultLimit), 10) || defaultLimit;
+  // Clamped: this comes from the URL, and the server rejects an over-cap limit
+  // with 400 rather than clamping it. See lib/api/pagination.ts.
+  const limit = clampLimit(
+    parseInt(params.get("limit") || String(defaultLimit), 10) || defaultLimit
+  );
 
   const filters: PurchaseFilterState = useMemo(
     () => ({
@@ -177,7 +182,11 @@ export function useCatalogFilters<TSort extends string>(
   const [params, setParams] = useSearchParams();
 
   const page = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
-  const limit = parseInt(params.get("limit") || String(defaultLimit), 10) || defaultLimit;
+  // Clamped: this comes from the URL, and the server rejects an over-cap limit
+  // with 400 rather than clamping it. See lib/api/pagination.ts.
+  const limit = clampLimit(
+    parseInt(params.get("limit") || String(defaultLimit), 10) || defaultLimit
+  );
 
   const filters: CatalogFilterState & { sortBy: TSort } = useMemo(
     () => ({

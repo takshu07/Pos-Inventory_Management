@@ -1,6 +1,6 @@
 {
   "generatedFrom": "prisma/schema.prisma",
-  "sourceHash": "91185a2c8554d50192b42b7d2c48ef1a9e18c5d7892771c4397efd919f0e7159",
+  "sourceHash": "f489f54af81bd94ad834e819abc891f3f22cf62e0c4d3415b883be9290550d7c",
   "enums": [
     "ActionModule",
     "ActionType",
@@ -4061,6 +4061,30 @@
         {
           "name": "transactionCount",
           "type": "Int",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "cashCollected",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "exchangeTopUps",
+          "type": "Decimal",
+          "isOptional": false,
+          "isId": false,
+          "isScalarList": false,
+          "isEnum": false
+        },
+        {
+          "name": "storeCreditTotal",
+          "type": "Decimal",
           "isOptional": false,
           "isId": false,
           "isScalarList": false,

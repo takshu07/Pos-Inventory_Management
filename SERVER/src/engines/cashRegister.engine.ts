@@ -86,6 +86,76 @@ export function calculateExpectedCash(
   return money(toDecimal(openingCash).plus(totals.cashIn).minus(totals.cashOut));
 }
 
+/**
+ * The itemised build-up of expected cash, in the order a cashier verifies it.
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * `expectedCash` alone is an assertion. A cashier told "the drawer should hold
+ * ₹14,200" and counting ₹13,900 has no way to find the missing ₹300 without the
+ * components, so the number is untrustworthy precisely when it matters most.
+ *
+ * Every field here is a CASH movement. UPI, card and store-credit figures are
+ * deliberately absent — not omitted for brevity, but excluded because they move
+ * no notes. Adding them would reintroduce the phantom-shortage bug this module
+ * is built to prevent.
+ */
+export interface DrawerBreakdown {
+  openingFloat: Prisma.Decimal;
+  /** Cash taken in: cash sales and cash exchange top-ups. */
+  cashCollected: Prisma.Decimal;
+  cashRefunds: Prisma.Decimal;
+  cashPayouts: Prisma.Decimal;
+  cashDrops: Prisma.Decimal;
+  /** Any cash movement not covered by the named buckets. Signed. */
+  otherAdjustments: Prisma.Decimal;
+  /** openingFloat + cashCollected − refunds − payouts − drops ± adjustments. */
+  expectedInDrawer: Prisma.Decimal;
+}
+
+export interface DrawerComponents {
+  openingFloat: Prisma.Decimal | number;
+  cashCollected: Prisma.Decimal | number;
+  cashRefunds?: Prisma.Decimal | number;
+  cashPayouts?: Prisma.Decimal | number;
+  cashDrops?: Prisma.Decimal | number;
+  otherAdjustments?: Prisma.Decimal | number;
+}
+
+/**
+ * Builds the reconciliation the cashier reads, line by line.
+ *
+ * The returned `expectedInDrawer` is computed FROM the same fields that are
+ * displayed, so the printed breakdown cannot disagree with its own total. A
+ * total computed separately from the lines that explain it is the defect this
+ * function makes structurally impossible.
+ */
+export function buildDrawerBreakdown(components: DrawerComponents): DrawerBreakdown {
+  const openingFloat = toDecimal(components.openingFloat);
+  const cashCollected = toDecimal(components.cashCollected);
+  const cashRefunds = toDecimal(components.cashRefunds);
+  const cashPayouts = toDecimal(components.cashPayouts);
+  const cashDrops = toDecimal(components.cashDrops);
+  const otherAdjustments = toDecimal(components.otherAdjustments);
+
+  const expectedInDrawer = openingFloat
+    .plus(cashCollected)
+    .minus(cashRefunds)
+    .minus(cashPayouts)
+    .minus(cashDrops)
+    .plus(otherAdjustments);
+
+  return {
+    openingFloat: money(openingFloat),
+    cashCollected: money(cashCollected),
+    cashRefunds: money(cashRefunds),
+    cashPayouts: money(cashPayouts),
+    cashDrops: money(cashDrops),
+    otherAdjustments: money(otherAdjustments),
+    expectedInDrawer: money(expectedInDrawer),
+  };
+}
+
 export type VarianceKind = "BALANCED" | "OVER" | "SHORT";
 
 export interface Variance {
@@ -221,6 +291,56 @@ export function bucketPayments(rows: PaymentRow[]): SalesBreakdown {
 /** Whether a tender lands in the physical drawer. */
 export function affectsDrawer(method: PaymentMethod): boolean {
   return method === PaymentMethod.CASH;
+}
+
+export interface CollectedTotals {
+  cash: Prisma.Decimal;
+  upi: Prisma.Decimal;
+  card: Prisma.Decimal;
+  other: Prisma.Decimal;
+  /** UPI + card. Settles to the bank, never to the till. */
+  digital: Prisma.Decimal;
+  /** Cash + UPI + card + other. Every rupee taken, in any form. */
+  totalCollected: Prisma.Decimal;
+  /** Refunds actually paid back in CASH. */
+  cashRefunds: Prisma.Decimal;
+  /** Refunds settled as store credit. Informational — moves no money. */
+  storeCreditRefunds: Prisma.Decimal;
+  /** totalCollected − cashRefunds. What the business kept. */
+  netCollected: Prisma.Decimal;
+}
+
+/**
+ * Totals what a shift took, and what it handed back.
+ *
+ * `netCollected` subtracts ONLY cash refunds. A refund issued as store credit
+ * hands the customer a balance on their account, not money — the shop still
+ * holds every rupee it took. Subtracting it here would understate takings by
+ * the credit amount while the drawer and the bank both disagree.
+ */
+export function calculateCollected(input: {
+  breakdown: SalesBreakdown;
+  cashRefunds?: Prisma.Decimal | number;
+  storeCreditRefunds?: Prisma.Decimal | number;
+}): CollectedTotals {
+  const { cash, upi, card, other } = input.breakdown;
+  const cashRefunds = toDecimal(input.cashRefunds);
+  const storeCreditRefunds = toDecimal(input.storeCreditRefunds);
+
+  const digital = upi.plus(card);
+  const totalCollected = cash.plus(digital).plus(other);
+
+  return {
+    cash: money(cash),
+    upi: money(upi),
+    card: money(card),
+    other: money(other),
+    digital: money(digital),
+    totalCollected: money(totalCollected),
+    cashRefunds: money(cashRefunds),
+    storeCreditRefunds: money(storeCreditRefunds),
+    netCollected: money(totalCollected.minus(cashRefunds)),
+  };
 }
 
 // =============================================================================

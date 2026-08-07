@@ -1,12 +1,19 @@
 import { useSearchParams } from "react-router";
 import { useCallback } from "react";
 
+import { clampLimit } from "@/lib/api/pagination";
+
 export function useTableState(defaultLimit = 10) {
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Parse current state from URL
-  const page = parseInt(searchParams.get("page") || "1", 10);
-  const limit = parseInt(searchParams.get("limit") || String(defaultLimit), 10);
+  const page = parseInt(searchParams.get("page") || "1", 10) || 1;
+  // Clamped, and with a fallback for unparseable input: both come from the URL.
+  // `?limit=abc` previously yielded NaN, which serializes as "NaN" in the query
+  // string and 400s just as surely as an over-cap number does.
+  const limit = clampLimit(
+    parseInt(searchParams.get("limit") || String(defaultLimit), 10) || defaultLimit
+  );
   const search = searchParams.get("search") || "";
   const status = searchParams.get("status") || "";
   const paymentMethod = searchParams.get("paymentMethod") || "";

@@ -38,6 +38,11 @@ export { useChangePassword } from "./hooks/useChangePassword";
 
 // ── Route Guards (consumed by router) ────────────────────────────────────────
 export { GuestRoute, ProtectedRoute, OwnerRoute, AdminRoute, ManagerRoute, CashierRoute } from "./components/RouteGuards";
+// The shell layouts share the guards' latching decision so a session refresh
+// mid-navigation cannot unmount the shell out from under a guard that has
+// already granted access.
+export { useSettledAccess } from "./components/RouteGuards";
+export type { Access } from "./components/RouteGuards";
 
 // ── Reusable Components (consumed by shell and other features) ────────────────
 export { PermissionGuard } from "./components/PermissionGuard";

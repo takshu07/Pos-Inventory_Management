@@ -3,7 +3,7 @@ import { cn } from "@/utils/cn";
 import { prefetchHandlers } from "@/app/router/prefetch";
 import { useAuthStore } from "@/store/auth.store";
 import { useUIStore } from "@/store/ui.store";
-import { CASHIER_NAV } from "@/config/cashierNavigation";
+import { CASHIER_NAV, isExactCashierNavPath } from "@/config/cashierNavigation";
 import type { NavSection } from "@/config/navigation";
 import { ChevronLeft, Store } from "lucide-react";
 
@@ -33,6 +33,7 @@ function NavSectionGroup({ section, collapsed }: { section: NavSection; collapse
           <li key={item.path}>
             <NavLink
               to={item.path}
+              end={isExactCashierNavPath(item.path)}
               {...prefetchHandlers(item.path)}
               className={({ isActive, isPending }) =>
                 cn(

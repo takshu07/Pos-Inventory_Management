@@ -1928,6 +1928,20 @@ model CashRegister {
   cashDropTotal    Decimal @default(0) @db.Decimal(12, 2)
   cashPayoutTotal  Decimal @default(0) @db.Decimal(12, 2)
   transactionCount Int     @default(0)
+
+  /// Total CASH_IN on the drawer ledger at close — cash sales PLUS cash
+  /// exchange top-ups. Distinct from `cashSales`, which is the sales table's
+  /// cash column and by definition excludes top-ups (an exchange is not a
+  /// sale). The drawer followed the LEDGER, so a closed shift that rebuilt its
+  /// reconciliation from `cashSales` would under-report cash collected by every
+  /// top-up taken and report a phantom shortage of exactly that size.
+  cashCollected    Decimal @default(0) @db.Decimal(12, 2)
+  /// Money taken across the counter on exchanges, in any tender. Explains why
+  /// total received exceeds gross sales; informational, never a drawer line.
+  exchangeTopUps   Decimal @default(0) @db.Decimal(12, 2)
+  /// Refunds settled as store credit. Informational — moves no notes, so it is
+  /// excluded from both the drawer and net revenue.
+  storeCreditTotal Decimal @default(0) @db.Decimal(12, 2)
   /// Wall-clock shift length, written at close so history never subtracts.
   durationMinutes  Int?
 

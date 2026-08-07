@@ -253,10 +253,21 @@ export const customerRepository = {
 
   /**
    * Retrieves the count of customers to generate sequential codes.
+   *
+   * Every row holding a `CUS-` code is considered, INCLUDING the Walk-In record.
+   * Walk-In is normally minted as "WALK-IN", but `scripts/ensure-walkin.ts`
+   * provisions it out of this same `CUS-` sequence, so on those databases it
+   * owns CUS-000001. Filtering `isWalkIn: false` here (as this did) skipped that
+   * row, returned 1 for an otherwise-empty table, and regenerated a code the
+   * Walk-In row already held — a unique violation on `customerCode` that
+   * surfaced as a 409 "record with the same field already exists" and blocked
+   * the FIRST real customer on every such database.
+   *
+   * The filter that matters is the code namespace, not the walk-in flag.
    */
   async getNextSequenceNumber(): Promise<number> {
     const lastCustomer = await prisma.customer.findFirst({
-      where: { isWalkIn: false, customerCode: { startsWith: 'CUS-' } },
+      where: { customerCode: { startsWith: 'CUS-' } },
       orderBy: { customerCode: 'desc' },
     });
 
@@ -362,17 +373,29 @@ export const customerRepository = {
 
     const whereSql = Prisma.join(conditions, " AND ");
 
-    // Correlated aggregate over COMPLETED sales, as a LEFT JOIN LATERAL so
-    // customers with zero sales still appear (spend/purchases 0, lastVisit NULL).
+    // Aggregate over COMPLETED sales, LEFT JOINed so customers with zero sales
+    // still appear (spend/purchases 0, lastVisit NULL).
+    //
+    // Grouped subquery rather than LEFT JOIN LATERAL: SQLite has no LATERAL, and
+    // an edge node running this against the local database fails with
+    // `near "SELECT": syntax error`. Pre-aggregating by "customerId" and joining
+    // on it is dialect-neutral — one query that runs on Postgres AND SQLite,
+    // which is the same reason DISTINCT ON and = ANY are rewritten at the source
+    // rather than text-translated by the raw-SQL bridge.
+    //
+    // The GROUP BY makes "customerId" unique in the subquery, so this stays a
+    // one-row-per-customer join and cannot fan out the result set.
     const aggJoin = Prisma.sql`
-      LEFT JOIN LATERAL (
+      LEFT JOIN (
         SELECT
-          COALESCE(SUM(s."grandTotal"), 0) AS "totalSpend",
-          COUNT(s.id)                      AS "totalPurchases",
-          MAX(s."saleDate")                AS "lastVisit"
+          s."customerId"      AS "customerId",
+          SUM(s."grandTotal") AS "totalSpend",
+          COUNT(s.id)         AS "totalPurchases",
+          MAX(s."saleDate")   AS "lastVisit"
         FROM "sales" s
-        WHERE s."customerId" = c.id AND s."status" = 'COMPLETED'
-      ) agg ON true
+        WHERE s."status" = 'COMPLETED'
+        GROUP BY s."customerId"
+      ) agg ON agg."customerId" = c.id
     `;
 
     const orderColumn = TABLE_SORT_COLUMNS[sortBy] ?? TABLE_SORT_COLUMNS.lastVisit;
@@ -390,8 +413,13 @@ export const customerRepository = {
           c."storeCredit"::float8            AS "storeCredit",
           c."isActive",
           c."createdAt",
-          agg."totalPurchases"::int          AS "totalPurchases",
-          agg."totalSpend"::float8           AS "totalSpend",
+          -- COALESCE here, not in the subquery: a customer with no COMPLETED
+          -- sales has no row to join to, so the LEFT JOIN yields NULL for these
+          -- columns regardless of what the subquery would have returned. The
+          -- API contract is 0 purchases / 0 spend. ("lastVisit" stays NULL —
+          -- "never visited" is a real distinction, and NULLS LAST sorts on it.)
+          COALESCE(agg."totalPurchases", 0)::int    AS "totalPurchases",
+          COALESCE(agg."totalSpend", 0)::float8     AS "totalSpend",
           agg."lastVisit",
           (agg."lastVisit" >= ${activeThreshold}) AS "active"
         FROM "customers" c
@@ -409,7 +437,19 @@ export const customerRepository = {
     ]);
 
     // COALESCE(active) — the raw boolean is NULL when lastVisit is NULL.
-    const normalized = rows.map((r) => ({ ...r, active: r.active === true }));
+    //
+    // The numerics are coerced because the two drivers disagree: Postgres
+    // narrows COUNT/SUM via the ::int/::float8 casts, while SQLite returns them
+    // as BigInt regardless — which JSON.stringify cannot serialize, so the
+    // response 500s on an edge node. Number() gives both the contracted type.
+    const normalized = rows.map((r) => ({
+      ...r,
+      totalPurchases: Number(r.totalPurchases ?? 0),
+      totalSpend: Number(r.totalSpend ?? 0),
+      rewardPoints: Number(r.rewardPoints ?? 0),
+      storeCredit: Number(r.storeCredit ?? 0),
+      active: r.active === true,
+    }));
     return { rows: normalized, total: Number(countResult[0]?.count ?? 0) };
   },
 

@@ -99,6 +99,34 @@ describe("cast translation", () => {
     expect(rows[0]?.d).toBe("2026-08-01");
   });
 
+  it("casts an aggregate together with its FILTER clause", () => {
+    // The FILTER parens look like an ordinary parenthesized group to the
+    // backward scan, so the cast wrapped only them and emitted
+    // `COUNT(*) FILTER CAST((WHERE …) AS INTEGER)` — SQLite rejected it with
+    // "near CAST: syntax error", which is what 500'd the inventory dashboard
+    // for every offline (SQLite) request.
+    const rows = run<{ inflow: number; outflow: number }>(`
+      SELECT
+        COALESCE(SUM(m."quantityChanged") FILTER (WHERE m."quantityChanged" > 0), 0)::bigint AS inflow,
+        COALESCE(ABS(SUM(m."quantityChanged") FILTER (WHERE m."quantityChanged" < 0)), 0)::bigint AS outflow
+      FROM m
+    `);
+
+    expect(rows[0]).toEqual({ inflow: 12, outflow: 11 });
+  });
+
+  it("casts COUNT(*) FILTER over a multi-condition predicate", () => {
+    const rows = run<{ n: number }>(`
+      SELECT COUNT(*) FILTER (
+        WHERE m."quantityChanged" > 0
+          AND m."type" = 'PURCHASE'
+      )::bigint AS n
+      FROM m
+    `);
+
+    expect(rows[0]?.n).toBe(2);
+  });
+
   it("leaves an unrecognized type alone rather than guessing", () => {
     // It will fail at the database, which is the correct outcome — silently
     // inventing a mapping is how a money column becomes a float.
@@ -280,6 +308,13 @@ describe("refusals", () => {
     ["DISTINCT ON", `SELECT DISTINCT ON (m."variantId") m."variantId" FROM m`],
     ["= ANY(array)", `SELECT * FROM m WHERE m."variantId" = ANY($1::text[])`],
     ["generate_series", `SELECT * FROM generate_series(1, 10)`],
+    [
+      "LATERAL join",
+      `SELECT c.id, agg.total FROM "customers" c
+         LEFT JOIN LATERAL (
+           SELECT SUM(s."grandTotal") AS total FROM "sales" s WHERE s."customerId" = c.id
+         ) agg ON true`,
+    ],
     ["trigram similarity", `SELECT similarity(a, b) FROM m`],
     ["array cast", `SELECT $1::text[] FROM m`],
   ])("refuses %s with an actionable message", (_name, sql) => {
@@ -295,6 +330,27 @@ describe("refusals", () => {
     // The message must say what to do, not merely that something is wrong —
     // whoever hits this has 63 raw queries to search through otherwise.
     expect(thrown?.message).toMatch(/Fix:/);
+  });
+
+  it("accepts the grouped-subquery form that replaces a LATERAL", () => {
+    // The counterpart to the refusal above: the rewrite the error message tells
+    // you to make must actually pass. Without this, the guidance could send
+    // someone toward a form that trips a different rule.
+    //
+    // This is the shape customer.repository.ts now uses — pre-aggregate by the
+    // join key, LEFT JOIN on it, COALESCE in the outer select.
+    expect(() =>
+      assertTranslatable(`
+        SELECT c.id, COALESCE(agg."totalSpend", 0) AS "totalSpend"
+          FROM "customers" c
+          LEFT JOIN (
+            SELECT s."customerId" AS "customerId", SUM(s."grandTotal") AS "totalSpend"
+              FROM "sales" s
+             WHERE s."status" = 'COMPLETED'
+             GROUP BY s."customerId"
+          ) agg ON agg."customerId" = c.id
+      `)
+    ).not.toThrow();
   });
 
   it("refuses BEFORE translating, so nothing is half-rewritten", () => {

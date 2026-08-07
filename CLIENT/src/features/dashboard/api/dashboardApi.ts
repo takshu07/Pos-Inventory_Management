@@ -16,6 +16,7 @@
  */
 
 import { apiClient } from "@/lib/api/axios";
+import { DEFAULT_MAX_LIMIT } from "@/lib/api/pagination";
 // Both from specific modules rather than the feature barrel: the barrel also
 // exports NotificationsPage, and a value import of it here would statically
 // pull the lazy notifications chunk into the dashboard's.
@@ -85,9 +86,16 @@ export async function getSalesKPIs(filters: { startDate?: string; endDate?: stri
  * Sourced from GET /sales (accessible to all roles) filtered to today — NOT the
  * owner-only analytics engine. Returns an exact transaction count (the paginated
  * `total`, independent of page size) and the summed revenue of today's sales.
- * A store's daily volume is small, so a single high-limit page covers it; if a
- * day ever exceeds the limit, the count stays exact and revenue reflects the
- * fetched page (never a fabricated number).
+ * A store's daily volume is small, so a single full page covers it; if a day
+ * ever exceeds the limit, the count stays exact (it comes from the server's
+ * `total`) and revenue reflects the fetched page — understated, never a
+ * fabricated number.
+ *
+ * ⚠ The page is DEFAULT_MAX_LIMIT (100) because that is the server's cap. A
+ * store doing more than 100 sales a day will see this tile's revenue plateau
+ * while its order count keeps climbing. The correct fix is a server-side
+ * aggregate (SUM over the day) rather than summing rows in the browser; that is
+ * a new endpoint, so it is flagged here rather than done silently.
  */
 export interface OperationalTodayStats {
   orderCount: number;
@@ -98,8 +106,15 @@ export async function getOperationalTodayStats(): Promise<OperationalTodayStats>
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
+  // DEFAULT_MAX_LIMIT, not 200: /sales extends the shared paginationSchema,
+  // which caps `limit` at 100 and returns 400 above it rather than clamping —
+  // so this tile showed no revenue at all on any day with sales.
   const response = await apiClient.get<any>("/sales", {
-    params: { startDate: startOfDay.toISOString(), limit: 200, page: 1 },
+    params: {
+      startDate: startOfDay.toISOString(),
+      limit: DEFAULT_MAX_LIMIT,
+      page: 1,
+    },
   });
 
   // Interceptor unwraps to response.data = { total, data: Sale[] }.

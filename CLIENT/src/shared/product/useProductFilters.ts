@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
+import { clampLimit } from "@/lib/api/pagination";
 import { EMPTY_FILTERS, type ProductFilterState, type SortOption, type StockStatus } from "./types";
 
 /**
@@ -14,7 +15,11 @@ export function useProductFilters(defaultLimit = 20) {
   const [params, setParams] = useSearchParams();
 
   const page = Math.max(1, parseInt(params.get("page") || "1", 10) || 1);
-  const limit = parseInt(params.get("limit") || String(defaultLimit), 10) || defaultLimit;
+  // Clamped: this comes from the URL, and the server rejects an over-cap limit
+  // with 400 rather than clamping it. See lib/api/pagination.ts.
+  const limit = clampLimit(
+    parseInt(params.get("limit") || String(defaultLimit), 10) || defaultLimit
+  );
 
   const filters: ProductFilterState = useMemo(
     () => ({

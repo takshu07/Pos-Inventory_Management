@@ -19,6 +19,7 @@ import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 
 import { useDebounce } from "@/hooks/useDebounce";
+import { clampLimit } from "@/lib/api/pagination";
 import type { AuditListParams, AuditPeriod, AuditSortBy } from "../types";
 
 export interface AuditFilterState {
@@ -79,7 +80,11 @@ export function useAuditFilters(prefix = "audit", defaultLimit = 25) {
   );
 
   const page = Math.max(1, parseInt(params.get(k("page")) || "1", 10) || 1);
-  const limit = parseInt(params.get(k("limit")) || String(defaultLimit), 10) || defaultLimit;
+  // Clamped: this comes from the URL, and the server rejects an over-cap limit
+  // with 400 rather than clamping it. See lib/api/pagination.ts.
+  const limit = clampLimit(
+    parseInt(params.get(k("limit")) || String(defaultLimit), 10) || defaultLimit
+  );
 
   const filters: AuditFilterState = useMemo(() => {
     const rawPeriod = params.get(k("period")) as AuditPeriod | null;

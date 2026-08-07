@@ -15,6 +15,7 @@ import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 
 import { useDebounce } from "@/hooks/useDebounce";
+import { clampLimit } from "@/lib/api/pagination";
 import type { StockParams, StockStatusFilter } from "../types";
 
 export interface InventoryFilterState {
@@ -45,7 +46,14 @@ export function useInventoryFilters(prefix = "inv", defaultLimit = 25) {
   const k = useCallback((name: string) => (prefix ? `${prefix}_${name}` : name), [prefix]);
 
   const page = Math.max(1, parseInt(params.get(k("page")) || "1", 10) || 1);
-  const limit = parseInt(params.get(k("limit")) || String(defaultLimit), 10) || defaultLimit;
+
+  // Clamped to the endpoint's cap because this value comes from the URL, where
+  // anything can appear — a bookmark, a shared link, a hand-edited address bar.
+  // The server rejects an over-cap `limit` with 400 rather than clamping it, so
+  // an unclamped `?inv_limit=200` renders an empty table with no visible cause.
+  const limit = clampLimit(
+    parseInt(params.get(k("limit")) || String(defaultLimit), 10) || defaultLimit
+  );
 
   const filters: InventoryFilterState = useMemo(
     () => ({

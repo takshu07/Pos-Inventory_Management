@@ -15,6 +15,7 @@ import { useCallback, useMemo } from "react";
 import { useSearchParams } from "react-router";
 
 import { useDebounce } from "@/hooks/useDebounce";
+import { clampLimit, MAX_LIMIT } from "@/lib/api/pagination";
 import type { RosterParams } from "../types";
 
 export interface WorkforceFilterState {
@@ -53,7 +54,17 @@ export function useWorkforceFilters(prefix = "", defaultLimit = 20) {
   const k = useCallback((name: string) => (prefix ? `${prefix}_${name}` : name), [prefix]);
 
   const page = Math.max(1, parseInt(params.get(k("page")) || "1", 10) || 1);
-  const limit = parseInt(params.get(k("limit")) || String(defaultLimit), 10) || defaultLimit;
+  // Clamped: this comes from the URL, and the server rejects an over-cap limit
+  // with 400 rather than clamping it.
+  //
+  // MAX_LIMIT.roster (200), NOT the default 100 — this hook drives RosterPage,
+  // and workforce.validation.ts deliberately allows 200 there so the staff
+  // pickers can load the whole roster in one request. Clamping to 100 would
+  // silently truncate a page size the API accepts.
+  const limit = clampLimit(
+    parseInt(params.get(k("limit")) || String(defaultLimit), 10) || defaultLimit,
+    MAX_LIMIT.roster
+  );
 
   const filters: WorkforceFilterState = useMemo(
     () => ({

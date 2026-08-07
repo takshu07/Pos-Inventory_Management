@@ -59,6 +59,23 @@ const UNSUPPORTED: readonly UnsupportedConstruct[] = [
       "query to maintain rather than two",
   },
   {
+    // SQLite has no LATERAL. Without this entry the query reached the engine
+    // untranslated and failed with `near "SELECT": syntax error` — a 500 that
+    // named neither the construct nor the file, which is the exact outcome this
+    // allowlist exists to prevent. customer.repository.ts hit this first (the
+    // customers list 500'd on every edge node); reports.repository.ts still has
+    // six occurrences, so the Product Report is the next one to surface.
+    pattern: /\bLATERAL\b/i,
+    name: "LATERAL join",
+    fix:
+      "pre-aggregate the correlated subquery into a GROUP BY over the join key " +
+      "and LEFT JOIN on it (see customer.repository.ts customerTable) — the " +
+      "GROUP BY keeps it one row per key, so the join cannot fan out, and the " +
+      "same query then runs on Postgres AND SQLite. COALESCE the aggregates in " +
+      "the OUTER select: a key with no matching rows has no row to join to, so " +
+      "the columns come back NULL regardless of the subquery's own COALESCE",
+  },
+  {
     pattern: /=\s*ANY\s*\(/i,
     name: "= ANY(array)",
     fix:
@@ -193,6 +210,28 @@ function scanExpressionStart(sql: string, end: number): number {
     while (scan >= 0 && /[\w$]/.test(sql[scan] as string)) {
       start = scan;
       scan -= 1;
+    }
+
+    // ── Absorb an aggregate's FILTER clause ────────────────────────────────
+    // `COUNT(*) FILTER (WHERE …)::bigint` casts the whole aggregate, but the
+    // scan above stops at the FILTER parens because they look like an ordinary
+    // parenthesized group. Casting that alone emits
+    // `COUNT(*) FILTER CAST((WHERE …) AS INTEGER)` — the CAST lands after
+    // FILTER, and SQLite reports "near CAST: syntax error" while the real
+    // problem is that half the expression was left outside the cast.
+    //
+    // A FILTER clause is a SUFFIX, never an operand, so when the word in front
+    // of the parens is FILTER the scan must continue past it to the aggregate
+    // call it modifies.
+    // Postgres allows whitespace before the parens (`FILTER (WHERE …)`), so the
+    // identifier scan above stops at the paren without absorbing the keyword —
+    // the word has to be read from the text preceding it.
+    const before = sql.slice(0, start);
+    const filter = /(?:^|[^\w$])FILTER\s*$/i.exec(before);
+    if (filter?.index !== undefined) {
+      // Continue the scan from where FILTER starts, so the operand becomes the
+      // aggregate call in front of it rather than the filter parens.
+      return scanExpressionStart(sql, before.toUpperCase().lastIndexOf("FILTER"));
     }
 
     return start;

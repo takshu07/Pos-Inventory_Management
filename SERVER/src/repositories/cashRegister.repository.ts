@@ -11,7 +11,7 @@
 // a service-layer decision; this file only knows how to ask Postgres questions.
 // =============================================================================
 
-import { Prisma, RegisterStatus, CashTransactionType, SaleStatus, PaymentStatus } from "../../generated/prisma";
+import { Prisma, RegisterStatus, CashTransactionType, ReferenceType, SaleStatus, PaymentStatus, PaymentMethod } from "../../generated/prisma";
 import { prisma } from "../config/prisma";
 import { buildDocumentNumber, parseDocumentSequence } from "../engines/cashRegister.engine";
 
@@ -326,24 +326,64 @@ export const cashRegisterRepository = {
   // so a window-only query would credit each with the other's sales.
   // ===========================================================================
 
-  /** Payment totals by tender for one shift window. */
+  /**
+   * Payment totals by tender for one shift window.
+   *
+   * COVERS SALES **AND** EXCHANGE TOP-UPS. An exchange where the customer
+   * trades up and pays the difference is money taken across the counter: it
+   * lands in the drawer via the ledger, so a tender breakdown that counted only
+   * sale payments would report less collected than the drawer actually holds,
+   * with nothing on screen to explain the gap.
+   *
+   * The two sides are queried separately because the employee bound differs —
+   * `sale.employeeId` versus `exchange.employeeId` — and Prisma cannot express
+   * that as one relation filter.
+   */
   async sumShiftPaymentsByMethod(params: {
     employeeId: string;
     from: Date;
     to: Date;
   }) {
-    return prisma.payment.groupBy({
-      by: ["method"],
-      where: {
-        status: PaymentStatus.PAID,
-        paidAt: { gte: params.from, lte: params.to },
-        sale: {
-          employeeId: params.employeeId,
-          status: { in: [SaleStatus.COMPLETED, SaleStatus.PARTIAL] },
+    const [saleRows, exchangeRows] = await Promise.all([
+      prisma.payment.groupBy({
+        by: ["method"],
+        where: {
+          status: PaymentStatus.PAID,
+          paidAt: { gte: params.from, lte: params.to },
+          sale: {
+            employeeId: params.employeeId,
+            status: { in: [SaleStatus.COMPLETED, SaleStatus.PARTIAL] },
+          },
         },
-      },
-      _sum: { amount: true },
-    });
+        _sum: { amount: true },
+      }),
+      prisma.payment.groupBy({
+        by: ["method"],
+        where: {
+          status: PaymentStatus.PAID,
+          paidAt: { gte: params.from, lte: params.to },
+          exchange: {
+            employeeId: params.employeeId,
+            status: "COMPLETED",
+          },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    // Merge on method so a tender paid on both a sale and an exchange yields
+    // one row; `bucketPayments` would otherwise see two and the caller could
+    // not tell whether that was intended.
+    const byMethod = new Map<PaymentMethod, Prisma.Decimal>();
+    for (const row of [...saleRows, ...exchangeRows]) {
+      const current = byMethod.get(row.method) ?? new Prisma.Decimal(0);
+      byMethod.set(row.method, current.plus(row._sum.amount ?? 0));
+    }
+
+    return [...byMethod].map(([method, amount]) => ({
+      method,
+      _sum: { amount },
+    }));
   },
 
   /** Bill-level aggregates for one shift window. */
@@ -386,43 +426,96 @@ export const cashRegisterRepository = {
 
   /** Exchange value moved during one shift window. */
   async sumShiftExchanges(params: { employeeId: string; from: Date; to: Date }) {
-    const result = await prisma.exchange.aggregate({
-      where: {
-        employeeId: params.employeeId,
-        exchangeDate: { gte: params.from, lte: params.to },
-        status: "COMPLETED",
-      },
-      _sum: { issuedValue: true, returnedValue: true, priceDifference: true },
-      _count: { _all: true },
-    });
+    const [result, topUps] = await Promise.all([
+      prisma.exchange.aggregate({
+        where: {
+          employeeId: params.employeeId,
+          exchangeDate: { gte: params.from, lte: params.to },
+          status: "COMPLETED",
+        },
+        _sum: { issuedValue: true, returnedValue: true, priceDifference: true },
+        _count: { _all: true },
+      }),
+      // Money the customer handed over on an exchange, in any tender. Reported
+      // separately so the tender breakdown can show why "total collected"
+      // exceeds "gross sales" instead of leaving an unexplained gap.
+      prisma.payment.aggregate({
+        where: {
+          status: PaymentStatus.PAID,
+          paidAt: { gte: params.from, lte: params.to },
+          exchange: { employeeId: params.employeeId, status: "COMPLETED" },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
     return {
       issued: result._sum.issuedValue,
       returned: result._sum.returnedValue,
       priceDifference: result._sum.priceDifference,
+      topUps: topUps._sum.amount,
       count: result._count._all,
     };
   },
 
   /**
-   * Refunds paid out of the drawer during a shift.
+   * Refunds owed to customers during a shift, SPLIT BY HOW THEY WERE SETTLED.
+   *
    * A refund is a negative priceDifference on a completed exchange — this
    * system has no standalone refund entity, so reading it from exchanges is
    * the truthful source rather than an approximation.
+   *
+   * THE SPLIT IS THE POINT. `exchange.service` settles every negative price
+   * difference by incrementing `customer.storeCredit`; no notes leave the till.
+   * Reporting those as cash refunds — as this query previously did — subtracted
+   * money from the drawer that was never taken out of it, producing a phantom
+   * shortage exactly equal to the credit issued. The cash bucket is therefore
+   * derived from the DRAWER LEDGER (the only record of notes actually handed
+   * back), and the credit bucket from the exchanges themselves.
    */
-  async sumShiftRefunds(params: { employeeId: string; from: Date; to: Date }) {
-    const rows = await prisma.exchange.aggregate({
-      where: {
-        employeeId: params.employeeId,
-        exchangeDate: { gte: params.from, lte: params.to },
-        status: "COMPLETED",
-        priceDifference: { lt: 0 },
-      },
-      _sum: { priceDifference: true },
-      _count: { _all: true },
-    });
+  async sumShiftRefunds(params: {
+    employeeId: string;
+    from: Date;
+    to: Date;
+    registerId: string;
+  }) {
+    const [owed, cashOut] = await Promise.all([
+      prisma.exchange.aggregate({
+        where: {
+          employeeId: params.employeeId,
+          exchangeDate: { gte: params.from, lte: params.to },
+          status: "COMPLETED",
+          priceDifference: { lt: 0 },
+        },
+        _sum: { priceDifference: true },
+        _count: { _all: true },
+      }),
+      // Cash actually paid back: CASH_OUT rows the exchange flow wrote. Drops
+      // and payouts are also CASH_OUT, so the reference type is what separates
+      // a refund from a safe drop.
+      prisma.cashTransaction.aggregate({
+        where: {
+          registerId: params.registerId,
+          type: CashTransactionType.CASH_OUT,
+          referenceType: ReferenceType.EXCHANGE,
+        },
+        _sum: { amount: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const totalOwed = new Prisma.Decimal(owed._sum.priceDifference ?? 0).abs();
+    const cashAmount = new Prisma.Decimal(cashOut._sum.amount ?? 0);
+
     return {
-      amount: new Prisma.Decimal(rows._sum.priceDifference ?? 0).abs(),
-      count: rows._count._all,
+      /** Refunds handed back as physical cash. Affects the drawer. */
+      cashAmount,
+      cashCount: cashOut._count._all,
+      /** Refunds settled as store credit. Informational only. */
+      storeCreditAmount: totalOwed.minus(cashAmount),
+      /** Everything owed back, however settled. */
+      totalAmount: totalOwed,
+      count: owed._count._all,
     };
   },
 

@@ -14,6 +14,7 @@
  */
 
 import { apiClient } from "@/lib/api";
+import { DEFAULT_MAX_LIMIT } from "@/lib/api/pagination";
 import type {
   Brand,
   BrandListParams,
@@ -260,8 +261,11 @@ export async function fetchProductVariants(productId: string): Promise<VariantOp
 
 /** Active suppliers for the create-purchase picker. */
 export async function fetchSupplierOptions(): Promise<{ id: string; businessName: string }[]> {
+  // DEFAULT_MAX_LIMIT, not 200: /suppliers extends the shared paginationSchema,
+  // capped at 100, which 400s above the cap instead of clamping — so the
+  // create-purchase supplier picker came back empty every time.
   const res = await apiClient.get<any>("/suppliers", {
-    params: { limit: 200, page: 1, isActive: "true" },
+    params: { limit: DEFAULT_MAX_LIMIT, page: 1, isActive: "true" },
   });
   const rows: Supplier[] = res?.data?.data ?? [];
   return rows.map((s) => ({ id: s.id, businessName: s.businessName }));

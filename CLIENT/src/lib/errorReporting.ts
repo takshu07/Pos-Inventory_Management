@@ -29,6 +29,18 @@ export interface ClientErrorContext {
   boundary?: string | undefined;
   /** Server correlation id, when the error originated from an API call. */
   requestId?: string | undefined;
+  /**
+   * True when the failure was a rejected dynamic `import()` rather than an
+   * application throw.
+   *
+   * Worth separating in the logs: a cluster of these means clients are running
+   * against chunk names a deploy has already removed — an infrastructure signal
+   * (roll forward, or serve old chunks through the transition), not a code bug
+   * to go hunting for.
+   */
+  isChunkError?: boolean | undefined;
+  /** HTTP status, when the router surfaced an ErrorResponse from a loader. */
+  status?: number | undefined;
 }
 
 export type ClientErrorReporter = (
@@ -67,6 +79,9 @@ export function reportClientError(
       message: error.message,
       boundary: context.boundary,
       requestId: context.requestId,
+      // Omitted unless set, so the common case reads exactly as before.
+      ...(context.isChunkError !== undefined && { isChunkError: context.isChunkError }),
+      ...(context.status !== undefined && { status: context.status }),
       stack: error.stack,
       componentStack: context.componentStack,
     });

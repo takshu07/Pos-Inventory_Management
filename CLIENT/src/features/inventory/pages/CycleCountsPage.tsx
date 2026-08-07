@@ -16,6 +16,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui";
 import { useAuthStore } from "@/store/auth.store";
+import { DEFAULT_MAX_LIMIT } from "@/lib/api/pagination";
 import { CycleCountStatusBadge, InventoryTableSkeleton } from "../components/InventoryAtoms";
 import { useCycleCounts, useStartCycleCount, useStock } from "../hooks/useInventory";
 import { accuracyAccent, formatDateTime, formatNumber, formatPercent } from "../utils/format";
@@ -49,7 +50,16 @@ export default function CycleCountsPage() {
 
   // Category options come from the loaded stock rather than a lookup endpoint,
   // so the list shows categories that actually have stock to count.
-  const { data: stock } = useStock({ page: 1, limit: 200 });
+  //
+  // DEFAULT_MAX_LIMIT, not 200: /inventory/stock caps `limit` at 100 and rejects
+  // anything larger with 400 instead of clamping, so this request failed every
+  // time the page opened. `isError` is read below because a silent `?? []` here
+  // left the category picker mysteriously empty with nothing to explain it.
+  const {
+    data: stock,
+    isError: stockFailed,
+    refetch: refetchStock,
+  } = useStock({ page: 1, limit: DEFAULT_MAX_LIMIT });
   const categories = [
     ...new Map(
       (stock?.data ?? [])
@@ -266,9 +276,28 @@ export default function CycleCountsPage() {
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
             />
-            <span className="text-[11px] text-muted-foreground">
-              Narrowing the scope keeps a count short enough to actually finish.
-            </span>
+            {/* A failed stock load leaves this picker with only "Everything in
+                stock", which is indistinguishable from a catalogue that has no
+                categories. Saying so — with a retry — is the difference between
+                a recoverable error and a user believing their data vanished.
+                The count itself is still startable at full scope. */}
+            {stockFailed ? (
+              <span className="text-[11px] text-destructive">
+                Could not load categories.{" "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:no-underline"
+                  onClick={() => void refetchStock()}
+                >
+                  Retry
+                </button>
+                {" — "}you can still count everything in stock.
+              </span>
+            ) : (
+              <span className="text-[11px] text-muted-foreground">
+                Narrowing the scope keeps a count short enough to actually finish.
+              </span>
+            )}
           </label>
 
           {startCount.isError && (

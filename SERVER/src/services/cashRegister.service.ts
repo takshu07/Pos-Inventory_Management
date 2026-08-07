@@ -62,6 +62,8 @@ import {
   calculateVariance,
   countDenominations,
   bucketPayments,
+  buildDrawerBreakdown,
+  calculateCollected,
   shiftDurationMinutes,
   formatDuration,
   type LedgerTotals,
@@ -232,14 +234,25 @@ interface ShiftSales {
   gross: Prisma.Decimal;
   split: Prisma.Decimal;
   discounts: Prisma.Decimal;
+  /**
+   * Refunds paid back in CASH. This is the only refund figure that may be
+   * subtracted from a cash total; see `storeCreditRefunds` for the rest.
+   */
   refunds: Prisma.Decimal;
   refundCount: number;
+  /** Refunds settled as store credit. Informational — moves no notes. */
+  storeCreditRefunds: Prisma.Decimal;
+  /** Cash + store-credit refunds. The customer-facing "money owed back". */
+  totalRefunds: Prisma.Decimal;
   exchangeValue: Prisma.Decimal;
+  /** Money taken across the counter on exchanges, in any tender. */
+  exchangeTopUps: Prisma.Decimal;
   exchangeCount: number;
   transactionCount: number;
 }
 
 async function computeShiftSales(session: {
+  id: string;
   openedById: string;
   openedAt: Date;
   closedAt: Date | null;
@@ -254,7 +267,7 @@ async function computeShiftSales(session: {
     repo.sumShiftPaymentsByMethod(window),
     repo.sumShiftSales(window),
     repo.sumShiftExchanges(window),
-    repo.sumShiftRefunds(window),
+    repo.sumShiftRefunds({ ...window, registerId: session.id }),
   ]);
 
   const buckets = bucketPayments(
@@ -269,9 +282,12 @@ async function computeShiftSales(session: {
     gross: money(toDecimal(sales.grandTotal)),
     split: money(toDecimal(sales.splitTotal)),
     discounts: money(toDecimal(sales.discountTotal)),
-    refunds: money(toDecimal(refunds.amount)),
+    refunds: money(toDecimal(refunds.cashAmount)),
     refundCount: refunds.count,
+    storeCreditRefunds: money(toDecimal(refunds.storeCreditAmount)),
+    totalRefunds: money(toDecimal(refunds.totalAmount)),
     exchangeValue: money(toDecimal(exchanges.issued)),
+    exchangeTopUps: money(toDecimal(exchanges.topUps)),
     exchangeCount: exchanges.count,
     transactionCount: sales.transactionCount,
   };
@@ -618,7 +634,7 @@ export async function getLiveDashboard(user: AuthenticatedUser, registerId?: str
 
   assertCanViewSession(session, user);
 
-  const [position, sales, drops, payouts, activity] = await Promise.all([
+  const [position, sales, dropSums, payoutSums, activity] = await Promise.all([
     computeLivePosition(session),
     computeShiftSales(session),
     repo.sumDrops(session.id),
@@ -627,6 +643,34 @@ export async function getLiveDashboard(user: AuthenticatedUser, registerId?: str
   ]);
 
   const elapsed = shiftDurationMinutes(session.openedAt, session.closedAt ?? new Date());
+
+  // The reconciliation the cashier verifies line by line.
+  //
+  // `cashCollected` is the LEDGER's cash-in, not the sales table's cash column.
+  // They differ legitimately — a cash exchange top-up is cash in that is not a
+  // sale — and the ledger is what the physical drawer followed.
+  //
+  // Refunds, drops and payouts are all CASH_OUT rows, so they are named here
+  // from their own tables and the remainder is surfaced as `otherAdjustments`
+  // rather than being silently dropped. That keeps the identity exact: the
+  // displayed lines always sum to the displayed total.
+  const drops = toDecimal(dropSums.amount);
+  const payouts = toDecimal(payoutSums.amount);
+  const namedCashOut = sales.refunds.plus(drops).plus(payouts);
+  const drawer = buildDrawerBreakdown({
+    openingFloat: position.openingCash,
+    cashCollected: position.cashIn,
+    cashRefunds: sales.refunds,
+    cashPayouts: payouts,
+    cashDrops: drops,
+    otherAdjustments: namedCashOut.minus(position.cashOut),
+  });
+
+  const collected = calculateCollected({
+    breakdown: { cash: sales.cash, upi: sales.upi, card: sales.card, other: sales.other, total: sales.gross },
+    cashRefunds: sales.refunds,
+    storeCreditRefunds: sales.storeCreditRefunds,
+  });
 
   return {
     hasOpenSession: session.status === RegisterStatus.OPEN,
@@ -639,6 +683,33 @@ export async function getLiveDashboard(user: AuthenticatedUser, registerId?: str
       expectedCash: toNumber(position.expectedCash),
     },
 
+    // Traceable build-up of expected cash. Every line is a cash movement, and
+    // they reconcile to `expectedInDrawer` exactly.
+    drawer: {
+      openingFloat: toNumber(drawer.openingFloat),
+      cashCollected: toNumber(drawer.cashCollected),
+      cashRefunds: toNumber(drawer.cashRefunds),
+      cashPayouts: toNumber(drawer.cashPayouts),
+      cashDrops: toNumber(drawer.cashDrops),
+      otherAdjustments: toNumber(drawer.otherAdjustments),
+      expectedInDrawer: toNumber(drawer.expectedInDrawer),
+    },
+
+    collected: {
+      cash: toNumber(collected.cash),
+      upi: toNumber(collected.upi),
+      card: toNumber(collected.card),
+      other: toNumber(collected.other),
+      digital: toNumber(collected.digital),
+      totalCollected: toNumber(collected.totalCollected),
+      cashRefunds: toNumber(collected.cashRefunds),
+      storeCreditRefunds: toNumber(collected.storeCreditRefunds),
+      netCollected: toNumber(collected.netCollected),
+      // Explains the difference between total collected and gross sales.
+      exchangeTopUps: toNumber(sales.exchangeTopUps),
+      grossSales: toNumber(sales.gross),
+    },
+
     sales: {
       cash: toNumber(sales.cash),
       upi: toNumber(sales.upi),
@@ -649,13 +720,15 @@ export async function getLiveDashboard(user: AuthenticatedUser, registerId?: str
       discounts: toNumber(sales.discounts),
       refunds: toNumber(sales.refunds),
       refundCount: sales.refundCount,
+      storeCreditRefunds: toNumber(sales.storeCreditRefunds),
+      totalRefunds: toNumber(sales.totalRefunds),
       exchangeValue: toNumber(sales.exchangeValue),
       exchangeCount: sales.exchangeCount,
       transactionCount: sales.transactionCount,
     },
 
-    drops: { total: toNumber(drops.amount), count: drops.count },
-    payouts: { total: toNumber(payouts.amount), count: payouts.count },
+    drops: { total: toNumber(dropSums.amount), count: dropSums.count },
+    payouts: { total: toNumber(payoutSums.amount), count: payoutSums.count },
 
     shift: {
       openedAt: session.openedAt,
@@ -1328,6 +1401,14 @@ export async function closeRegister(
         cashPayoutTotal: money(toDecimal(payouts.amount)),
         transactionCount: sales.transactionCount,
 
+        // Frozen so the closed-shift summary can rebuild its reconciliation
+        // from what the drawer actually did, not from the nearest sales column.
+        // `cashCollected` is the LEDGER's cash-in — it includes cash exchange
+        // top-ups, which `cashSales` cannot, because an exchange is not a sale.
+        cashCollected: position.cashIn,
+        exchangeTopUps: sales.exchangeTopUps,
+        storeCreditTotal: sales.storeCreditRefunds,
+
         ...(input.notes !== undefined && { notes: input.notes ?? null }),
       },
       tx
@@ -1480,6 +1561,48 @@ export async function getShiftSummary(registerId: string, user: AuthenticatedUse
   const durationMinutes =
     session.durationMinutes ?? shiftDurationMinutes(session.openedAt, session.closedAt ?? new Date());
 
+  // The traceable build-up. For a CLOSED shift the components come from the
+  // frozen rollups and `otherAdjustments` is the residual that makes the lines
+  // reconcile to the stored `expectedBalance` — so a summary can never display
+  // a set of figures that fails to add up to its own total, even for a session
+  // closed before this breakdown existed.
+  const cashRefunds = isOpen ? liveSales!.refunds : toDecimal(session.refundTotal);
+  const dropTotal = toDecimal(drops.totalAmount);
+  const payoutTotal = toDecimal(payouts.totalAmount);
+
+  // Cash collected is the LEDGER's cash-in, never the sales table's cash column.
+  // The two differ legitimately — a cash exchange top-up is money in the drawer
+  // that is not a sale — and the physical drawer followed the ledger.
+  //
+  // For a closed shift this comes from the `cashCollected` rollup frozen at
+  // close. Shifts closed before that column existed have it backfilled from the
+  // ledger by migration; a genuinely un-backfillable zero on a shift that did
+  // take cash falls back to `cashSales` so the panel degrades to the old,
+  // slightly understated figure rather than to a blank drawer.
+  const frozenCashCollected = toDecimal(session.cashCollected);
+  const cashCollected = isOpen
+    ? position!.cashIn
+    : frozenCashCollected.isZero() && !toDecimal(session.cashSales).isZero()
+      ? toDecimal(session.cashSales)
+      : frozenCashCollected;
+
+  const provisional = buildDrawerBreakdown({
+    openingFloat: session.openingBalance,
+    cashCollected,
+    cashRefunds,
+    cashPayouts: payoutTotal,
+    cashDrops: dropTotal,
+  });
+
+  const drawer = buildDrawerBreakdown({
+    openingFloat: session.openingBalance,
+    cashCollected,
+    cashRefunds,
+    cashPayouts: payoutTotal,
+    cashDrops: dropTotal,
+    otherAdjustments: toDecimal(expectedCash).minus(provisional.expectedInDrawer),
+  });
+
   return {
     isLive: isOpen,
     session: toSessionDTO(session),
@@ -1491,15 +1614,35 @@ export async function getShiftSummary(registerId: string, user: AuthenticatedUse
       cardSales: isOpen ? toNumber(liveSales!.card) : toNumber(session.cardSales),
       otherSales: isOpen ? toNumber(liveSales!.other) : toNumber(session.otherSales),
       splitSales: isOpen ? toNumber(liveSales!.split) : toNumber(session.splitSales),
-      refunds: isOpen ? toNumber(liveSales!.refunds) : toNumber(session.refundTotal),
+      // Cash refunds only — the figure that legitimately reduces the drawer.
+      refunds: toNumber(cashRefunds),
+      // Frozen at close rather than hardcoded to 0, which previously made every
+      // closed shift claim it had issued no store credit at all.
+      storeCreditRefunds: isOpen
+        ? toNumber(liveSales!.storeCreditRefunds)
+        : toNumber(session.storeCreditTotal),
+      // Goods issued on exchange. INFORMATIONAL: it is merchandise value, not
+      // money, and is excluded from every cash and drawer total.
       exchanges: isOpen ? toNumber(liveSales!.exchangeValue) : toNumber(session.exchangeTotal),
       discounts: isOpen ? toNumber(liveSales!.discounts) : toNumber(session.discountTotal),
-      cashDrops: toNumber(drops.totalAmount),
-      cashPayouts: toNumber(payouts.totalAmount),
+      cashDrops: toNumber(dropTotal),
+      cashPayouts: toNumber(payoutTotal),
       expectedCash: toNumber(expectedCash),
       countedCash: countedCash === null ? null : toNumber(countedCash),
       difference: difference === null ? null : toNumber(difference),
       transactionCount: isOpen ? liveSales!.transactionCount : session.transactionCount,
+    },
+
+    // Every line is a cash movement, and they sum exactly to expectedInDrawer.
+    drawer: {
+      openingFloat: toNumber(drawer.openingFloat),
+      cashCollected: toNumber(drawer.cashCollected),
+      cashRefunds: toNumber(drawer.cashRefunds),
+      cashPayouts: toNumber(drawer.cashPayouts),
+      cashDrops: toNumber(drawer.cashDrops),
+      otherAdjustments: toNumber(drawer.otherAdjustments),
+      expectedInDrawer: toNumber(drawer.expectedInDrawer),
+      closingCash: countedCash === null ? null : toNumber(countedCash),
     },
 
     shift: {

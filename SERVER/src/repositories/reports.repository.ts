@@ -362,24 +362,34 @@ export const reportsRepository = {
         JOIN "products" p ON p.id = v."productId"
         LEFT JOIN "categories" c ON c.id = p."categoryId"
         LEFT JOIN "brands" b ON b.id = p."brandId"
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(SUM(ri.quantity), 0) AS units
+        -- Pre-aggregated rather than LATERAL: SQLite has no LATERAL, so an edge
+        -- node running this against the local database failed with a bare
+        -- "near SELECT: syntax error". GROUP BY on "variantId" makes the key
+        -- unique, so this stays one row per variant and cannot fan out.
+        --
+        -- The COALESCE lives in the OUTER select (see "returnedUnits" above),
+        -- NOT here: a variant with no exchange rows has no row to join to, so
+        -- the column is NULL regardless of what this subquery would return.
+        -- Verified row-for-row against the LATERAL form on Postgres —
+        -- scratch/verify-lateral-equivalence.ts.
+        LEFT JOIN (
+          SELECT ri."variantId" AS "variantId", SUM(ri.quantity) AS units
             FROM "exchange_return_items" ri
             JOIN "exchanges" e ON e.id = ri."exchangeId"
-           WHERE ri."variantId" = sold."variantId"
-             AND e.status = 'COMPLETED'
+           WHERE e.status = 'COMPLETED'
              AND e."exchangeDate" >= ${f.startDate}
              AND e."exchangeDate" <= ${f.endDate}
-        ) ret ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(SUM(ii.quantity), 0) AS units
+           GROUP BY ri."variantId"
+        ) ret ON ret."variantId" = sold."variantId"
+        LEFT JOIN (
+          SELECT ii."variantId" AS "variantId", SUM(ii.quantity) AS units
             FROM "exchange_issued_items" ii
             JOIN "exchanges" e ON e.id = ii."exchangeId"
-           WHERE ii."variantId" = sold."variantId"
-             AND e.status = 'COMPLETED'
+           WHERE e.status = 'COMPLETED'
              AND e."exchangeDate" >= ${f.startDate}
              AND e."exchangeDate" <= ${f.endDate}
-        ) exc ON TRUE
+           GROUP BY ii."variantId"
+        ) exc ON exc."variantId" = sold."variantId"
        ORDER BY ${sortColumn} ${direction(options.sortOrder)} NULLS LAST
        LIMIT ${options.limit} OFFSET ${options.offset}
     `;
@@ -708,9 +718,15 @@ export const reportsRepository = {
   }) {
     const since = new Date(Date.now() - options.velocityDays * 86_400_000);
 
+    // `pr`, not `p` — the query below aliases "products" AS pr. These predicates
+    // said `p."categoryId"`, an alias that exists nowhere in the statement, so
+    // Postgres rejected it with `missing FROM-clause entry for table "p"` and
+    // the Inventory report 500'd on EVERY request that applied a category,
+    // brand or supplier filter. Unfiltered requests never emit these lines,
+    // which is why the page worked until someone touched a filter.
     const filters: Prisma.Sql[] = [Prisma.sql`v."isActive" = true`];
-    if (options.categoryId) filters.push(Prisma.sql`p."categoryId" = ${options.categoryId}`);
-    if (options.brandId) filters.push(Prisma.sql`p."brandId" = ${options.brandId}`);
+    if (options.categoryId) filters.push(Prisma.sql`pr."categoryId" = ${options.categoryId}`);
+    if (options.brandId) filters.push(Prisma.sql`pr."brandId" = ${options.brandId}`);
     if (options.supplierId) filters.push(Prisma.sql`v."supplierId" = ${options.supplierId}`);
 
     // Bucket predicates are applied AFTER the velocity aggregate, so they can
@@ -774,19 +790,24 @@ export const reportsRepository = {
           JOIN "categories" c ON c.id = pr."categoryId"
           LEFT JOIN "brands" b ON b.id = pr."brandId"
           LEFT JOIN "suppliers" sup ON sup.id = v."supplierId"
-          LEFT JOIN LATERAL (
-            SELECT COALESCE(SUM(si.quantity), 0) AS units
+          -- Pre-aggregated rather than LATERAL — see the note in productReport.
+          -- GROUP BY makes "variantId" unique in each subquery, so neither can
+          -- fan out the variant row.
+          LEFT JOIN (
+            SELECT si."variantId" AS "variantId", SUM(si.quantity) AS units
               FROM "sale_items" si
               JOIN "sales" s ON s.id = si."saleId"
-             WHERE si."variantId" = v.id
-               AND s.status = 'COMPLETED'
+             WHERE s.status = 'COMPLETED'
                AND s."saleDate" >= ${since}
-          ) sold ON TRUE
-          LEFT JOIN LATERAL (
-            SELECT MAX(im."createdAt") AS last_at
+             GROUP BY si."variantId"
+          ) sold ON sold."variantId" = v.id
+          -- MAX() over no rows is NULL, and NULL is the correct answer for
+          -- "never moved" — deliberately NOT coalesced to a date or a zero.
+          LEFT JOIN (
+            SELECT im."variantId" AS "variantId", MAX(im."createdAt") AS last_at
               FROM "inventory_movements" im
-             WHERE im."variantId" = v.id
-          ) mv ON TRUE
+             GROUP BY im."variantId"
+          ) mv ON mv."variantId" = v.id
          WHERE ${Prisma.join(filters, " AND ")}
       )
       SELECT t.*,
@@ -1096,14 +1117,17 @@ export const reportsRepository = {
         JOIN "customers" cu ON cu.id = e."customerId"
         JOIN "employees" emp ON emp.id = e."employeeId"
         JOIN "sales" os ON os.id = e."originalSaleId"
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(SUM(x.quantity), 0) AS units
-            FROM "exchange_return_items" x WHERE x."exchangeId" = e.id
-        ) ri ON TRUE
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(SUM(x.quantity), 0) AS units
-            FROM "exchange_issued_items" x WHERE x."exchangeId" = e.id
-        ) ii ON TRUE
+        -- Pre-aggregated rather than LATERAL — see the note in productReport.
+        -- Keyed on "exchangeId", which GROUP BY makes unique, so an exchange
+        -- with several return lines stays one row.
+        LEFT JOIN (
+          SELECT x."exchangeId" AS "exchangeId", SUM(x.quantity) AS units
+            FROM "exchange_return_items" x GROUP BY x."exchangeId"
+        ) ri ON ri."exchangeId" = e.id
+        LEFT JOIN (
+          SELECT x."exchangeId" AS "exchangeId", SUM(x.quantity) AS units
+            FROM "exchange_issued_items" x GROUP BY x."exchangeId"
+        ) ii ON ii."exchangeId" = e.id
        WHERE e.status = 'COMPLETED'
          AND e."exchangeDate" >= ${f.startDate}
          AND e."exchangeDate" <= ${f.endDate}

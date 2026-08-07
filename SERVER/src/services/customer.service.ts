@@ -27,6 +27,41 @@ function normalizePhone(phone: string): string {
   return cleaned;
 }
 
+/**
+ * Returns the field names named by a Prisma P2002 unique-constraint error, or
+ * an empty array if `err` is not one.
+ *
+ * `meta.target` is a string[] on Postgres but a comma-joined string on SQLite
+ * (the offline edge datasource), and can name the index rather than the column
+ * — both shapes are flattened to a searchable list of names. Duck-typed on
+ * `code` for the same reason error.middleware.ts is: the offline router may
+ * hand back an error from a different Prisma client instance.
+ */
+function uniqueViolationTargets(err: unknown): string[] {
+  if (typeof err !== "object" || err === null) return [];
+  if ((err as { code?: string }).code !== "P2002") return [];
+
+  const target = (err as { meta?: { target?: unknown } }).meta?.target;
+
+  const names = Array.isArray(target)
+    ? target.map(String)
+    : typeof target === "string"
+      ? target.split(",").map((t) => t.trim())
+      : [];
+
+  // Lowercased so callers can match case-insensitively: the entry may be the
+  // column ("customerCode") or the index that enforces it
+  // ("customers_customerCode_key"), so callers substring-match rather than
+  // compare for equality.
+  return names.map((n) => n.toLowerCase());
+}
+
+/** True when a P2002 names `field`, whether as a column or an index name. */
+function violates(err: unknown, field: string): boolean {
+  const needle = field.toLowerCase();
+  return uniqueViolationTargets(err).some((t) => t.includes(needle));
+}
+
 export const customerService = {
   /**
    * Retrieves a paginated list of customers.
@@ -137,13 +172,9 @@ export const customerService = {
       throw new AppError(HTTP_STATUS.CONFLICT, "A customer with this phone number already exists.");
     }
 
-    // 2. Generate Customer Code
-    const nextSeq = await customerRepository.getNextSequenceNumber();
-    const customerCode = `CUS-${String(nextSeq).padStart(6, "0")}`;
-
-    // 3. Prepare payload
+    // 2. Prepare payload (customerCode is assigned per attempt below)
     const payload: Prisma.CustomerCreateInput = {
-      customerCode,
+      customerCode: "",
       name: data.name,
       phone: normalizedPhone,
       email: data.email,
@@ -161,8 +192,47 @@ export const customerService = {
       };
     }
 
-    // 4. Create in DB
-    const newCustomer = await customerRepository.create(payload);
+    // 3. Create in DB, retrying on a customerCode collision.
+    //
+    // The code is derived from the current maximum, so it is inherently racy:
+    // two cashiers creating a customer at the same moment compute the same next
+    // code and one loses on the unique index. That collision is transient — the
+    // next read sees the winner's row and yields the following code — so it is
+    // retried rather than reported. Reporting it produced the misleading
+    // "A record with the same field already exists", which reads as a duplicate
+    // PHONE to the cashier even though the phone was verified free in step 1.
+    //
+    // Only a `customerCode` conflict is retried. A P2002 on `phone` means a
+    // customer was genuinely created between the check above and this write, and
+    // is surfaced as the real duplicate it is.
+    const MAX_CODE_ATTEMPTS = 5;
+    let newCustomer;
+
+    for (let attempt = 1; ; attempt++) {
+      const nextSeq = await customerRepository.getNextSequenceNumber();
+      payload.customerCode = `CUS-${String(nextSeq).padStart(6, "0")}`;
+
+      try {
+        newCustomer = await customerRepository.create(payload);
+        break;
+      } catch (err) {
+        if (violates(err, "phone")) {
+          throw new AppError(
+            HTTP_STATUS.CONFLICT,
+            "A customer with this phone number already exists."
+          );
+        }
+
+        if (!violates(err, "customerCode") || attempt >= MAX_CODE_ATTEMPTS) {
+          throw err;
+        }
+
+        logger.warn(
+          { attempt, customerCode: payload.customerCode },
+          "Customer code collision — regenerating"
+        );
+      }
+    }
 
     // 5. Audit Logging
     auditRepository.create({

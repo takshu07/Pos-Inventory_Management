@@ -65,16 +65,22 @@ import { AUTH_ROUTES } from "../constants";
 // unmounts these guards via the top-level status flip to 'unauthenticated' /
 // 'expired', so this cannot pin a stale grant open — see the explicit check.
 
-type Access = "pending" | "granted" | "denied";
+export type Access = "pending" | "granted" | "denied";
 
 /**
  * Resolves a guard's decision, latching 'granted' so an in-flight session
  * refresh cannot momentarily revoke it mid-navigation.
  *
+ * Exported because MainLayout must reach the SAME decision as the guard above
+ * it. When it read `sessionStatus` directly it could return null for a blink
+ * that the latched ManagerRoute above had already decided to ignore — and since
+ * the guard never re-rendered, nothing brought the shell back. That left a
+ * permanently blank page on any navigation that overlapped a session refresh.
+ *
  * @param settled  false while sessionStatus is 'idle' | 'loading'
  * @param allowed  the guard's own predicate, only meaningful once settled
  */
-function useSettledAccess(settled: boolean, allowed: boolean): Access {
+export function useSettledAccess(settled: boolean, allowed: boolean): Access {
   const grantedOnce = useRef(false);
 
   // A settled + allowed session is the only thing that opens the latch.

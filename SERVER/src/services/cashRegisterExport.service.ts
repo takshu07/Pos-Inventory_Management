@@ -209,6 +209,8 @@ type Summary = Awaited<ReturnType<typeof registerService.getShiftSummary>>;
 function summaryRows(summary: Summary): Array<{ label: string; value: string }> {
   const t = summary.totals;
   const s = summary.shift;
+  const d = summary.drawer;
+  const totalCollected = t.cashSales + t.upiSales + t.cardSales + t.otherSales;
 
   return [
     { label: "Session", value: summary.session.sessionNumber ?? summary.session.id },
@@ -219,21 +221,26 @@ function summaryRows(summary: Summary): Array<{ label: string; value: string }> 
     { label: "Shift Duration", value: s.durationLabel },
     { label: "Status", value: summary.session.status },
     { label: "—", value: "—" },
-    { label: "Opening Cash", value: inr(t.openingCash) },
     { label: "Cash Sales", value: inr(t.cashSales) },
     { label: "UPI Sales", value: inr(t.upiSales) },
     { label: "Card Sales", value: inr(t.cardSales) },
-    { label: "Other Sales", value: inr(t.otherSales) },
+    { label: "Other Tenders", value: inr(t.otherSales) },
+    { label: "Total Money Collected", value: inr(totalCollected) },
+    { label: "Cash Refunds", value: inr(t.refunds) },
+    { label: "Net Collected", value: inr(totalCollected - t.refunds) },
     { label: "Split Payments", value: inr(t.splitSales) },
-    { label: "Refunds", value: inr(t.refunds) },
-    { label: "Exchanges", value: inr(t.exchanges) },
     { label: "Discounts", value: inr(t.discounts) },
-    { label: "Cash Drops", value: inr(t.cashDrops) },
-    { label: "Cash Payouts", value: inr(t.cashPayouts) },
     { label: "Transactions", value: String(t.transactionCount) },
     { label: "—", value: "—" },
-    { label: "Expected Cash", value: inr(t.expectedCash) },
-    { label: "Counted Cash", value: inr(t.countedCash) },
+    // Drawer reconciliation — cash only, and these lines sum to the total.
+    { label: "Opening Float", value: inr(d.openingFloat) },
+    { label: "Cash Collected", value: inr(d.cashCollected) },
+    { label: "Cash Refunds (out)", value: inr(d.cashRefunds) },
+    { label: "Cash Payouts", value: inr(d.cashPayouts) },
+    { label: "Cash Drops", value: inr(d.cashDrops) },
+    { label: "Other Cash Adjustments", value: inr(d.otherAdjustments) },
+    { label: "Expected in Drawer", value: inr(d.expectedInDrawer) },
+    { label: "Closing Cash (Counted)", value: inr(t.countedCash) },
     {
       label: "Difference",
       value:
@@ -244,6 +251,14 @@ function summaryRows(summary: Summary): Array<{ label: string; value: string }> 
     { label: "Discrepancy Reason", value: s.discrepancyReason ?? "—" },
     { label: "Closed By", value: s.closedBy ?? "—" },
     { label: "Reconciled By", value: s.reconciledBy ?? "—" },
+    { label: "—", value: "—" },
+    // Informational: merchandise and account credit, not money. Excluded from
+    // every cash total above.
+    { label: "Exchange Value Issued (informational)", value: inr(t.exchanges) },
+    {
+      label: "Store Credit Refunds (informational)",
+      value: inr(t.storeCreditRefunds ?? 0),
+    },
   ];
 }
 
@@ -258,6 +273,7 @@ function summaryRows(summary: Summary): Array<{ label: string; value: string }> 
 function renderSummaryDocument(summary: Summary): string {
   const t = summary.totals;
   const s = summary.shift;
+  const d = summary.drawer;
 
   const row = (label: string, value: string, cls = "") =>
     `<tr class="${cls}"><td>${xmlEscape(label)}</td><td class="num">${xmlEscape(value)}</td></tr>`;
@@ -368,22 +384,37 @@ function renderSummaryDocument(summary: Summary): string {
       ${row("Other Tenders", inr(t.otherSales))}
       ${row("Split Payments", inr(t.splitSales))}
       ${row("Discounts Given", inr(t.discounts))}
-      ${row("Refunds", inr(t.refunds))}
-      ${row("Exchanges", inr(t.exchanges))}
+      ${row("Total Collected", inr(t.cashSales + t.upiSales + t.cardSales + t.otherSales), "total")}
+      ${row("− Cash Refunds", inr(t.refunds))}
+      ${row("Net Collected", inr(t.cashSales + t.upiSales + t.cardSales + t.otherSales - t.refunds), "total")}
     </tbody>
   </table>
 
   <h2>Drawer Reconciliation</h2>
   <table>
     <tbody>
-      ${row("Opening Cash", inr(t.openingCash))}
-      ${row("+ Cash Sales", inr(t.cashSales))}
-      ${row("− Cash Drops", inr(t.cashDrops))}
-      ${row("− Cash Payouts", inr(t.cashPayouts))}
-      ${row("Expected Cash", inr(t.expectedCash), "total")}
-      ${row("Counted Cash", inr(t.countedCash))}
+      ${row("Opening Float", inr(d.openingFloat))}
+      ${row("+ Cash Collected", inr(d.cashCollected))}
+      ${row("− Cash Refunds", inr(d.cashRefunds))}
+      ${row("− Cash Payouts", inr(d.cashPayouts))}
+      ${row("− Cash Drops", inr(d.cashDrops))}
+      ${d.otherAdjustments !== 0 ? row("± Other Cash Adjustments", inr(d.otherAdjustments)) : ""}
+      ${row("Expected in Drawer", inr(d.expectedInDrawer), "total")}
+      ${row("Closing Cash (Counted)", inr(t.countedCash))}
     </tbody>
   </table>
+
+  <h2>Informational — Not Cash</h2>
+  <table>
+    <tbody>
+      ${row("Exchange Value Issued", inr(t.exchanges))}
+      ${row("Store Credit Refunds", inr(t.storeCreditRefunds ?? 0))}
+    </tbody>
+  </table>
+  <div class="reason">
+    These are merchandise and account-credit values. They move no notes and are
+    excluded from every cash and drawer total above.
+  </div>
 
   <div class="variance ${varianceClass}">
     <span>${xmlEscape(varianceLabel)}</span>
